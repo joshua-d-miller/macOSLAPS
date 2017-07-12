@@ -15,7 +15,8 @@ var defaultpreferences = [
     "PasswordLength":12,
     "DaysTillExpiration":60,
     "RemoveKeychain":true,
-    "RemovePassChars": "'"
+    "RemovePassChars": "\'",
+    "ExclusionSets": []
     ] as [String : Any]
 
 // Pull configuration settings from managed preferences or set defaults

@@ -18,12 +18,16 @@ func connect_to_ad() -> Array<ODRecord> {
     // Get Active Directory Info
     let ad_info = [ SCDynamicStoreCopyValue(net_config, "com.apple.opendirectoryd.ActiveDirectory" as CFString)]
     // Convert ad_info variable to dictionary as it seems there is support for multiple directories
-    let adDict = ad_info[0]! as! NSDictionary
+    let adDict = ad_info[0]! as? NSDictionary ?? nil
+    if adDict == nil {
+        laps_log.print("This machine does not appear to be bound to Active Directory")
+        exit(1)
+    }
     // Use Open Directory to Connect to Active Directory
     let session = ODSession.default()
     var computer_record = [ODRecord]()
     let node = try! ODNode.init(session: session, type:UInt32(kODNodeTypeNetwork))
-    let query = try! ODQuery.init(node: node, forRecordTypes: kODRecordTypeComputers, attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
+    let query = try! ODQuery.init(node: node, forRecordTypes: kODRecordTypeComputers, attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict?["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
     computer_record = try! query.resultsAllowingPartial(false) as! [ODRecord]
     if computer_record.isEmpty {
         laps_log.print("Unable to connect to Active Directory", .error)
