@@ -18,7 +18,7 @@ func connect_to_ad() -> Array<ODRecord> {
     // Get Active Directory Info
     let ad_info = [ SCDynamicStoreCopyValue(net_config, "com.apple.opendirectoryd.ActiveDirectory" as CFString)]
     // Convert ad_info variable to dictionary as it seems there is support for multiple directories
-    let adDict = ad_info[0]! as? NSDictionary ?? nil
+    let adDict = ad_info[0] as? NSDictionary ?? nil
     if adDict == nil {
         laps_log.print("This machine does not appear to be bound to Active Directory")
         exit(1)
