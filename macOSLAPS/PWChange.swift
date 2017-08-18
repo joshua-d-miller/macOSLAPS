@@ -13,8 +13,8 @@ func perform_password_change(computer_record: Array<ODRecord>, local_admin: Stri
     laps_log.print("Password Change is required as the LAPS password for " + local_admin + " has expired", .info)
     // Get our configuration variables to prepare for password change
     
-    let pass_length = get_config_settings(preference_key: "PasswordLength") as! Int
-    let exp_days = get_config_settings(preference_key: "DaysTillExpiration") as! Int
+    let pass_length = Int(get_config_settings(preference_key: "PasswordLength") as! Int)
+    let exp_days = Int(get_config_settings(preference_key: "DaysTillExpiration") as! Int)
     let keychain_remove = get_config_settings(preference_key: "RemoveKeychain") as! Bool
     
     // Generate random password
