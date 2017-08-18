@@ -41,19 +41,27 @@ func connect_to_ad() -> Array<ODRecord> {
 func ad_tools(computer_record: Array<ODRecord>, tool: String, password: String?, new_ad_exp_date: String?) -> String? {
     for case let value in computer_record {
         if tool == "Expiration Time" {
-            var expirationtime = try! String(describing: value.values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")[0])
-            if !expirationtime.isEmpty {
-                return(expirationtime)
-            }
-            else {
+            var expirationtime = "126227988000000000" // Setting a default expiration date of 01/01/2001
+            do {
+                expirationtime = try String(describing: value.values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")[0])
+            } catch {
                 laps_log.print("There has never been a random password generated for this device. Setting a default expiration date of 01/01/2001 in Active Directory to force a password change...", .warn)
-                expirationtime = "126227988000000000"
-                return(expirationtime)
             }
+            return(expirationtime)
         }
+
         if tool == "Set Password" {
-            try! value.setValue(password, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
-            try! value.setValue(new_ad_exp_date, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
+            do {
+                try value.setValue(password, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
+            } catch {
+                laps_log.print("There was an error setting the password for this device...", .warn)
+            }
+            
+            do {
+                try value.setValue(new_ad_exp_date, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
+            } catch {
+                laps_log.print("There was an error setting the new password expiration for this device...", .warn)
+            }
         }
     }
     return(nil)
