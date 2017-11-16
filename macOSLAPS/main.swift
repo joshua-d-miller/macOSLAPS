@@ -16,6 +16,9 @@ import Foundation
 // Date Formatting for application
 let dateFormatter = date_formatter()
 
+// Read Command Line Arugments into array to use later
+let arguments = CommandLine.arguments as Array
+
 // Main function that checks our local admin password expiration in Active Directory and then if
 // needed changes the password to something random and writes it back to Active Directory
 func macOSLAPS() {
@@ -24,7 +27,13 @@ func macOSLAPS() {
     // Connect to Active Directory
     let computer_record = connect_to_ad()
     // Get Expiration Time from Active Directory
-    let exp_time = ad_tools(computer_record: computer_record, tool: "Expiration Time", password: nil, new_ad_exp_date: nil)
+    var exp_time = ""
+    if arguments.contains("-resetPassword") {
+        exp_time = "126227988000000000"
+    }
+    else {
+        exp_time = ad_tools(computer_record: computer_record, tool: "Expiration Time", password: nil, new_ad_exp_date: nil)!
+    }
     // Convert that time into a date
     let exp_date = time_conversion(time_type: "epoch", exp_time: exp_time, exp_days: nil) as! Date
     // Compare that newly calculated date against now to see if a change is required
