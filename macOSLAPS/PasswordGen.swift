@@ -19,9 +19,9 @@ func generate_random_pw(length: Int) -> String {
     string_passwordCharacters = exclude_character_sets(password_chars: string_passwordCharacters)
     // Exclude Characters specified in string format. If any characters are specified that
     // require escape make sure the escape is there as well (Examples: \\ \")
-    var passwordCharacters = Array(string_passwordCharacters.characters)
+    var passwordCharacters = Array(string_passwordCharacters)
     let exclusions_from_pw = get_config_settings(preference_key: "RemovePassChars") as! String
-    for character in exclusions_from_pw.characters {
+    for character in exclusions_from_pw {
         if let ix = passwordCharacters.index(of: character) {
             passwordCharacters.remove(at: ix)
         }

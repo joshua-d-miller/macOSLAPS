@@ -23,10 +23,7 @@ func perform_password_change(computer_record: Array<ODRecord>, local_admin: Stri
         // Pull Local Administrator Record
         let local_node = try ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes))
         let local_admin_change = try local_node.record(withRecordType: kODRecordTypeUsers, name: local_admin, attributes: nil)
-        // Change the password for the account
-        try local_admin_change.changePassword(nil, toPassword: password)
-        // Set out nex expiration date in a variable x days from our
-        // configuration variable
+        // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = time_conversion(time_type: "windows", exp_time: nil, exp_days: exp_days) as! String
         // Format Expiration Date
         let print_exp_date = time_conversion(time_type: "epoch", exp_time: new_ad_exp_date, exp_days: nil) as! Date
@@ -34,6 +31,8 @@ func perform_password_change(computer_record: Array<ODRecord>, local_admin: Stri
         // Change the password in Active Directory
         _ = ad_tools(computer_record: computer_record, tool: "Set Password", password: password, new_ad_exp_date: new_ad_exp_date)
         laps_log.print("Password change has been completed for local admin " + local_admin + ". New expiration date is " + formatted_new_exp_date, .info)
+        // Change the password for the account
+        try local_admin_change.changePassword(nil, toPassword: password)
     } catch {
         laps_log.print("Unable to connect to local directory or change password. Exiting...", .error)
         exit(1)
