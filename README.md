@@ -16,8 +16,8 @@ The following parameters must be set or the application will use the defaults:
 
 **LocalAdminAccount** - Local Administrator Account. Default is 'admin'. (In String format)  
 **DaysTillExpiration** - Expiration date of random password. Default is 60 Days. (In Integer format)  
-**PasswordLength** - Length of randomly generated password. Default is 12. (In Integer format) . 
-**RemoveKeyChain** - Remove the local admin keychains after password change. (In Boolean format, recommended)  
+**PasswordLength** - Length of randomly generated password. Default is 12. (In Integer format)  
+**RemoveKeyChain** - Remove the local admin keychains after password change. (In Boolean format, recommended)  
 **RemovePassChars** - Exclude any characters you'd like from the randomly generated password (In String format)  
 **ExclusionSets** - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")  
 
