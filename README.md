@@ -33,9 +33,7 @@ the character map to enter it. Since this is very detriment to using a LAPS pass
 
 Installation Instructions
 -------------------------
-At this time you can clone the repo or download a zip of the repo or you can
-use the package created using Packages to install. This script will run
-3 times a day between 8 A.M. and 5 P.M. at 9 A.M., 1 P.M. and 4 P.M.
+At this time you can clone the repo or download a zip of the repo or you can use the package created using Packages to install. The package includes a Launch Daemon to run macOSLAPS every 90 minutes.
 
 Logging
 -------
