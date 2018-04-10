@@ -14,12 +14,12 @@ Requirements
 
 The following parameters must be set or the application will use the defaults:
 
-**LocalAdminAccount** - Local Administrator Account. Default is 'admin'  
-**DaysTillExpiration** - Expiration date of random password. Default is 60 Days  
-**PasswordLength** - Length of randomly generated password. Default is 12  
-**RemoveKeyChain** - Remove the local admin keychains after password change. (Recommended)  
-**RemovePassChars** - Exclude any characters you'd like from the randomly generated password (In String format)
-**ExclusionSets** - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")
+**LocalAdminAccount** - Local Administrator Account. Default is 'admin'. (In String format)  
+**DaysTillExpiration** - Expiration date of random password. Default is 60 Days. (In Integer format)  
+**PasswordLength** - Length of randomly generated password. Default is 12. (In Integer format)  
+**RemoveKeyChain** - Remove the local admin keychains after password change. (In Boolean format, recommended)  
+**RemovePassChars** - Exclude any characters you'd like from the randomly generated password (In String format)  
+**ExclusionSets** - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")  
 
 These parameters are set in the location /Libary/Preferences/edu.psu.macoslaps.plist
 or you can use your MDM's Custom Settings to set these values.
@@ -33,9 +33,7 @@ the character map to enter it. Since this is very detriment to using a LAPS pass
 
 Installation Instructions
 -------------------------
-At this time you can clone the repo or download a zip of the repo or you can
-use the package created using Packages to install. This script will run
-3 times a day between 8 A.M. and 5 P.M. at 9 A.M., 1 P.M. and 4 P.M.
+At this time you can clone the repo or download a zip of the repo or you can use the package created using Packages to install. The package includes a Launch Daemon to run macOSLAPS every 90 minutes.
 
 Logging
 -------
