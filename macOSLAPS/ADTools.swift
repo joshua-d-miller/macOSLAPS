@@ -28,11 +28,13 @@ func connect_to_ad() -> Array<ODRecord> {
     // Create the Active Directory Path in case Search Paths are disabled
     let ad_path = "\(adDict?["NodeName"] as! String)/\(adDict?["DomainNameDns"] as! String)"
     var computer_record = [ODRecord]()
-    let node = try! ODNode.init(session: session, name: ad_path)
-    let query = try! ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict?["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
-    computer_record = try! query.resultsAllowingPartial(false) as! [ODRecord]
-    if computer_record.isEmpty {
-        laps_log.print("Unable to connect to Active Directory", .error)
+    do {
+        let node = try ODNode.init(session: session, name: ad_path)
+        let query = try! ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict?["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
+        computer_record = try! query.resultsAllowingPartial(false) as! [ODRecord]
+    }
+    catch {
+        laps_log.print("Active Directory Node not available. Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
         exit(1)
     }
     return(computer_record)
