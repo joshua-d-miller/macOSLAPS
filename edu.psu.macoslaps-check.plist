@@ -8,26 +8,7 @@
   <array>
     <string>/usr/local/laps/macOSLAPS</string>
   </array>
-  <key>StartCalendarInterval</key>
-  <array>
-    <dict>
-      <key>Minute</key>
-      <integer>0</integer>
-      <key>Hour</key>
-      <integer>9</integer>
-    </dict>
-    <dict>
-      <key>Minute</key>
-      <integer>0</integer>
-      <key>Hour</key>
-      <integer>13</integer>
-    </dict>
-    <dict>
-      <key>Minute</key>
-      <integer>0</integer>
-      <key>Hour</key>
-      <integer>16</integer>
-    </dict>
-  </array>
+  <key>StartInterval</key>
+  <integer>5400</integer>
 </dict>
 </plist>
