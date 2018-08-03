@@ -37,7 +37,7 @@ At this time you can clone the repo or download a zip of the repo or you can use
 
 Usage
 -------
-macOSLAPS is designed to run in an automated fashion (e.g. triggered by a Launch Daemon or your management tool of choice. It can be invoked manually at the command line by running `/usr/local/laps/macOSLAPS` as root.
+macOSLAPS is designed to run in an automated fashion (e.g. triggered by a Launch Daemon or your management tool of choice). It can be invoked manually at the command line by running `/usr/local/laps/macOSLAPS` as root.
 
 #### Optional Flags
 
