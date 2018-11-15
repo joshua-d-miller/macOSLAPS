@@ -33,27 +33,28 @@ func perform_password_change(computer_record: Array<ODRecord>, local_admin: Stri
         laps_log.print("Password change has been completed for local admin " + local_admin + ". New expiration date is " + formatted_new_exp_date, .info)
         // Change the password for the account
         try local_admin_change.changePassword(nil, toPassword: password)
-    } catch {
-        laps_log.print("Unable to connect to local directory or change password. Exiting...", .error)
-        exit(1)
-    }
-    if keychain_remove == true {
-        let local_admin_path = "/Users/" + local_admin + "/Library/Keychains"
-        do {
-            if FileManager.default.fileExists(atPath: local_admin_path) {
-                laps_log.print("Removing Keychain for local administrator account " + local_admin + "...", .info)
-                try FileManager.default.removeItem(atPath: local_admin_path)
+        if keychain_remove == true {
+            let local_admin_home = local_admin_change.value(forKeyPath: "dsAttrTypeStandard:NFSHomeDirectory") as! NSMutableArray
+            let local_admin_keychain_path = local_admin_home[0] as! String + "/Library/Keychains"
+            do {
+                if FileManager.default.fileExists(atPath: local_admin_keychain_path) {
+                    laps_log.print("Removing Keychain for local administrator account " + local_admin + "...", .info)
+                    try FileManager.default.removeItem(atPath: local_admin_keychain_path)
+                }
+                else {
+                    laps_log.print("Keychain does not currently exist. This may be due to the fact that the user account has never been logged into and is only used for elevation...")
+                }
+            } catch {
+                laps_log.print("Unable to remove " + local_admin + "'s Keychain.", .error)
+                exit(1)
             }
-            else {
-                laps_log.print("Keychain does not currently exist. This may be due to the fact that the user account has never been logged into and is only used for elevation...")
-            }
-        } catch {
-            laps_log.print("Unable to remove " + local_admin + "'s Keychain.", .error)
+        }
+        else {
+            laps_log.print("Keychain has NOT been modified. Keep in mind that this may cause keychain prompts and the old password may not be accessible.", .warn)
             exit(1)
         }
-    }
-    else {
-        laps_log.print("Keychain has NOT been modified. Keep in mind that this may cause keychain prompts and the old password may not be accessible.", .warn)
+    } catch {
+        laps_log.print("Unable to connect to local directory or change password. Exiting...", .error)
         exit(1)
     }
 }
