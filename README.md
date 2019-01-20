@@ -21,7 +21,7 @@ The following preference keys must be set or the application will use the defaul
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
 `ExclusionSets` - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")  
 
-These parameters are set in the location `/Libary/Preferences/edu.psu.macoslaps.plist`
+These parameters are set in the location `/Library/Preferences/edu.psu.macoslaps.plist`
 or you can use your MDM's Custom Settings to set these values.
 
 **NOTE**: The Swift binary will most likely only work on macOS 10.10+. If you need to run LAPS on older versions of macOS please use the legacy version of macOSLAPS written in Python [here](https://github.com/joshua-d-miller/macOSLAPS-Legacy)
