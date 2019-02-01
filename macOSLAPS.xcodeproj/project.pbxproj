@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		E5049713220401BC006C7A7C /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5049712220401BC006C7A7C /* Keychain.swift */; };
 		E57A17D41F0D80E7008D21B6 /* ADTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CA1F0D80E7008D21B6 /* ADTools.swift */; };
 		E57A17D51F0D80E7008D21B6 /* ConfigSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CB1F0D80E7008D21B6 /* ConfigSettings.swift */; };
 		E57A17D61F0D80E7008D21B6 /* DateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CC1F0D80E7008D21B6 /* DateFormatter.swift */; };
@@ -32,6 +33,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		E5049712220401BC006C7A7C /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		E56B73031E38D39700FC66CB /* macOSLAPS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macOSLAPS; sourceTree = BUILT_PRODUCTS_DIR; };
 		E57A17CA1F0D80E7008D21B6 /* ADTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ADTools.swift; path = macOSLAPS/ADTools.swift; sourceTree = "<group>"; };
 		E57A17CB1F0D80E7008D21B6 /* ConfigSettings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ConfigSettings.swift; path = macOSLAPS/ConfigSettings.swift; sourceTree = "<group>"; };
@@ -69,6 +71,7 @@
 				E57A17CE1F0D80E7008D21B6 /* Info.plist */,
 				E57A17CF1F0D80E7008D21B6 /* Logging.swift */,
 				E57A17D01F0D80E7008D21B6 /* main.swift */,
+				E5049712220401BC006C7A7C /* Keychain.swift */,
 				E57A17D11F0D80E7008D21B6 /* PasswordGen.swift */,
 				E57A17D21F0D80E7008D21B6 /* PWChange.swift */,
 				E57A17D31F0D80E7008D21B6 /* TimeConversion.swift */,
@@ -150,6 +153,7 @@
 				E57A17D91F0D80E7008D21B6 /* main.swift in Sources */,
 				E57A17DA1F0D80E7008D21B6 /* PasswordGen.swift in Sources */,
 				E57A17D51F0D80E7008D21B6 /* ConfigSettings.swift in Sources */,
+				E5049713220401BC006C7A7C /* Keychain.swift in Sources */,
 				E57A17D41F0D80E7008D21B6 /* ADTools.swift in Sources */,
 				E57A17DC1F0D80E7008D21B6 /* TimeConversion.swift in Sources */,
 				E57A17DB1F0D80E7008D21B6 /* PWChange.swift in Sources */,
@@ -213,6 +217,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INSTALL_GROUP = wheel;
+				INSTALL_OWNER = root;
+				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -269,6 +276,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INSTALL_GROUP = wheel;
+				INSTALL_OWNER = root;
+				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
@@ -282,13 +292,14 @@
 		E56B730B1E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = wheel;
-				ALTERNATE_OWNER = root;
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -301,13 +312,14 @@
 		E56B730C1E38D39700FC66CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = wheel;
-				ALTERNATE_OWNER = root;
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";

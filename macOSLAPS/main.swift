@@ -9,7 +9,7 @@
 //  the LAPS UI to be utilized and the random password the ability to be seen by those with
 //  permission to retrieve it.
 //  Joshua D. Miller - josh@psu.edu - The Pennsylvania State University
-//  Last Update June 13, 2017
+//  Last Update November 28, 2018
 
 import Foundation
 
@@ -24,8 +24,10 @@ let arguments = CommandLine.arguments as Array
 func macOSLAPS() {
     // Let's get started with getting our local admin account name
     let local_admin = get_config_settings(preference_key: "LocalAdminAccount") as! String
+    // Get Active Directory Path
+    let (ad_path, adDict) = get_ad_path()
     // Connect to Active Directory
-    let computer_record = connect_to_ad()
+    let computer_record = connect_to_ad(ad_path: ad_path, adDict: adDict)
     // Get Expiration Time from Active Directory
     var exp_time = ""
     if arguments.contains("-resetPassword") {

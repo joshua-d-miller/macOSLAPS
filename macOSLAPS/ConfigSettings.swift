@@ -16,7 +16,9 @@ var defaultpreferences = [
     "DaysTillExpiration":60,
     "RemoveKeychain":true,
     "RemovePassChars": "\'",
-    "ExclusionSets": []
+    "ExclusionSets": [],
+    "PreferredDC": "",
+    "FirstPass": ""
     ] as [String : Any]
 
 // Pull configuration settings from managed preferences or set defaults
