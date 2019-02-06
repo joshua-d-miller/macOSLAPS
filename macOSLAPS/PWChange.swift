@@ -30,7 +30,6 @@ func shell(launchPath: String, arguments: [String]) -> String?
     return output
 }
 
-
 func perform_password_change(computer_record: Array<ODRecord>, local_admin: String) {
     laps_log.print("Password Change is required as the LAPS password for \(local_admin), has expired", .info)
     // Get our configuration variables to prepare for password change

@@ -45,9 +45,9 @@ public class KeychainService: NSObject {
             while status != 0 {
                 SecItemDelete(keychainQuery as CFDictionary)
                 status = SecItemAdd(keychainQuery as CFDictionary, nil)
-                }
             }
         }
+    }
     
     class func loadPassword(service: String) -> String? {
         // Instantiate a new default keychain query
