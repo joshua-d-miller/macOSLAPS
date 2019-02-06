@@ -19,7 +19,11 @@ The following preference keys must be set or the application will use the defaul
 `PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)  
 `RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)  
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
-`ExclusionSets` - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")  
+`ExclusionSets` - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")
+`PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format)
+`FirstPass` - Use this key if you are enabling secureToken on your LAPS Admin. The script will read this key in if there isn't a keyhcain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
+
+**NOTE about *FirstPass*:** macOSLAPS must know at least one password via config profile before we can start the keychain process. Settings this key before running it for the first time when it is your temporary admin password is the best method.
 
 These parameters are set in the location `/Library/Preferences/edu.psu.macoslaps.plist`
 or you can use your MDM's Custom Settings to set these values.
@@ -64,4 +68,4 @@ Epoch time
 * Matt Hansen - For critiquing and assisting with generating the random password
 * Allen Clouser and Jody Harptster - For showing me that the **'** key cannot be used from a Windows client without character map
 * John Pater - For advising me on the idea of generating 10 random passwords and picking one randomly to further randomize the password
-* Joel Rennich - For taking my questions about Swift and advising me on better ways to utilize Swift
+* Joel Rennich - For taking my questions about Swift and advising me on better ways to utilize Swift. Another special thanks to Joel for advising me on saving the password in the **System** keychain to deal with secureToken.
