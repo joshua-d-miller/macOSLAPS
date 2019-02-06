@@ -74,7 +74,8 @@ public class KeychainService: NSObject {
                 password = String(data: passwordData!, encoding: String.Encoding.utf8)
             }
         } else {
-            print("Nothing was retrieved from the keychain. Status code \(status)")
+            // We are commenting this out to keep it out of the log.
+            // print("Nothing was retrieved from the keychain. Status code \(status)")
             return(nil)
         }
         

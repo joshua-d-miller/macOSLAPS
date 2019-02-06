@@ -4,7 +4,7 @@
 //
 //  Created by Joshua D. Miller on 6/13/17.
 //  The Pennsylvania State University
-//  Last Update on 11/28/18
+//  Last Update on February 6, 2019
 
 import Foundation
 import OpenDirectory
@@ -67,17 +67,23 @@ func ad_tools(computer_record: Array<ODRecord>, tool: String, password: String?,
             }
             return(expirationtime)
         }
-
-        if tool == "Set Password" {
+        if tool == "Check if writable" {
             // Test that we can write to the domain controller we are currently connected to
             // before actually attemtping to write the new password
             do {
-                let expirationtime = try String(describing: value.values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")[0])
-                try value.setValue(expirationtime, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
+                let expirationtime = try? String(describing: value.values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")[0])
+                if expirationtime == nil {
+                    try value.setValue("Th1sIsN0tth3P@ssword", forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
+                }
+                else {
+                    try value.setValue(expirationtime, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
+                }
             } catch {
                 laps_log.print("Unable to test setting the current expiration time in Active Directory to the same value. Either the record is not writable or the domain controller is not writable.", .error)
                 exit(1)
             }
+        }
+        if tool == "Set Password" {
             do {
                 try value.setValue(password, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
             } catch {
