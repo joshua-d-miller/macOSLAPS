@@ -21,7 +21,7 @@ The following preference keys must be set or the application will use the defaul
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
 `ExclusionSets` - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")
 `PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format)
-`FirstPass` - Use this key if you are enabling secureToken on your LAPS Admin. The script will read this key in if there isn't a keyhcain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
+`FirstPass` - Use this key if you are LAPS Admin is a FileVault user. The script will read this key in if there isn't a keyhcain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
 
 **NOTE about *FirstPass*:** macOSLAPS must know at least one password via config profile before we can start the keychain process. Settings this key before running it for the first time when it is your temporary admin password is the best method.
 
@@ -69,3 +69,4 @@ Epoch time
 * Allen Clouser and Jody Harptster - For showing me that the **'** key cannot be used from a Windows client without character map
 * John Pater - For advising me on the idea of generating 10 random passwords and picking one randomly to further randomize the password
 * Joel Rennich - For taking my questions about Swift and advising me on better ways to utilize Swift. Another special thanks to Joel for advising me on saving the password in the **System** keychain to deal with secureToken.
+* Peter Szul - For working with me to determine the initial date set by a newly bound computer is invalid and we need to test writing to the Domain Controller with another value for the first run.
