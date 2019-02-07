@@ -4,7 +4,7 @@
 //
 //  Created by Joshua D. Miller on 6/13/17.
 //  The Pennsylvania State University
-//  Last Update February 1, 2019
+//  Last Update February 7, 2019
 
 import Cocoa
 import Foundation
@@ -14,7 +14,7 @@ import OpenDirectory
 // Set up a function to run bash commands so we
 // can run fdesetup - From StackOverflow
 // https://stackoverflow.com/questions/26971240/how-do-i-run-an-terminal-command-in-a-swift-script-e-g-xcodebuild
-func shell(launchPath: String, arguments: [String]) -> String?
+func shell(launchPath: String, arguments: [String]) -> String
 {
     let task = Process()
     task.launchPath = launchPath
@@ -22,69 +22,96 @@ func shell(launchPath: String, arguments: [String]) -> String?
     
     let pipe = Pipe()
     task.standardOutput = pipe
+    task.standardError = pipe
     task.launch()
     
     let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    let output = String(data: data, encoding: String.Encoding.utf8)
-    
+    let output = String(data: data, encoding: String.Encoding.utf8)!
+    if output.count > 0 {
+        //remove newline character.
+        let lastIndex = output.index(before: output.endIndex)
+        return String(output[output.startIndex ..< lastIndex])
+    }
     return output
 }
 
 func perform_password_change(computer_record: Array<ODRecord>, local_admin: String) {
-    laps_log.print("Password Change is required as the LAPS password for \(local_admin), has expired", .info)
-    // Get our configuration variables to prepare for password change
     
+    laps_log.print("Password Change is required as the LAPS password for \(local_admin), has expired", .info)
+    
+    // Get our configuration variables to prepare for password change
     let pass_length = Int(get_config_settings(preference_key: "PasswordLength") as! Int)
     let exp_days = Int(get_config_settings(preference_key: "DaysTillExpiration") as! Int)
     let keychain_remove = get_config_settings(preference_key: "RemoveKeychain") as! Bool
+    var security_enabled_user = false
     
     // Generate random password
     let password = generate_random_pw(length: pass_length)
+    
     do {
         // Pull Local Administrator Record
         let local_node = try ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes))
         let local_admin_record = try local_node.record(withRecordType: kODRecordTypeUsers, name: local_admin, attributes: kODAttributeTypeRecordName)
+        
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = time_conversion(time_type: "windows", exp_time: nil, exp_days: exp_days) as! String
+        
         // Format Expiration Date
         let print_exp_date = time_conversion(time_type: "epoch", exp_time: new_ad_exp_date, exp_days: nil) as! Date
         let formatted_new_exp_date = dateFormatter.string(from: print_exp_date)
+        
         /* --- Change the password for the account --- */
-        // Determine if FileVault is Enabled
-        let fv_status = shell(launchPath: "/usr/bin/fdesetup", arguments: ["status"])
-        if (fv_status?.contains("FileVault is On."))! {
-            // Check if Local Admin is a FileVault User
-            let fv_user_cmd = shell(launchPath: "/usr/bin/fdesetup", arguments: ["list"])
-            let fv_user_list = fv_user_cmd?.components(separatedBy: [",", "\n"])
-            // Is Our Admin User a FileVault User?
-            if (fv_user_list?.contains(local_admin))! {
-                laps_log.print("The admin user specified: \(local_admin), has been detected as a FileVault user. Performing FileVault Password Change...", .info)
-                // Attempt to load password from System Keychain
-                let old_password = KeychainService.loadPassword(service: "macOSLAPS")
-                // If the attribute is nil then use our first password from config profile to change the password
-                if old_password == nil {
-                    let first_pass = get_config_settings(preference_key: "FirstPass") as! String
-                    try local_admin_record.changePassword(first_pass, toPassword: password)
-                }
-                // Use the Keychain Stored Password
-                else {
-                    try local_admin_record.changePassword(old_password, toPassword: password)
-                }
-            }
-            // Do Password change without an old password as the admin user is NOT a FileVault User
-            else {
-                try local_admin_record.changePassword(nil, toPassword: password)
+        // Check OS Version as that will determine how we proceed
+        if ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion.init(majorVersion: 10, minorVersion: 13, patchVersion: 0)) {
+            // Check for secureToken
+            let secure_token_status = shell(launchPath: "/usr/sbin/sysadminctl", arguments: ["-secureTokenStatus", local_admin])
+            if secure_token_status.contains("ENABLED") {
+                security_enabled_user = true
+                laps_log.print("The local admin: \(local_admin) has been detected to have a secureToken. Performing secure password change...", .info)
             }
         }
-        // Do Password change without an old password as FileVault is NOT enabled
         else {
+            // Determine if FileVault is Enabled
+            let fv_status = shell(launchPath: "/usr/bin/fdesetup", arguments: ["status"])
+            if (fv_status.contains("FileVault is On.")) {
+            // Check if Local Admin is a FileVault User
+                let fv_user_cmd = shell(launchPath: "/usr/bin/fdesetup", arguments: ["list"])
+                let fv_user_list = fv_user_cmd.components(separatedBy: [",", "\n"])
+                // Is Our Admin User a FileVault User?
+                if (fv_user_list.contains(local_admin)) {
+                    security_enabled_user = true
+                    laps_log.print("The local admin: \(local_admin) is currently a FileVault user. Performing secure password change...", .info)
+                }
+            }
+        }
+        
+        // Have we determineed that the local admin is a FileVault User or that the local admin user has a secureToken?
+        if security_enabled_user == true {
+            // Attempt to load password from System Keychain
+            let old_password = KeychainService.loadPassword(service: "macOSLAPS")
+            // If the attribute is nil then use our first password from config profile to change the password
+            if old_password == nil {
+                let first_pass = get_config_settings(preference_key: "FirstPass") as! String
+                try local_admin_record.changePassword(first_pass, toPassword: password)
+            }
+            else {
+                // Use the System Keychain password to change the old password to the new one and retain secureToken
+                try local_admin_record.changePassword(old_password, toPassword: password)
+            }
+        }
+        else {
+            // Do the standard reset as FileVault and secureToken are not present
             try local_admin_record.changePassword(nil, toPassword: password)
         }
+        
         // Write our new password to System Keychain
         KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
+        
         // Change the password in Active Directory
         _ = ad_tools(computer_record: computer_record, tool: "Set Password", password: password, new_ad_exp_date: new_ad_exp_date)
+        
         laps_log.print("Password change has been completed for the local admin \(local_admin). New expiration date is \(formatted_new_exp_date)", .info)
+        
         // Keychain Removal if enabled
         if keychain_remove == true {
             let local_admin_home = local_admin_record.value(forKeyPath: "dsAttrTypeStandard:NFSHomeDirectory") as! NSMutableArray
