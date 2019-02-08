@@ -22,6 +22,11 @@ let arguments = CommandLine.arguments as Array
 // Main function that checks our local admin password expiration in Active Directory and then if
 // needed changes the password to something random and writes it back to Active Directory
 func macOSLAPS() {
+    if arguments.contains("-version") {
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
+        print(appVersion)
+        exit(0)
+    }
     // Let's get started with getting our local admin account name
     let local_admin = get_config_settings(preference_key: "LocalAdminAccount") as! String
     // Check if running as root

@@ -292,15 +292,22 @@
 		E56B730B1E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = staff;
-				ALTERNATE_OWNER = jdm51;
+				ALTERNATE_GROUP = wheel;
+				ALTERNATE_OWNER = root;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = staff;
-				INSTALL_OWNER = jdm51;
+				INSTALL_GROUP = wheel;
+				INSTALL_OWNER = root;
 				INSTALL_PATH = /usr/local/laps;
+				"OTHER_LDFLAGS[arch=*]" = (
+					"-sectcreate",
+					__TEXT,
+					__info_plist,
+					"$(INFOPLIST_FILE)",
+				);
+				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -312,15 +319,22 @@
 		E56B730C1E38D39700FC66CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = staff;
-				ALTERNATE_OWNER = jdm51;
+				ALTERNATE_GROUP = wheel;
+				ALTERNATE_OWNER = root;
 				CODE_SIGN_IDENTITY = "Mac Developer";
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = staff;
-				INSTALL_OWNER = jdm51;
+				INSTALL_GROUP = wheel;
+				INSTALL_OWNER = root;
 				INSTALL_PATH = /usr/local/laps;
+				"OTHER_LDFLAGS[arch=*]" = (
+					"-sectcreate",
+					__TEXT,
+					__info_plist,
+					"$(INFOPLIST_FILE)",
+				);
+				OTHER_SWIFT_FLAGS = "";
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
