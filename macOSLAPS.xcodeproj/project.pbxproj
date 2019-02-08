@@ -298,8 +298,8 @@
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
@@ -325,8 +325,8 @@
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
