@@ -45,7 +45,7 @@ macOSLAPS is designed to run in an automated fashion (e.g. triggered by a Launch
 
 #### Optional Flags
 
-`-resetPassword` - generates a new password and writes it to the Active Directory computer record.
+`-resetPassword` - generates a new password and writes it to the Active Directory computer record.  
 `-version` - prints out the current verison of macOSLAPS.
 
 Logging
