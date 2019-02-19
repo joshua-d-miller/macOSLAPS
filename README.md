@@ -67,7 +67,7 @@ Credits
 * Rusty Myers - For helping to determine that Windows has its own time method vs
 Epoch time
 * Matt Hansen - For critiquing and assisting with generating the random password
-* Allen Clouser and Jody Harptster - For showing me that the **'** key cannot be used from a Windows client without character map
+* Allen Clouser and Jody Harpster - For showing me that the **'** key cannot be used from a Windows client without character map
 * John Pater - For advising me on the idea of generating 10 random passwords and picking one randomly to further randomize the password
 * Joel Rennich - For taking my questions about Swift and advising me on better ways to utilize Swift. Another special thanks to Joel for advising me on saving the password in the **System** keychain to deal with secureToken.
 * Peter Szul - For working with me to determine the initial date set by a newly bound computer is invalid and we need to test writing to the Domain Controller with another value for the first run.
