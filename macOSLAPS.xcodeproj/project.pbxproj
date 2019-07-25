@@ -301,6 +301,7 @@
 			buildSettings = {
 				ALTERNATE_GROUP = staff;
 				ALTERNATE_OWNER = jdm51;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
@@ -329,6 +330,7 @@
 			buildSettings = {
 				ALTERNATE_GROUP = staff;
 				ALTERNATE_OWNER = jdm51;
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
