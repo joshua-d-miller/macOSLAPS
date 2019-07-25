@@ -115,23 +115,24 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 0810;
-				LastUpgradeCheck = 0930;
+				LastUpgradeCheck = 1030;
 				ORGANIZATIONNAME = "Joshua D. Miller";
 				TargetAttributes = {
 					E56B73021E38D39700FC66CB = {
 						CreatedOnToolsVersion = 8.1;
 						DevelopmentTeam = VQ32N9FEBR;
-						LastSwiftMigration = 0920;
-						ProvisioningStyle = Automatic;
+						LastSwiftMigration = 1020;
+						ProvisioningStyle = Manual;
 					};
 				};
 			};
 			buildConfigurationList = E56B72FE1E38D39700FC66CB /* Build configuration list for PBXProject "macOSLAPS" */;
 			compatibilityVersion = "Xcode 3.2";
-			developmentRegion = English;
+			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				Base,
 			);
 			mainGroup = E56B72FA1E38D39700FC66CB;
 			productRefGroup = E56B73041E38D39700FC66CB /* Products */;
@@ -168,7 +169,10 @@
 		E56B73081E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -217,9 +221,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
-				INSTALL_PATH = /usr/local/laps;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
+				INSTALL_PATH = /;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -233,7 +237,10 @@
 		E56B73091E38D39700FC66CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
 				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
@@ -276,9 +283,9 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				INSTALL_GROUP = wheel;
-				INSTALL_OWNER = root;
-				INSTALL_PATH = /usr/local/laps;
+				INSTALL_GROUP = staff;
+				INSTALL_OWNER = jdm51;
+				INSTALL_PATH = /;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
@@ -292,15 +299,17 @@
 		E56B730B1E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = wheel;
-				ALTERNATE_OWNER = root;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /usr/local/laps;
+				INSTALL_PATH = /;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
 					__TEXT,
@@ -311,23 +320,24 @@
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
-				SWIFT_VERSION = 4.2;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
 		E56B730C1E38D39700FC66CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALTERNATE_GROUP = wheel;
-				ALTERNATE_OWNER = root;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				ALTERNATE_GROUP = staff;
+				ALTERNATE_OWNER = jdm51;
+				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_STYLE = Manual;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /usr/local/laps;
+				INSTALL_PATH = /;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
 					__TEXT,
@@ -338,8 +348,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_SWIFT3_OBJC_INFERENCE = Off;
-				SWIFT_VERSION = 4.2;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};

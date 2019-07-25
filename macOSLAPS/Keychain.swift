@@ -58,7 +58,7 @@ public class KeychainService: NSObject {
         SecKeychainUnlock(systemKeychain, 0, nil, false)
         
         let keychainQuery: NSMutableDictionary = NSMutableDictionary(
-            objects: [systemKeychain as Any, kSecClassGenericPassword, service, kCFBooleanTrue, kCFBooleanTrue, kSecMatchLimitOne],
+            objects: [systemKeychain as Any, kSecClassGenericPassword, service, kCFBooleanTrue ?? false, kCFBooleanTrue ?? false, kSecMatchLimitOne],
             forKeys: [kSecUseKeychainValue, kSecClass, kSecAttrServiceValue, kSecReturnData, kSecReturnAttributes, kSecMatchLimit])
         
         var item: CFTypeRef?

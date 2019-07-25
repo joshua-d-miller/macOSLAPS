@@ -22,7 +22,7 @@ func generate_random_pw(length: Int) -> String {
     var passwordCharacters = Array(string_passwordCharacters)
     let exclusions_from_pw = get_config_settings(preference_key: "RemovePassChars") as! String
     for character in exclusions_from_pw {
-        if let ix = passwordCharacters.index(of: character) {
+        if let ix = passwordCharacters.firstIndex(of: character) {
             passwordCharacters.remove(at: ix)
         }
     }
