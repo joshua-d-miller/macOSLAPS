@@ -7,17 +7,17 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E57A17D41F0D80E7008D21B6 /* ADTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CA1F0D80E7008D21B6 /* ADTools.swift */; };
-		E57A17D51F0D80E7008D21B6 /* ConfigSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CB1F0D80E7008D21B6 /* ConfigSettings.swift */; };
-		E57A17D61F0D80E7008D21B6 /* DateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CC1F0D80E7008D21B6 /* DateFormatter.swift */; };
-		E57A17D71F0D80E7008D21B6 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CD1F0D80E7008D21B6 /* Extensions.swift */; };
-		E57A17D81F0D80E7008D21B6 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17CF1F0D80E7008D21B6 /* Logging.swift */; };
-		E57A17D91F0D80E7008D21B6 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17D01F0D80E7008D21B6 /* main.swift */; };
-		E57A17DA1F0D80E7008D21B6 /* PasswordGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17D11F0D80E7008D21B6 /* PasswordGen.swift */; };
-		E57A17DB1F0D80E7008D21B6 /* PWChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17D21F0D80E7008D21B6 /* PWChange.swift */; };
-		E57A17DC1F0D80E7008D21B6 /* TimeConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E57A17D31F0D80E7008D21B6 /* TimeConversion.swift */; };
-		E5BF1B30220B92750043DD69 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5BF1B2F220B92750043DD69 /* Keychain.swift */; };
-		E5D9B89B1F0F4A7C0028703D /* CharacterSetExlusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D9B89A1F0F4A7C0028703D /* CharacterSetExlusion.swift */; };
+		E5C72DAD2367661700762B42 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA12367661700762B42 /* Logging.swift */; };
+		E5C72DAE2367661700762B42 /* CharacterSetExlusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA22367661700762B42 /* CharacterSetExlusion.swift */; };
+		E5C72DAF2367661700762B42 /* ConfigSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA32367661700762B42 /* ConfigSettings.swift */; };
+		E5C72DB02367661700762B42 /* TimeConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA42367661700762B42 /* TimeConversion.swift */; };
+		E5C72DB12367661700762B42 /* Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA52367661700762B42 /* Extensions.swift */; };
+		E5C72DB22367661700762B42 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA62367661700762B42 /* Keychain.swift */; };
+		E5C72DB32367661700762B42 /* DateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA72367661700762B42 /* DateFormatter.swift */; };
+		E5C72DB42367661700762B42 /* PWChange.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA82367661700762B42 /* PWChange.swift */; };
+		E5C72DB52367661700762B42 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA92367661700762B42 /* main.swift */; };
+		E5C72DB62367661700762B42 /* ADTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DAA2367661700762B42 /* ADTools.swift */; };
+		E5C72DB72367661700762B42 /* PasswordGen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DAB2367661700762B42 /* PasswordGen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -34,19 +34,18 @@
 
 /* Begin PBXFileReference section */
 		E56B73031E38D39700FC66CB /* macOSLAPS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macOSLAPS; sourceTree = BUILT_PRODUCTS_DIR; };
-		E57A17CA1F0D80E7008D21B6 /* ADTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ADTools.swift; path = macOSLAPS/ADTools.swift; sourceTree = "<group>"; };
-		E57A17CB1F0D80E7008D21B6 /* ConfigSettings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ConfigSettings.swift; path = macOSLAPS/ConfigSettings.swift; sourceTree = "<group>"; };
-		E57A17CC1F0D80E7008D21B6 /* DateFormatter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = DateFormatter.swift; path = macOSLAPS/DateFormatter.swift; sourceTree = "<group>"; };
-		E57A17CD1F0D80E7008D21B6 /* Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Extensions.swift; path = macOSLAPS/Extensions.swift; sourceTree = "<group>"; };
-		E57A17CE1F0D80E7008D21B6 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = macOSLAPS/Info.plist; sourceTree = "<group>"; };
-		E57A17CF1F0D80E7008D21B6 /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = Logging.swift; path = macOSLAPS/Logging.swift; sourceTree = "<group>"; };
-		E57A17D01F0D80E7008D21B6 /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = main.swift; path = macOSLAPS/main.swift; sourceTree = "<group>"; };
-		E57A17D11F0D80E7008D21B6 /* PasswordGen.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = PasswordGen.swift; path = macOSLAPS/PasswordGen.swift; sourceTree = "<group>"; };
-		E57A17D21F0D80E7008D21B6 /* PWChange.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = PWChange.swift; path = macOSLAPS/PWChange.swift; sourceTree = "<group>"; };
-		E57A17D31F0D80E7008D21B6 /* TimeConversion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = TimeConversion.swift; path = macOSLAPS/TimeConversion.swift; sourceTree = "<group>"; };
-		E5BF1B2F220B92750043DD69 /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Keychain.swift; path = macOSLAPS/Keychain.swift; sourceTree = "<group>"; };
-		E5D9B89A1F0F4A7C0028703D /* CharacterSetExlusion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = CharacterSetExlusion.swift; path = macOSLAPS/CharacterSetExlusion.swift; sourceTree = "<group>"; };
-		E5DE29F91EF1557900ADEECE /* macOSLAPS */ = {isa = PBXFileReference; lastKnownFileType = folder; path = macOSLAPS; sourceTree = "<group>"; };
+		E5C72DA12367661700762B42 /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
+		E5C72DA22367661700762B42 /* CharacterSetExlusion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CharacterSetExlusion.swift; sourceTree = "<group>"; };
+		E5C72DA32367661700762B42 /* ConfigSettings.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ConfigSettings.swift; sourceTree = "<group>"; };
+		E5C72DA42367661700762B42 /* TimeConversion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TimeConversion.swift; sourceTree = "<group>"; };
+		E5C72DA52367661700762B42 /* Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Extensions.swift; sourceTree = "<group>"; };
+		E5C72DA62367661700762B42 /* Keychain.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
+		E5C72DA72367661700762B42 /* DateFormatter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DateFormatter.swift; sourceTree = "<group>"; };
+		E5C72DA82367661700762B42 /* PWChange.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PWChange.swift; sourceTree = "<group>"; };
+		E5C72DA92367661700762B42 /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		E5C72DAA2367661700762B42 /* ADTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ADTools.swift; sourceTree = "<group>"; };
+		E5C72DAB2367661700762B42 /* PasswordGen.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PasswordGen.swift; sourceTree = "<group>"; };
+		E5C72DAC2367661700762B42 /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -63,19 +62,7 @@
 		E56B72FA1E38D39700FC66CB = {
 			isa = PBXGroup;
 			children = (
-				E57A17CA1F0D80E7008D21B6 /* ADTools.swift */,
-				E5D9B89A1F0F4A7C0028703D /* CharacterSetExlusion.swift */,
-				E57A17CB1F0D80E7008D21B6 /* ConfigSettings.swift */,
-				E57A17CC1F0D80E7008D21B6 /* DateFormatter.swift */,
-				E57A17CD1F0D80E7008D21B6 /* Extensions.swift */,
-				E5BF1B2F220B92750043DD69 /* Keychain.swift */,
-				E57A17CE1F0D80E7008D21B6 /* Info.plist */,
-				E57A17CF1F0D80E7008D21B6 /* Logging.swift */,
-				E57A17D01F0D80E7008D21B6 /* main.swift */,
-				E57A17D11F0D80E7008D21B6 /* PasswordGen.swift */,
-				E57A17D21F0D80E7008D21B6 /* PWChange.swift */,
-				E57A17D31F0D80E7008D21B6 /* TimeConversion.swift */,
-				E5DE29F91EF1557900ADEECE /* macOSLAPS */,
+				E5C72DA02367661700762B42 /* macOSLAPS */,
 				E56B73041E38D39700FC66CB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -88,6 +75,25 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		E5C72DA02367661700762B42 /* macOSLAPS */ = {
+			isa = PBXGroup;
+			children = (
+				E5C72DA12367661700762B42 /* Logging.swift */,
+				E5C72DA22367661700762B42 /* CharacterSetExlusion.swift */,
+				E5C72DA32367661700762B42 /* ConfigSettings.swift */,
+				E5C72DA42367661700762B42 /* TimeConversion.swift */,
+				E5C72DA52367661700762B42 /* Extensions.swift */,
+				E5C72DA62367661700762B42 /* Keychain.swift */,
+				E5C72DA72367661700762B42 /* DateFormatter.swift */,
+				E5C72DA82367661700762B42 /* PWChange.swift */,
+				E5C72DA92367661700762B42 /* main.swift */,
+				E5C72DAA2367661700762B42 /* ADTools.swift */,
+				E5C72DAB2367661700762B42 /* PasswordGen.swift */,
+				E5C72DAC2367661700762B42 /* Info.plist */,
+			);
+			path = macOSLAPS;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -98,6 +104,7 @@
 				E56B72FF1E38D39700FC66CB /* Sources */,
 				E56B73001E38D39700FC66CB /* Frameworks */,
 				E56B73011E38D39700FC66CB /* CopyFiles */,
+				E5BECFB42385806C0066DDCC /* Increment Build */,
 			);
 			buildRules = (
 			);
@@ -115,7 +122,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 0810;
-				LastUpgradeCheck = 1030;
+				LastUpgradeCheck = 1110;
 				ORGANIZATIONNAME = "Joshua D. Miller";
 				TargetAttributes = {
 					E56B73021E38D39700FC66CB = {
@@ -144,22 +151,43 @@
 		};
 /* End PBXProject section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		E5BECFB42385806C0066DDCC /* Increment Build */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Increment Build";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "buildPlist=${INFOPLIST_FILE}\nbuildNumber=$(/usr/libexec/PlistBuddy -c \"Print CFBundleVersion\" \"$buildPlist\")\nbuildNumber=$(($buildNumber + 1))\n/usr/libexec/PlistBuddy -c \"Set :CFBundleVersion $buildNumber\" \"$buildPlist\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		E56B72FF1E38D39700FC66CB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				E57A17D61F0D80E7008D21B6 /* DateFormatter.swift in Sources */,
-				E57A17D81F0D80E7008D21B6 /* Logging.swift in Sources */,
-				E57A17D91F0D80E7008D21B6 /* main.swift in Sources */,
-				E57A17DA1F0D80E7008D21B6 /* PasswordGen.swift in Sources */,
-				E57A17D51F0D80E7008D21B6 /* ConfigSettings.swift in Sources */,
-				E5BF1B30220B92750043DD69 /* Keychain.swift in Sources */,
-				E57A17D41F0D80E7008D21B6 /* ADTools.swift in Sources */,
-				E57A17DC1F0D80E7008D21B6 /* TimeConversion.swift in Sources */,
-				E57A17DB1F0D80E7008D21B6 /* PWChange.swift in Sources */,
-				E57A17D71F0D80E7008D21B6 /* Extensions.swift in Sources */,
-				E5D9B89B1F0F4A7C0028703D /* CharacterSetExlusion.swift in Sources */,
+				E5C72DB12367661700762B42 /* Extensions.swift in Sources */,
+				E5C72DB72367661700762B42 /* PasswordGen.swift in Sources */,
+				E5C72DB02367661700762B42 /* TimeConversion.swift in Sources */,
+				E5C72DB62367661700762B42 /* ADTools.swift in Sources */,
+				E5C72DB52367661700762B42 /* main.swift in Sources */,
+				E5C72DAF2367661700762B42 /* ConfigSettings.swift in Sources */,
+				E5C72DB32367661700762B42 /* DateFormatter.swift in Sources */,
+				E5C72DAD2367661700762B42 /* Logging.swift in Sources */,
+				E5C72DAE2367661700762B42 /* CharacterSetExlusion.swift in Sources */,
+				E5C72DB42367661700762B42 /* PWChange.swift in Sources */,
+				E5C72DB22367661700762B42 /* Keychain.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -196,7 +224,6 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Mac Developer";
@@ -225,7 +252,6 @@
 				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
-				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -264,7 +290,6 @@
 				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
 				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_SUSPICIOUS_MOVES = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_IDENTITY = "Mac Developer";
@@ -287,7 +312,6 @@
 				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
-				MTL_ENABLE_DEBUG_INFO = NO;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Owholemodule";
@@ -301,16 +325,19 @@
 			buildSettings = {
 				ALTERNATE_GROUP = staff;
 				ALTERNATE_OWNER = jdm51;
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_IDENTITY = "Developer ID Application";
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 253;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /;
+				INSTALL_PATH = /usr/local/laps;
+				MARKETING_VERSION = 1.1.5;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
 					__TEXT,
@@ -330,16 +357,19 @@
 			buildSettings = {
 				ALTERNATE_GROUP = staff;
 				ALTERNATE_OWNER = jdm51;
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
-				CODE_SIGN_IDENTITY = "Developer ID Application";
+				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = NO;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 253;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /;
+				INSTALL_PATH = /usr/local/laps;
+				MARKETING_VERSION = 1.1.5;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
 					__TEXT,

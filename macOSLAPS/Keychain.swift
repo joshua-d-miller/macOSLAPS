@@ -8,7 +8,8 @@
 //  https://developer.apple.com/documentation/security/keychain_services/keychain_items/searching_for_keychain_items
 //  https://gitlab.com/orchardandgrove-oss/NoMADLogin-AD/blob/master/Mechs/KeychainAdd.swift
 //  Unlocking System Keychain code inspired by NoMad Login - Thanks Joel Rennich
-//  Last Updated February 1, 2019
+//  Another special thanks to Joel for critiqing my code to figure out the keychain function needed rewrote to compile in Xcode 11.1
+//  Last Updated November 7, 2019
 
 import Cocoa
 import Security
@@ -35,9 +36,12 @@ public class KeychainService: NSObject {
             SecKeychainUnlock(systemKeychain, 0, nil, false)
             
             // Instantiate a new default keychain query
-            let keychainQuery: NSMutableDictionary = NSMutableDictionary(
-                objects: [systemKeychain as Any, kSecClassGenericPasswordValue, service, account, dataFromString],
-                forKeys: [kSecUseKeychainValue, kSecClassValue, kSecAttrServiceValue, kSecAttrAccountValue, kSecValueDataValue])
+            let keychainQuery : [ String : AnyObject ] = [
+            kSecUseKeychainValue as String : systemKeychain as AnyObject,
+            kSecClassValue as String : kSecClassGenericPasswordValue as AnyObject,
+            kSecAttrServiceValue as String: service as AnyObject,
+            kSecAttrAccountValue as String : account as AnyObject,
+            kSecValueDataValue as String : dataFromString as AnyObject]
             
             // Add the new keychain item
             var status = SecItemAdd(keychainQuery as CFDictionary, nil)
@@ -57,14 +61,18 @@ public class KeychainService: NSObject {
         SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
         SecKeychainUnlock(systemKeychain, 0, nil, false)
         
-        let keychainQuery: NSMutableDictionary = NSMutableDictionary(
-            objects: [systemKeychain as Any, kSecClassGenericPassword, service, kCFBooleanTrue ?? false, kCFBooleanTrue ?? false, kSecMatchLimitOne],
-            forKeys: [kSecUseKeychainValue, kSecClass, kSecAttrServiceValue, kSecReturnData, kSecReturnAttributes, kSecMatchLimit])
+        let keychainQuery : [ String : AnyObject ] = [
+        kSecReturnAttributes as String: true as AnyObject,
+        kSecReturnData as String : true as AnyObject,
+        kSecMatchLimit as String : kSecMatchLimitOne as AnyObject,
+        kSecAttrServiceValue as String : service as AnyObject,
+        kSecClass as String : kSecClassGenericPassword as AnyObject,
+        kSecUseKeychainValue as String : systemKeychain as AnyObject]
         
         var item: CFTypeRef?
         
         // Search for the keychain items
-        let status: OSStatus = SecItemCopyMatching(keychainQuery, &item)
+        let status: OSStatus = SecItemCopyMatching(keychainQuery as CFDictionary, &item)
         var password: String? = nil
         
         if status == errSecSuccess {

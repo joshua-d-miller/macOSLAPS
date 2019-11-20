@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<string>edu.psu.macOSLAPS</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.1.2</string>
+	<string>1.1.6</string>
 	<key>CFBundleVersion</key>
-	<string>224</string>
+	<string>258</string>
 </dict>
 </plist>

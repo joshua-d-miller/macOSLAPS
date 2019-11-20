@@ -9,7 +9,7 @@
 //  the LAPS UI to be utilized and the random password the ability to be seen by those with
 //  permission to retrieve it.
 //  Joshua D. Miller - josh@psu.edu - The Pennsylvania State University
-//  Last Update February 6, 2019
+//  Last Updated November 7, 2019
 
 import Foundation
 
@@ -54,6 +54,7 @@ func macOSLAPS() {
         // Check if the domain controller that we are connected to is writable
         _ = ad_tools(computer_record: computer_record, tool: "Check if writable", password: nil, new_ad_exp_date: nil)
         // Performs Password Change for local admin account
+        laps_log.print("Password Change is required as the LAPS password for \(local_admin), has expired", .info)
         perform_password_change(computer_record: computer_record, local_admin: local_admin)
     }
     else {
@@ -61,7 +62,6 @@ func macOSLAPS() {
         laps_log.print("Password change is not required as the password for \(local_admin) does not expire until \(actual_exp_date)", .info)
         exit(0)
     }
-
 }
 
 macOSLAPS()
