@@ -19,9 +19,9 @@ The following preference keys must be set or the application will use the defaul
 `PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)  
 `RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)  
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
-`ExclusionSets` - Exclude any character set you'd like by specificying a string in an array (Example: "symbols")
+`ExclusionSets` - Exclude any character set you'd like by specifying a string in an array. Options are 'symbols', 'letters', and/or 'numbers'.
 `PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format)
-`FirstPass` - Use this key if you are LAPS Admin is a FileVault user. The script will read this key in if there isn't a keyhcain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
+`FirstPass` - Use this key if you are LAPS Admin is a FileVault user. The script will read this key in if there isn't a keychain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
 
 **NOTE about *FirstPass*:** macOSLAPS must know at least one password via config profile before we can start the keychain process. Setting this key before running it for the first time when it is your temporary admin password is the best method.
 
