@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <Scheme
-   LastUpgradeVersion = "1110"
+   LastUpgradeVersion = "1230"
    version = "1.3">
    <BuildAction
       parallelizeBuildables = "YES"
@@ -46,6 +46,7 @@
       debugAsWhichUser = "root"
       launchStyle = "0"
       useCustomWorkingDirectory = "NO"
+      customWorkingDirectory = "/usr/local/laps"
       ignoresPersistentStateOnLaunch = "NO"
       debugDocumentVersioning = "YES"
       debugServiceExtension = "internal"

@@ -1,10 +1,10 @@
-//
-//  DateFormatter.swift
-//  macOSLAPS
-//
-//  Created by Joshua D. Miller on 6/13/17.
-//  The Pennsylvania State University
-//
+///
+///  DateFormatter.swift
+///  macOSLAPS
+///
+///  Created by Joshua D. Miller on 6/13/17.
+///  The Pennsylvania State University
+///
 
 import Foundation
 

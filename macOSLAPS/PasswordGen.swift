@@ -1,27 +1,26 @@
-//
-//  PasswordGen.swift
-//  macOSLAPS
-//
-//  Created by Joshua D. Miller on 6/13/17.
-//  The Pennsylvania State University
-//
+///
+///  PasswordGen.swift
+///  macOSLAPS
+///
+///  Created by Joshua D. Miller on 6/13/17.
+///  The Pennsylvania State University
+///
 
 import Foundation
 
 // Generate a randomized password using the ASCII Character Set
-func generate_random_pw(length: Int) -> String {
+func PasswordGen(length: Int) -> String {
     var get_passwordCharacters = [] as Array<Character>
     for c in 33 ..< 127 {
         let char = Character(UnicodeScalar(c)!)
         get_passwordCharacters.append(char)
     }
     var string_passwordCharacters = String(get_passwordCharacters)
-    string_passwordCharacters = exclude_character_sets(password_chars: string_passwordCharacters)
+    string_passwordCharacters = CharacterSetExclusions(password_chars: string_passwordCharacters)
     // Exclude Characters specified in string format. If any characters are specified that
     // require escape make sure the escape is there as well (Examples: \\ \")
     var passwordCharacters = Array(string_passwordCharacters)
-    let exclusions_from_pw = get_config_settings(preference_key: "RemovePassChars") as! String
-    for character in exclusions_from_pw {
+    for character in Constants.characters_to_remove {
         if let ix = passwordCharacters.firstIndex(of: character) {
             passwordCharacters.remove(at: ix)
         }
