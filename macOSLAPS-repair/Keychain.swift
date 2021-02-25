@@ -27,7 +27,7 @@ class KeychainService {
         var trustedappRepair: SecTrustedApplication?
         
         SecTrustedApplicationCreateFromPath("/usr/local/laps/macOSLAPS", &trustedappSelf)
-        SecTrustedApplicationCreateFromPath("/usr/local/laps/macOSLAPS-repair", &trustedappRepair)
+        SecTrustedApplicationCreateFromPath(nil, &trustedappRepair)
         
         let trustedList = [trustedappSelf, trustedappRepair]
         

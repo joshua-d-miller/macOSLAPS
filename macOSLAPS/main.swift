@@ -7,11 +7,11 @@
 ///
 ///  Current Usage:
 ///    - Active Directory (Similar to Windows functionality)
-///    - Local (Password stored in Keycahin Only)
+///    - Local (Password stored in Keychain Only)
 ///  -------------------------
 ///  Joshua D. Miller - josh@psu.edu
 ///  The Pennsylvania State University
-///  Last Updated February 5, 2021
+///  Last Updated February 20, 2021
 ///  -------------------------
 
 import Foundation
@@ -34,108 +34,98 @@ struct Constants {
     static let method = GetPreference(preference_key: "Method") as! String
 }
 
-func GetLocalExpirationDate() -> Date? {
-    let (_, creation_date) = KeychainService.loadPassword(service: "macOSLAPS")
-    // Convert the date we received to an acceptable format
-    if creation_date == nil {
-        return(nil)
-    } else {
-        guard let formatted_date = Constants.dateFormatter.date(from: creation_date!) else {
-            // Print message we were unable to convert the date
-            laps_log.print("Unable to unwrap the creation date form our keychain entry. Exiting...", .error)
-            exit(1)
-        }
-        let exp_date = Calendar.current.date(byAdding: .day, value: Constants.days_till_expiration, to: formatted_date)!
-        return exp_date
-    }
-}
-
-// Active Directory Password Change Function
-func ad_change(reset: Bool) {
-    let ad_computer_record = ADTools.connect()
-    // Get Expiration Time from Active Directory
-    var ad_exp_time = ""
-    if reset == true {
-        ad_exp_time = "126227988000000000"
-    } else {
-        ad_exp_time = ADTools.check_pw_expiration(computer_record: ad_computer_record)!
-    }
-    // Convert that time into a date
-    let exp_date = TimeConversion.epoch(exp_time: ad_exp_time)
-    // Compare that newly calculated date against now to see if a change is required
-    if exp_date! < Date() {
-        // Check if the domain controller that we are connected to is writable
-        ADTools.verify_dc_writability(computer_record: ad_computer_record)
-        // Performs Password Change for local admin account
-        laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
-        PasswordChange.AD(computer_record: ad_computer_record)
-    }
-    else {
-        let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
-        laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(actual_exp_date)", .info)
-        exit(0)
-    }
-}
-// Local method to perform passwords changes locally vs relying on Active Directory.
-// It is assumed that users will be using either an MDM or some reporting method to store
-// the password somewhere
-func local_change(reset: Bool) {
-    // Load the Keychain Item and compare the date
-    var exp_date : Date?
-    if reset == true {
-        exp_date = Calendar.current.date(byAdding: .day, value: -7, to: Date())
-    } else {
-        exp_date = GetLocalExpirationDate()
-    }
-    if exp_date! < Date() {
-        PasswordChange.Local()
-        let new_exp_date = GetLocalExpirationDate()
-        laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
-        exit(0)
-    }
-    else {
-        laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: exp_date!))", .info)
-        exit(0)
-    }
-}
-
 func macOSLAPS() {
     // Check if running as root
     let current_running_User = NSUserName()
     if current_running_User != "root" {
         laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
-        exit(1)
+        exit(77)
     }
-    if Constants.arguments.contains("-version") {
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
-        print(appVersion)
-        exit(0)
-    } else if Constants.arguments.contains("-getPassword") {
-        if Constants.method == "local" {
-            let (current_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
-            if current_password == nil {
-                laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry", .error)
-                exit(1)
+    var pw_reset : Bool = false
+    // Iterate through supported Arguments
+    for argument in Constants.arguments {
+        switch argument {
+        case "-version":
+            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
+            print(appVersion)
+            exit(0)
+        case "-getPassword":
+            if Constants.method == "Local" {
+                let (current_password, current_expiration) = KeychainService.loadPassword(service: "macOSLAPS")
+                if current_password == nil {
+                    laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry", .error)
+                    exit(1)
+                } else {
+                    do {
+                        // Write contents to file
+                        try current_password!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-password", atomically: true, encoding: String.Encoding.utf8)
+                        try current_expiration!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
+                    }
+                    catch let error as NSError {
+                        print("Ooops! Something went wrong: \(error)")
+                    }
+                    exit(0)
+                }
             } else {
-                print(current_password!)
+                laps_log.print("Will not display password as our current method is Active Directory", .warn)
                 exit(0)
             }
+        case "-resetPassword":
+            pw_reset = true
+        default:
+            continue
+        }
+    }
+    switch Constants.method {
+    case "AD":
+        // Active Directory Password Change Function
+        let ad_computer_record = ADTools.connect()
+        // Get Expiration Time from Active Directory
+        var ad_exp_time = ""
+        if pw_reset == true {
+            ad_exp_time = "126227988000000000"
         } else {
-            laps_log.print("Will not display password as our current method is Active Directory", .warn)
+            ad_exp_time = ADTools.check_pw_expiration(computer_record: ad_computer_record)!
+        }
+        // Convert that time into a date
+        let exp_date = TimeConversion.epoch(exp_time: ad_exp_time)
+        // Compare that newly calculated date against now to see if a change is required
+        if exp_date! < Date() {
+            // Check if the domain controller that we are connected to is writable
+            ADTools.verify_dc_writability(computer_record: ad_computer_record)
+            // Performs Password Change for local admin account
+            laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
+            ADTools.password_change(computer_record: ad_computer_record)
+        }
+        else {
+            let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
+            laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(actual_exp_date)", .info)
             exit(0)
         }
-    } else if Constants.arguments.contains("-resetPassword") {
-        if Constants.method == "AD" {
-            ad_change(reset: true)
-        } else if Constants.method == "local" {
-            local_change(reset: true)
+    case "Local":
+        // Local method to perform passwords changes locally vs relying on Active Directory.
+        // It is assumed that users will be using either an MDM or some reporting method to store
+        // the password somewhere
+        // Load the Keychain Item and compare the date
+        var exp_date : Date?
+        if pw_reset == true {
+            exp_date = Calendar.current.date(byAdding: .day, value: -7, to: Date())
+        } else {
+            exp_date = LocalTools.get_expiration_date()
         }
+        if exp_date! < Date() {
+            LocalTools.password_change()
+            let new_exp_date = LocalTools.get_expiration_date()
+            laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
+            exit(0)
+        }
+        else {
+            laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: exp_date!))", .info)
+            exit(0)
+        }
+    default:
+        exit(0)
     }
-    if Constants.method == "AD" {
-        ad_change(reset: false)
-    } else if Constants.method == "local" {
-        local_change(reset: false)
-    }
-
 }
+
 macOSLAPS()

@@ -2,6 +2,6 @@
 <Workspace
    version = "1.0">
    <FileRef
-      location = "self:macOSLAPS.xcodeproj">
+      location = "self:/Users/jdm51/Documents/GitHub/macOSLAPS/macOSLAPS.xcodeproj">
    </FileRef>
 </Workspace>
