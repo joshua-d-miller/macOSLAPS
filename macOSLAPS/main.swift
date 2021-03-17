@@ -11,7 +11,7 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh@psu.edu
 ///  The Pennsylvania State University
-///  Last Updated February 20, 2021
+///  Last Updated March 17, 2021
 ///  -------------------------
 
 import Foundation
@@ -41,6 +41,15 @@ func macOSLAPS() {
         laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
         exit(77)
     }
+    // Remove files from extracting password if they exist
+    if FileManager.default.fileExists(atPath: "/var/root/Library/Application Support/macOSLAPS-password") {
+        do {
+            try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-password")
+            try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-expiration")
+        } catch {
+            laps_log.print("Unable to remove files used for extraction of password for MDM. Please delete manually", .warn)
+        }
+    }
     var pw_reset : Bool = false
     // Iterate through supported Arguments
     for argument in Constants.arguments {
@@ -62,7 +71,7 @@ func macOSLAPS() {
                         try current_expiration!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
                     }
                     catch let error as NSError {
-                        print("Ooops! Something went wrong: \(error)")
+                        laps_log.print("Unable to extract password from keychain. Error: \(error)", .error)
                     }
                     exit(0)
                 }

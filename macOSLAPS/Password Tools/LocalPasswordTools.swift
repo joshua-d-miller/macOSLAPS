@@ -1,10 +1,10 @@
-//
-//  LocalPasswordTools.swift
-//  macOSLAPS
-//
-//  Created by Miller, Joshua D. on 2/21/21.
-//  Copyright © 2021 Joshua D. Miller. All rights reserved.
-//
+///
+///  LocalPasswordTools.swift
+///  macOSLAPS
+///
+///  Created by Joshua D. Miller on 6/13/17.
+///  The Pennsylvania State University
+///  Last Update on March 17, 2021
 
 import Foundation
 import OpenDirectory
@@ -84,9 +84,18 @@ class LocalTools: NSObject {
             }
         }
         // Write our new password to System Keychain
-        let keychain_save : OSStatus = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
-        if keychain_save != 0 {
+        let save_status : OSStatus = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
+        if save_status == noErr {
+            laps_log.print("Password change has been completed locally." .info)
+        } else {
             laps_log.print("We were unable to save the password to keychain so we will revert the changes.", .error)
+            do {
+                try local_admin_record.changePassword(password, toPassword: old_password)
+                exit(1)
+            } catch {
+                laps_log.print("Unable to revert back to the old password, Please reset the local admin account to the FirstPass key and start again", .error)
+                exit(1)
+            }
             exit(1)
         }
         
@@ -103,8 +112,7 @@ class LocalTools: NSObject {
                     laps_log.print("Keychain does not currently exist. This may be due to the fact that the user account has never been logged into and is only used for elevation...", .info)
                 }
             } catch {
-                laps_log.print("Unable to remove \(Constants.local_admin)'s Keychain.", .error)
-                exit(1)
+                laps_log.print("Unable to remove \(Constants.local_admin)'s Keychain. If logging in as this user you may be presented with prompts for keychain", .warn)
             }
         }
     }

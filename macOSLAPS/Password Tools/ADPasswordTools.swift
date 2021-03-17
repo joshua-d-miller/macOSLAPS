@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  The Pennsylvania State University
-///  Last Update on February 1, 2021
+///  Last Update on March 17, 2021
 
 import Foundation
 import OpenDirectory
@@ -104,8 +104,7 @@ public class ADTools: NSObject {
             if old_password == nil {
                 do {
                     laps_log.print("Performing first password change using FirstPass attribute from configuration.", .info)
-                    let first_pass = GetPreference(preference_key: "FirstPass") as! String
-                    try local_admin_record.changePassword(first_pass, toPassword: password)
+                    try local_admin_record.changePassword(Constants.first_password, toPassword: password)
                 } catch {
                     laps_log.print("Unable to perform the first password change for secureToken admin account \(Constants.local_admin).")
                     exit(1)
@@ -133,7 +132,20 @@ public class ADTools: NSObject {
         // Write our new password to System Keychain and Active Directory
         var save_status : OSStatus
         save_status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
-        laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
+        // Error Catching for writing to keychain
+        if save_status == noErr {
+            laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
+        }
+        else {
+            do {
+                laps_log.print("New Password could not be saved to the keychain. Reverting Changes and exiting...", .error)
+                try local_admin_record.changePassword(password, toPassword: old_password)
+                exit(1)
+            } catch {
+                laps_log.print("Unable to revert back to the old password, Please reset the local admin account to the FirstPass key and start again", .error)
+                exit(1)
+            }
+        }
         save_status = ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!)
         // Error catching should the Writing of the password fail. Revert the changes and exit
         if save_status != 0 {
@@ -163,8 +175,7 @@ public class ADTools: NSObject {
                     laps_log.print("Keychain does not currently exist. This may be due to the fact that the user account has never been logged into and is only used for elevation...", .info)
                 }
             } catch {
-                laps_log.print("Unable to remove \(Constants.local_admin)'s Keychain.", .error)
-                exit(1)
+                laps_log.print("Unable to remove \(Constants.local_admin)'s Keychain. If logging in as this user you may be presented with prompts for keychain", .warn)
             }
         }
         else {

@@ -23,32 +23,38 @@ class KeychainService {
         SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
         SecKeychainUnlock(systemKeychain, 0, nil, false)
         
-        
         // Create access for our two binaries to access the Keychain
         // Item. This shold ensure we always have access
         var access : SecAccess?
         var trustedappSelf: SecTrustedApplication?
-        var trustedappNew: SecTrustedApplication?
+        var trustedappRepair: SecTrustedApplication?
+        var trustedList : Array<SecTrustedApplication?>
         
         SecTrustedApplicationCreateFromPath(nil, &trustedappSelf)
-        SecTrustedApplicationCreateFromPath("/usr/local/laps/macOSLAPS", &trustedappNew)
-        let new_app_data = Data(base64Encoded: "L1VzZXJzL2pkbTUxL0xpYnJhcnkvRGV2ZWxvcGVyL1hjb2RlL0Rlcml2ZWREYXRhL0J1aWxkL1Byb2R1Y3RzL0RlYnVnL21hY09TTEFQUwA=")! as CFData
-        SecTrustedApplicationSetData(trustedappNew!, new_app_data)
-        let trustedList = [trustedappSelf, trustedappNew]
+        SecTrustedApplicationCreateFromPath("/usr/local/laps/macOSLAPS-repair", &trustedappRepair)
         
+        // Error Checking for if some reason the repair is not available
+        if trustedappSelf != nil && trustedappRepair != nil {
+            trustedList = [trustedappSelf, trustedappRepair]
+        } else {
+            trustedList = [trustedappSelf]
+        }
+        
+        // Create Access list with our applications
         SecAccessCreate("macOSLAPS Access" as CFString, trustedList as CFArray, &access)
         
         // The query used to save our newly created keychain entry
         let query : [String : Any] = [
-            kSecClass as String       : kSecClassGenericPassword as String,
-            kSecAttrService as String : service,
-            kSecAttrAccess as String  : access!,
-            kSecAttrAccount as String : account,
-            kSecValueData as String   : dataFromString!,
-            kSecUseKeychain as String : systemKeychain!]
-
+            kSecClass as String        : kSecClassGenericPassword as String,
+            kSecAttrService as String  : service,
+            kSecAttrAccount as String  : account,
+            kSecAttrAccess as String   : access!,
+            kSecValueData as String    : dataFromString!,
+            kSecUseKeychain as String  : systemKeychain!]
+        
+        // Remove old keychain entry
         SecItemDelete(query as CFDictionary)
-
+        // Create new keychain entry
         SecItemAdd(query as CFDictionary, nil)
         
         // Add Creation Date as Comment
@@ -76,7 +82,6 @@ class KeychainService {
             kSecClass as String            : kSecClassGenericPassword,
             kSecAttrService as String      : service,
             kSecReturnData as String       : kCFBooleanTrue!,
-            kSecReturnRef as String        : kCFBooleanTrue!,
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
             kSecUseKeychain as String      : systemKeychain!]
@@ -89,13 +94,43 @@ class KeychainService {
             let existingItem = item as? [String: Any]
             let passwordData = existingItem![String(kSecValueData)] as? Data
             let password = String(data: passwordData!, encoding: String.Encoding.utf8)
-            let comment = existingItem![String(kSecAttrComment)].unsafelyUnwrapped as! String
+            guard let comment = existingItem?[String(kSecAttrComment)] as? String else {
+                laps_log.print("There is currently no expriation date comment", .warn)
+                return(password, nil)
+            }
             let r = comment.index(comment.startIndex, offsetBy: 9)..<comment.endIndex
             let creationdate = String(comment[r])
             
             return (password, creationdate)
         } else {
-            return(nil,nil)
+            // Run macOSLAPS-repair to repair the keychain entry
+            _ = Shell.run(launchPath: "/usr/local/laps/macOSLAPS-repair", arguments: [])
+            // Construct second query to allow us to try again
+            let second_query : [String : Any] = [
+                kSecClass as String            : kSecClassGenericPassword,
+                kSecAttrService as String      : service,
+                kSecReturnData as String       : kCFBooleanTrue!,
+                kSecReturnAttributes as String : kCFBooleanTrue!,
+                kSecMatchLimit as String       : kSecMatchLimitOne,
+                kSecUseKeychain as String      : systemKeychain!]
+            var retryItem: AnyObject? = nil
+            let second_status: OSStatus = SecItemCopyMatching(second_query as CFDictionary, &retryItem)
+            // Check if we succeeded or else return nil
+            if second_status == noErr {
+                let retryexistingItem = retryItem as? [String: Any]
+                let passwordData = retryexistingItem![String(kSecValueData)] as? Data
+                let password = String(data: passwordData!, encoding: String.Encoding.utf8)
+                guard let comment = retryItem?[String(kSecAttrComment)] as? String else {
+                    laps_log.print("There is currently no expriation date comment", .warn)
+                    return(password, nil)
+                }
+                let r = comment.index(comment.startIndex, offsetBy: 9)..<comment.endIndex
+                let creationdate = String(comment[r])
+                
+                return (password, creationdate)
+            }
+            
         }
+        return(nil,nil)
     }
 }

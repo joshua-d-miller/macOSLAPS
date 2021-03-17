@@ -1,10 +1,10 @@
-//
-//  Shell.swift
-//  macOSLAPS
-//
-//  Created by Miller, Joshua D. on 2/21/21.
-//  Copyright © 2021 Joshua D. Miller. All rights reserved.
-//
+///
+///  Shell.swift
+///  macOSLAPS
+///
+///  Created by Joshua D. Miller on 2/21/21.
+///  The Pennsylvania State University
+///
 
 import Foundation
 
@@ -21,7 +21,7 @@ class Shell: NSObject {
         task.standardOutput = pipe
         task.standardError = pipe
         task.launch()
-        
+        task.waitUntilExit()
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         let output = String(data: data, encoding: String.Encoding.utf8)!
         if output.count > 0 {
