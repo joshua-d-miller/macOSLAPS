@@ -86,7 +86,7 @@ class LocalTools: NSObject {
         // Write our new password to System Keychain
         let save_status : OSStatus = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
         if save_status == noErr {
-            laps_log.print("Password change has been completed locally." .info)
+            laps_log.print("Password change has been completed locally.", .info)
         } else {
             laps_log.print("We were unable to save the password to keychain so we will revert the changes.", .error)
             do {
