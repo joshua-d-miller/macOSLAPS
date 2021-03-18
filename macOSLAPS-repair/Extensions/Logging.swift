@@ -1,6 +1,6 @@
 ///
 ///  Logging.swift
-///  macOSLAPS
+///  macOSLAPS-repair
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  The Pennsylvania State University
@@ -37,8 +37,8 @@ public class laps_log {
     public static func print<T>(_ object: T, _ level: logLevel = .debug, filename: String = #file, line: Int = #line, funcname: String = #function) {
         if level.rawValue >= laps_log.minimumLogLevel.rawValue {
             let process = ProcessInfo.processInfo
-            Swift.print("\(level.description())|\(Constants.dateFormatter.string(from: Foundation.Date()))|\(process.processName)|\(object)")
-            let text = "\(level.description())|\(Constants.dateFormatter.string(from: Foundation.Date()))|\(process.processName)|\(object)"
+            Swift.print("\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)")
+            let text = "\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)"
             writeToFile(content: text, fileName: "macOSLAPS.log")
         }
     }

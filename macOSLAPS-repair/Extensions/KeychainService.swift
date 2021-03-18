@@ -1,6 +1,6 @@
 ///
-///  Keychain.swift
-///  macOSLAPS - Pulled from LAPS for macOS to use with System.keychain
+///  KeychainService.swift
+///  macOSLAPS-repair - Pulled from LAPS for macOS to use with System.keychain
 ///
 ///  Created by Joshua D. Miller on 7/21/18.
 ///  The Pennsylvania State University
@@ -16,13 +16,12 @@ import Security
 
 class KeychainService {
     
-    class func savePassword(service: String, account: String, data: String) -> OSStatus {
+    class func savePassword(service: String, account: String, data: String, create_date: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
         var systemKeychain : SecKeychain?
         
         SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
         SecKeychainUnlock(systemKeychain, 0, nil, false)
-        
         
         // Create access for our two binaries to access the Keychain
         // Item. This shold ensure we always have access
@@ -34,36 +33,30 @@ class KeychainService {
         SecTrustedApplicationCreateFromPath("/usr/local/laps/macOSLAPS-repair", &trustedappRepair)
         
         var trustedList : Array<SecTrustedApplication?>
-        if trustedappRepair == nil {
-            trustedList = [trustedappSelf]
-        } else {
-            trustedList = [trustedappSelf, trustedappRepair]
-        }
+        trustedList = [trustedappSelf, trustedappRepair]
         
         SecAccessCreate("macOSLAPS Access" as CFString, trustedList as CFArray, &access)
         
         // The query used to save our newly created keychain entry
         let query : [String : Any] = [
-            kSecClass as String       : kSecClassGenericPassword as String,
-            kSecAttrService as String : service,
-            kSecAttrAccess as String  : access!,
-            kSecAttrAccount as String : account,
-            kSecValueData as String   : dataFromString!,
-            kSecUseKeychain as String : systemKeychain!]
+            kSecClass as String        : kSecClassGenericPassword as String,
+            kSecAttrService as String  : service,
+            kSecAttrAccount as String  : account,
+            kSecAttrAccess as String   : access!,
+            kSecValueData as String    : dataFromString!,
+            kSecUseKeychain as String  : systemKeychain!]
 
         SecItemDelete(query as CFDictionary)
-
         SecItemAdd(query as CFDictionary, nil)
         
         // Add Creation Date as Comment
         // This seemed to require another query and update as it failed with the original
-        let creation_date = Constants.dateFormatter.string(from: Date())
         let newquery : [ String : Any ] = [
             kSecClass as String       : kSecClassGenericPassword,
             kSecAttrService as String : service,
             kSecUseKeychain as String : systemKeychain!]
         let comment_attribute : [ String : Any ] = [
-            kSecAttrComment as String : "Created: \(creation_date)"
+            kSecAttrComment as String : "Created: \(create_date)"
         ]
         return SecItemUpdate(newquery as CFDictionary, comment_attribute as CFDictionary)
     }
@@ -83,17 +76,19 @@ class KeychainService {
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
             kSecUseKeychain as String      : systemKeychain!]
-
+        
         var item: AnyObject? = nil
         SecKeychainSetUserInteractionAllowed(false)
                 defer { SecKeychainSetUserInteractionAllowed(true) }
         let status: OSStatus = SecItemCopyMatching(query as CFDictionary, &item)
-        
         if status == noErr {
             let existingItem = item as? [String: Any]
             let passwordData = existingItem![String(kSecValueData)] as? Data
             let password = String(data: passwordData!, encoding: String.Encoding.utf8)
-            let comment = existingItem![String(kSecAttrComment)].unsafelyUnwrapped as! String
+            guard let comment = existingItem?[String(kSecAttrComment)] as? String else {
+                laps_log.print("There is currently no expriation date comment", .warn)
+                return(password, nil)
+            }
             let r = comment.index(comment.startIndex, offsetBy: 9)..<comment.endIndex
             let creationdate = String(comment[r])
             
