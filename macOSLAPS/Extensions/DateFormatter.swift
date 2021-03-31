@@ -10,8 +10,7 @@ import Foundation
 
 
 // Used to format the date when needed
-func date_formatter () -> DateFormatter {
-    let dateFormatter = DateFormatter()
-    dateFormatter.dateFormat = "E MMM dd, yyyy hh:mm:ss a"
+func date_formatter () -> ISO8601DateFormatter {
+    let dateFormatter = ISO8601DateFormatter()
     return(dateFormatter)
 }
