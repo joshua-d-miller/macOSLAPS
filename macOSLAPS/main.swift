@@ -60,15 +60,17 @@ func macOSLAPS() {
             exit(0)
         case "-getPassword":
             if Constants.method == "Local" {
-                let (current_password, current_expiration) = KeychainService.loadPassword(service: "macOSLAPS")
+                let (current_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
                 if current_password == nil {
                     laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry", .error)
                     exit(1)
                 } else {
                     do {
+                        let current_expiration_date = LocalTools.get_expiration_date()
+                        let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)
                         // Write contents to file
                         try current_password!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-password", atomically: true, encoding: String.Encoding.utf8)
-                        try current_expiration!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
+                        try current_expiration_string!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
                     }
                     catch let error as NSError {
                         laps_log.print("Unable to extract password from keychain. Error: \(error)", .error)
