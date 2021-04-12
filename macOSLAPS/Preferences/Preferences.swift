@@ -13,6 +13,8 @@ var bundle_id = "edu.psu.macoslaps"
 var defaultpreferences : [ String : Any ] = [
     "LocalAdminAccount"     :       "admin",
     "PasswordLength"        :       12,
+    "PasswordGrouping"      :       0,
+    "PasswordSeparator"     :       "-",
     "DaysTillExpiration"    :       60,
     "RemoveKeychain"        :       true,
     "RemovePassChars"       :       "\'",
