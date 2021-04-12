@@ -41,7 +41,7 @@ class LocalTools: NSObject {
         // Get Configuration Settings
         let security_enabled_user = Determine_secureToken()
         // Generate random password
-        let password = PasswordGen(length: Constants.password_lenth)
+        let password = PasswordGen(length: Constants.password_length)
         // Pull Local Administrator Record
         guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
             laps_log.print("Unable to connect to local node.", .error)

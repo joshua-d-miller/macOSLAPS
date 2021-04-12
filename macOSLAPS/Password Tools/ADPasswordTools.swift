@@ -81,7 +81,7 @@ public class ADTools: NSObject {
     class func password_change(computer_record: Array<ODRecord>) {
         let security_enabled_user = Determine_secureToken()
         // Generate random password
-        let password = PasswordGen(length: Constants.password_lenth)
+        let password = PasswordGen(length: Constants.password_length)
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = TimeConversion.windows()
         // Format Expiration Date
