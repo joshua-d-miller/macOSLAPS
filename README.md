@@ -17,12 +17,11 @@ The following preference keys must be set or the application will use the defaul
 `LocalAdminAccount` - Local Administrator Account. Default is 'admin'. (In String format)  
 `DaysTillExpiration` - Expiration date of random password. Default is 60 Days. (In Integer format)  
 `PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)  
-`RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)  
+`RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended).  
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
 `ExclusionSets` - Exclude any character set you'd like by specifying a string in an array. Options are 'symbols', 'letters', and/or 'numbers'.  
-`PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format)
-`FirstPass` - Use this key if you are LAPS Admin is a FileVault user. The script will read this key in if there isn't a keychain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.
-
+`PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format).  
+`FirstPass` - Use this key if you are LAPS Admin is a FileVault user. The script will read this key in if there isn't a keychain entry in **System** keychain for macOSLAPS. Once this has been completed, the keychain entry will then be used.  
 `Method` - The method to use with macOSLAPS. Default is **AD** for Active Directory. The other option is **Local** which will allow local rotation and no need to talk to Active Directory.
 
 **NOTE about *FirstPass*:** macOSLAPS must know at least one password via config profile before we can start the keychain process. Setting this key before running it for the first time when it is your temporary admin password is the best method.
