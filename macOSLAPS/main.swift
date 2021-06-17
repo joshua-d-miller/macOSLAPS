@@ -24,7 +24,7 @@ struct Constants {
     // Retrieve our configuration for thte application or use the
     // default values
     static let local_admin = GetPreference(preference_key: "LocalAdminAccount") as! String
-    static let password_lenth = GetPreference(preference_key: "PasswordLength") as! Int
+    static let password_length = GetPreference(preference_key: "PasswordLength") as! Int
     static let days_till_expiration = GetPreference(preference_key: "DaysTillExpiration") as! Int
     static let remove_keychain = GetPreference(preference_key: "RemoveKeychain") as! Bool
     static let characters_to_remove = GetPreference(preference_key: "RemovePassChars") as! String

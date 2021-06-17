@@ -38,5 +38,15 @@ func PasswordGen(length: Int) -> String {
     }
     // Select one of those random passwords
     let final_password = generated_passwords.randomItem() as! String
-    return(final_password)
+    let password_grouping = GetPreference(preference_key: "PasswordGrouping") as! Int
+    if (password_grouping > 0) {
+        let chunks = stride(from: 0, to: final_password.count, by: grouping).map { (offset) -> Substring in
+            let start = final_password.index(final_password.startIndex, offsetBy: offset)
+            let end = final_password.index(start, offsetBy: grouping, limitedBy: final_password.endIndex) ?? final_password.endIndex
+            return final_password[start..<end]
+        }
+        return chunks.joined(separator: GetPreference(preference_key: "PasswordSeparator") as! String)
+    } else {
+        return final_password
+    }
 }
