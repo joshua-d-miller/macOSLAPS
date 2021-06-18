@@ -3,7 +3,7 @@
 ///  macOSLAPS
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
-///  The Pennsylvania State University
+///
 ///
 
 import Foundation
@@ -40,9 +40,9 @@ func PasswordGen(length: Int) -> String {
     let final_password = generated_passwords.randomItem() as! String
     let password_grouping = GetPreference(preference_key: "PasswordGrouping") as! Int
     if (password_grouping > 0) {
-        let chunks = stride(from: 0, to: final_password.count, by: grouping).map { (offset) -> Substring in
+        let chunks = stride(from: 0, to: final_password.count, by: password_grouping).map { (offset) -> Substring in
             let start = final_password.index(final_password.startIndex, offsetBy: offset)
-            let end = final_password.index(start, offsetBy: grouping, limitedBy: final_password.endIndex) ?? final_password.endIndex
+            let end = final_password.index(start, offsetBy: password_grouping, limitedBy: final_password.endIndex) ?? final_password.endIndex
             return final_password[start..<end]
         }
         return chunks.joined(separator: GetPreference(preference_key: "PasswordSeparator") as! String)

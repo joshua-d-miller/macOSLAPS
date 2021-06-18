@@ -9,8 +9,8 @@
 ///    - Active Directory (Similar to Windows functionality)
 ///    - Local (Password stored in Keychain Only)
 ///  -------------------------
-///  Joshua D. Miller - josh@psu.edu
-///  The Pennsylvania State University
+///  Joshua D. Miller - josh.miller@outlook.com
+///  
 ///  Last Updated March 17, 2021
 ///  -------------------------
 

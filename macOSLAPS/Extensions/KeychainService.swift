@@ -3,7 +3,7 @@
 ///  macOSLAPS - Pulled from LAPS for macOS to use with System.keychain
 ///
 ///  Created by Joshua D. Miller on 7/21/18.
-///  The Pennsylvania State University
+///
 ///  Sources: https://stackoverflow.com/a/37539998/1694526
 ///  https://developer.apple.com/documentation/security/keychain_services/keychain_items/searching_for_keychain_items
 ///  https://gitlab.com/orchardandgrove-oss/NoMADLogin-AD/blob/master/Mechs/KeychainAdd.swift

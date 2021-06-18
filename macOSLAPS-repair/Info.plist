@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>edu.psu.macOSLAPS-repair</string>
+	<string>com.joshuamiller.macOSLAPS-repair</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
 	<key>CFBundleVersion</key>

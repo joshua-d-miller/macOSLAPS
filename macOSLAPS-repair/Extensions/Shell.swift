@@ -1,10 +1,10 @@
-//
+///
 ///  Shell.swift
 ///  macOSLAPS-repair
 ///
 ///  Created by Joshua D. Miller on 2/21/21.
-///  The Pennsylvania State University
-//
+///
+///
 
 import Foundation
 

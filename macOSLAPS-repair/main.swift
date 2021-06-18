@@ -6,8 +6,8 @@
 ///  we can cotinue with password rotation. Specifically
 ///  used for rotating our bundle identifier and signing certfiicate
 ///  -------------------------
-///  Joshua D. Miller - josh@psu.edu
-///  The Pennsylvania State University
+///  Joshua D. Miller - josh.miller@outlook.com
+///
 ///  Last Updated March 17, 2021
 ///  -------------------------
 

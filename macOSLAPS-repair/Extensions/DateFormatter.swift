@@ -3,7 +3,7 @@
 ///  macOSLAPS-repair
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
-///  The Pennsylvania State University
+/// 
 ///
 
 import Foundation

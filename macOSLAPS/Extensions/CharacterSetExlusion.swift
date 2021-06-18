@@ -3,7 +3,7 @@
 ///  macOSLAPS
 ///
 ///  Created by Joshua D. Miller on 7/7/17.
-///  The Pennsylvania State University
+///
 ///
 
 import Foundation
