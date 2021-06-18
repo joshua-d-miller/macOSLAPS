@@ -17,7 +17,9 @@ The following preference keys must be set or the application will use the defaul
 `LocalAdminAccount` - Local Administrator Account. Default is 'admin'. (In String format)  
 `DaysTillExpiration` - Expiration date of random password. Default is 60 Days. (In Integer format)  
 `PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)  
-`RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended).  
+`PasswordGrouping` - How many characters you want in each group before the separator. Default is 0 (In Integer format)
+`PasswordSeparator` - What Password separtor you would like to use. Default is **-** (In String format)  
+`RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)   
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  
 `ExclusionSets` - Exclude any character set you'd like by specifying a string in an array. Options are 'symbols', 'letters', and/or 'numbers'.  
 `PreferredDC` - Set your preferred Domain Controller to connect to [Useful when you have RODCs] (In String format).  
@@ -48,6 +50,8 @@ macOSLAPS is designed to run in an automated fashion (e.g. triggered by a Launch
 
 `-resetPassword` - generates a new password and writes it to the Active Directory computer record.  
 `-version` - prints out the current verison of macOSLAPS.
+`-getPassword` - Will store the password and expiration date in files only accessible by root. These files are deleted upon next run. This will **ONLY** work if the method selected is `Local` (Locations: */var/root/Library/Application Support/macOSLAPS-password* and */var/root/Library/Application Support/macOSLAPS-expiration*)
+
 
 Logging
 -------
@@ -68,6 +72,7 @@ Credits
 * Rusty Myers - For helping to determine that Windows has its own time method vs
 Epoch time
 * Matt Hansen - For critiquing and assisting with generating the random password
+* Per Olofsson - For advising me on using ISODate format for international dates and for providing the foundational code for password grouping
 * Allen Clouser and Jody Harpster - For showing me that the **'** key cannot be used from a Windows client without character map
 * John Pater - For advising me on the idea of generating 10 random passwords and picking one randomly to further randomize the password
 * Joel Rennich - For taking my questions about Swift and advising me on better ways to utilize Swift. Another special thanks to Joel for advising me on saving the password in the **System** keychain to deal with secureToken.
