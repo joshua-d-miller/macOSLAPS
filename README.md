@@ -16,7 +16,7 @@ The following preference keys must be set or the application will use the defaul
 
 `LocalAdminAccount` - Local Administrator Account. Default is 'admin'. (In String format)  
 `DaysTillExpiration` - Expiration date of random password. Default is 60 Days. (In Integer format)  
-`PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)  
+`PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)   
 `PasswordGrouping` - How many characters you want in each group before the separator. Default is 0 (In Integer format)
 `PasswordSeparator` - What Password separtor you would like to use. Default is **-** (In String format)  
 `RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)   
@@ -31,7 +31,7 @@ The following preference keys must be set or the application will use the defaul
 These parameters are set in the location `/Library/Preferences/edu.psu.macoslaps.plist`
 or you can use your MDM's Custom Settings to set these values.
 
-**NOTE**: The Swift binary will most likely only work on macOS 10.10+. If you need to run LAPS on older versions of macOS please use the legacy version of macOSLAPS written in Python [here](https://github.com/joshua-d-miller/macOSLAPS-Legacy)
+**NOTE**: The Swift binary will only work on macOS 10.12+. If you need to run LAPS on older versions of macOS please use the legacy version of macOSLAPS written in Python [here](https://github.com/joshua-d-miller/macOSLAPS-Legacy)
 
 Exclusions
 ----------------
