@@ -3,10 +3,14 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<string>edu.psu.macOSLAPS</string>
+	<key>CFBundleName</key>
+	<string>macOSLAPS</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.0</string>
+	<string>2.1.0</string>
 	<key>CFBundleVersion</key>
-	<string>704</string>
+	<string>721</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.12</string>
 </dict>
 </plist>

@@ -16,8 +16,8 @@ The following preference keys must be set or the application will use the defaul
 
 `LocalAdminAccount` - Local Administrator Account. Default is 'admin'. (In String format)  
 `DaysTillExpiration` - Expiration date of random password. Default is 60 Days. (In Integer format)  
-`PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)   
-`PasswordGrouping` - How many characters you want in each group before the separator. Default is 0 (In Integer format)
+`PasswordLength` - Length of randomly generated password. Default is 12. (In Integer format)    
+`PasswordGrouping` - How many characters you want in each group before the separator. Default is 0 (In Integer format)  
 `PasswordSeparator` - What Password separtor you would like to use. Default is **-** (In String format)  
 `RemoveKeyChain` - Remove the local admin keychains after password change. (In Boolean format, recommended)   
 `RemovePassChars` - Exclude any characters you'd like from the randomly generated password (In String format)  

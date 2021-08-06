@@ -312,6 +312,8 @@
 		E55B217225FBD0CC003C3A5A /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALTERNATE_GROUP = "";
+				ALTERNATE_OWNER = "";
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 115;
@@ -319,6 +321,8 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS-repair/Info.plist";
+				INSTALL_GROUP = "";
+				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -333,7 +337,7 @@
 					__TEXT,
 					"$(INFOPLIST_FILE",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joshuamiller.macOSLAPS-repair";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macOSLAPS-repair";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
@@ -343,13 +347,17 @@
 		E55B217325FBD0CC003C3A5A /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ALTERNATE_GROUP = "";
+				ALTERNATE_OWNER = "";
 				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
 				CURRENT_PROJECT_VERSION = 115;
-				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DEVELOPMENT_TEAM = 9UYK4F9BSM;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS-repair/Info.plist";
+				INSTALL_GROUP = "";
+				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -364,7 +372,7 @@
 					__TEXT,
 					"$(INFOPLIST_FILE)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "edu.psu.macOSLAPS-repair";
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macOSLAPS-repair";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
@@ -409,6 +417,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -426,9 +435,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = "";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /;
+				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -476,6 +486,7 @@
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -487,9 +498,10 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				INFOPLIST_FILE = "";
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
-				INSTALL_PATH = /;
+				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
@@ -503,16 +515,20 @@
 		E56B730B1E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_IDENTITY = "Mac Developer: Joshua Miller (97QX8Q2453)";
+				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				CURRENT_PROJECT_VERSION = 535;
-				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DEVELOPMENT_TEAM = 9UYK4F9BSM;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
+				INSTALL_GROUP = "";
+				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				ONLY_ACTIVE_ARCH = NO;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
@@ -530,16 +546,20 @@
 		E56B730C1E38D39700FC66CB /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_IDENTITY = "Mac Developer: Joshua Miller (97QX8Q2453)";
+				CODE_SIGN_IDENTITY = "Developer ID Application";
 				CODE_SIGN_STYLE = Manual;
+				CREATE_INFOPLIST_SECTION_IN_BINARY = YES;
 				CURRENT_PROJECT_VERSION = 535;
-				DEVELOPMENT_TEAM = VQ32N9FEBR;
+				DEVELOPMENT_TEAM = 9UYK4F9BSM;
+				DSTROOT = $SRCROOT/build/pkgroot;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_PKGINFO_FILE = NO;
 				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS/Info.plist";
+				INSTALL_GROUP = "";
+				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.1.0;
 				ONLY_ACTIVE_ARCH = NO;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
