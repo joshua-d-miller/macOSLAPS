@@ -26,18 +26,17 @@ class LocalTools: NSObject {
         // Convert the date we received to an acceptable format
         if creation_date == nil {
             return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
-            
         } else {
             guard let formatted_date = Constants.dateFormatter.date(from: creation_date!) else {
                 // Print message we were unable to convert the date
-                laps_log.print("Unable to unwrap the creation date form our keychain entry. Exiting...", .error)
+                laps_log.print("Unable to unwrap the creation date from our keychain entry. Exiting...", .error)
                 exit(1)
             }
             let exp_date = Calendar.current.date(byAdding: .day, value: Constants.days_till_expiration, to: formatted_date)!
             return exp_date
         }
     }
-    class func password_change() {
+    class func password_change(use_firstpass: Bool) {
         // Get Configuration Settings
         let security_enabled_user = Determine_secureToken()
         // Generate random password
@@ -56,9 +55,10 @@ class LocalTools: NSObject {
         // Password Changing Function
         if security_enabled_user == true {
             // If the attribute is nil then use our first password from config profile to change the password
-            if old_password == nil {
+            if old_password == nil || use_firstpass == true {
                 let first_pass = GetPreference(preference_key: "FirstPass") as! String
                 do {
+                    laps_log.print("Performing first password change using FirstPass key from configuration profile or string command line argument specified.", .info)
                     try local_admin_record.changePassword(first_pass, toPassword: password)
                 } catch {
                     laps_log.print("Unable to change password for local administrator \(Constants.local_admin) using FirstPassword Key.", .error)

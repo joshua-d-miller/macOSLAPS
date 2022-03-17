@@ -30,7 +30,7 @@ struct Constants {
     static let characters_to_remove = GetPreference(preference_key: "RemovePassChars") as! String
     static let character_exclusion_sets = GetPreference(preference_key: "ExclusionSets") as? Array<String>
     static let preferred_domain_controller = GetPreference(preference_key: "PreferredDC") as! String
-    static let first_password = GetPreference(preference_key: "FirstPass") as! String
+    static var first_password = GetPreference(preference_key: "FirstPass") as! String
     static let method = GetPreference(preference_key: "Method") as! String
 }
 
@@ -41,8 +41,9 @@ func macOSLAPS() {
         laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
         exit(77)
     }
+    let output_dir = "/var/root/Library/Application Support"
     // Remove files from extracting password if they exist
-    if FileManager.default.fileExists(atPath: "/var/root/Library/Application Support/macOSLAPS-password") {
+    if FileManager.default.fileExists(atPath: "\(output_dir)/macOSLAPS-password") {
         do {
             try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-password")
             try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-expiration")
@@ -51,6 +52,7 @@ func macOSLAPS() {
         }
     }
     var pw_reset : Bool = false
+    var use_firstpass : Bool = false
     // Iterate through supported Arguments
     for argument in Constants.arguments {
         switch argument {
@@ -68,7 +70,19 @@ func macOSLAPS() {
                     do {
                         let current_expiration_date = LocalTools.get_expiration_date()
                         let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)
+                        // Verify our output Directory exists and if not create it
+                        var isDir:ObjCBool = true
                         // Write contents to file
+                        if !FileManager.default.fileExists(atPath: output_dir, isDirectory: &isDir) {
+                            do {
+                                laps_log.print("Creating directory \(output_dir) as it does not currently exist. This issue was first present in macOS 12.3.0", .warn)
+                                try FileManager.default.createDirectory(atPath: output_dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0])
+                                laps_log.print("Directory \(output_dir) has been created. Continuing...")
+                            } catch {
+                                laps_log.print("An error occured attempting to create the directory \(output_dir). Unable to extract password. Exiting...")
+                                exit(0)
+                            }
+                        }
                         try current_password!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-password", atomically: true, encoding: String.Encoding.utf8)
                         try current_expiration_string!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
                     }
@@ -83,6 +97,40 @@ func macOSLAPS() {
             }
         case "-resetPassword":
             pw_reset = true
+            
+        case "-help":
+            print("""
+                  macOSLAPS Help
+                  ==============
+                  
+                  These are the arguments that you can use with macOSLAPS. You may only use one argument at a time.
+                  
+                  -version          Prints Current Version of macOSLAPS and gracefully exits
+                  
+                  -getPassword      If using the Local method, the password will be outputted
+                                    to the filesystem temporarily. Password is deleted upon
+                                    next automated or manual run
+                  
+                  -resetPassword    Forces a password reset no matter the expiration date
+                  -firstPass        Performs a password reset using the FirstPass Configuration
+                                    Profile key or the password you specify after this flag.
+                                    The password of the admin MUST be this password or the
+                                    change WILL FAIL.
+                  
+                  -help             Displays this screen
+                  """)
+            exit(0)
+        case "-firstPass":
+            pw_reset = true
+            use_firstpass = true
+            if Constants.first_password == "" {
+                Constants.first_password = CommandLine.arguments[2]
+            }
+            if Constants.first_password == "" {
+                laps_log.print("No password is specified via the FirstPass key OR in the command line. Exiting...", .error)
+                exit(1)
+            }
+            laps_log.print("the -firstPass argument was invoked. Using the Configuration Profile specified password or the argument password that was specified.", .info)
         default:
             continue
         }
@@ -106,7 +154,7 @@ func macOSLAPS() {
             ADTools.verify_dc_writability(computer_record: ad_computer_record)
             // Performs Password Change for local admin account
             laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
-            ADTools.password_change(computer_record: ad_computer_record)
+            ADTools.password_change(computer_record: ad_computer_record, use_firstpass: use_firstpass)
         }
         else {
             let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
@@ -125,7 +173,7 @@ func macOSLAPS() {
             exp_date = LocalTools.get_expiration_date()
         }
         if exp_date! < Date() {
-            LocalTools.password_change()
+            LocalTools.password_change(use_firstpass: use_firstpass)
             let new_exp_date = LocalTools.get_expiration_date()
             laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
             exit(0)
