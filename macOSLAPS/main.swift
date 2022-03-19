@@ -21,7 +21,7 @@ struct Constants {
     static let dateFormatter = date_formatter()
     // Read Command Line Arugments into array to use later
     static let arguments : Array = CommandLine.arguments
-    // Retrieve our configuration for thte application or use the
+    // Retrieve our configuration for the application or use the
     // default values
     static let local_admin = GetPreference(preference_key: "LocalAdminAccount") as! String
     static let password_length = GetPreference(preference_key: "PasswordLength") as! Int
