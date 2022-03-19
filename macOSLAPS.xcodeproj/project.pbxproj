@@ -24,6 +24,7 @@
 		E5289A1725E404D8005DE9EC /* LocalPasswordTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */; };
 		E5289A1C25E404E6005DE9EC /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1B25E404E6005DE9EC /* Preferences.swift */; };
 		E55B217925FBD161003C3A5A /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55B217825FBD161003C3A5A /* main.swift */; };
+		E5C0F4E427E35B55006DFA09 /* ValidatePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */; };
 		E5C72DB52367661700762B42 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA92367661700762B42 /* main.swift */; };
 /* End PBXBuildFile section */
 
@@ -70,6 +71,7 @@
 		E55B217825FBD161003C3A5A /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		E56B73031E38D39700FC66CB /* macOSLAPS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macOSLAPS; sourceTree = BUILT_PRODUCTS_DIR; };
 		E57DC0DC25CE61FC009064DE /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidatePassword.swift; sourceTree = "<group>"; };
 		E5C72DA92367661700762B42 /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -121,6 +123,7 @@
 			isa = PBXGroup;
 			children = (
 				E5289A1225E404D8005DE9EC /* GeneratePassword.swift */,
+				E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */,
 				E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */,
 				E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */,
 			);
@@ -296,6 +299,7 @@
 				E5289A0C25E404C6005DE9EC /* RandomItem.swift in Sources */,
 				E5C72DB52367661700762B42 /* main.swift in Sources */,
 				E5289A1525E404D8005DE9EC /* GeneratePassword.swift in Sources */,
+				E5C0F4E427E35B55006DFA09 /* ValidatePassword.swift in Sources */,
 				E5289A0725E404C6005DE9EC /* Logging.swift in Sources */,
 				E5289A0A25E404C6005DE9EC /* KeychainService.swift in Sources */,
 				E5289A0D25E404C6005DE9EC /* Shell.swift in Sources */,

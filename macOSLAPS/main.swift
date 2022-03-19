@@ -11,13 +11,13 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh.miller@outlook.com
 ///  
-///  Last Updated March 17, 2021
+///  Last Updated March 18, 2022
 ///  -------------------------
 
 import Foundation
 
 struct Constants {
-    // Begin by setting our
+    // Begin by tying date_formatter() to a variable
     static let dateFormatter = date_formatter()
     // Read Command Line Arugments into array to use later
     static let arguments : Array = CommandLine.arguments
@@ -32,6 +32,10 @@ struct Constants {
     static let preferred_domain_controller = GetPreference(preference_key: "PreferredDC") as! String
     static var first_password = GetPreference(preference_key: "FirstPass") as! String
     static let method = GetPreference(preference_key: "Method") as! String
+    static let passwordrequirements = GetPreference(preference_key: "PasswordRequirements") as! Dictionary<String, Any>
+    // Constant values if triggering a password reset / specifying a First Password
+    static var pw_reset : Bool = false
+    static var use_firstpass : Bool = false
 }
 
 func macOSLAPS() {
@@ -51,8 +55,6 @@ func macOSLAPS() {
             laps_log.print("Unable to remove files used for extraction of password for MDM. Please delete manually", .warn)
         }
     }
-    var pw_reset : Bool = false
-    var use_firstpass : Bool = false
     // Iterate through supported Arguments
     for argument in Constants.arguments {
         switch argument {
@@ -75,7 +77,7 @@ func macOSLAPS() {
                         // Write contents to file
                         if !FileManager.default.fileExists(atPath: output_dir, isDirectory: &isDir) {
                             do {
-                                laps_log.print("Creating directory \(output_dir) as it does not currently exist. This issue was first present in macOS 12.3.0", .warn)
+                                laps_log.print("Creating directory \(output_dir) as it does not currently exist. This issue was first present in macOS 12.2.1 on Apple Silicon", .warn)
                                 try FileManager.default.createDirectory(atPath: output_dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0])
                                 laps_log.print("Directory \(output_dir) has been created. Continuing...")
                             } catch {
@@ -85,18 +87,19 @@ func macOSLAPS() {
                         }
                         try current_password!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-password", atomically: true, encoding: String.Encoding.utf8)
                         try current_expiration_string!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
+                        exit(0)
                     }
                     catch let error as NSError {
                         laps_log.print("Unable to extract password from keychain. Error: \(error)", .error)
                     }
-                    exit(0)
+                    exit(1)
                 }
             } else {
                 laps_log.print("Will not display password as our current method is Active Directory", .warn)
                 exit(0)
             }
         case "-resetPassword":
-            pw_reset = true
+            Constants.pw_reset = true
             
         case "-help":
             print("""
@@ -121,8 +124,8 @@ func macOSLAPS() {
                   """)
             exit(0)
         case "-firstPass":
-            pw_reset = true
-            use_firstpass = true
+            Constants.pw_reset = true
+            Constants.use_firstpass = true
             if Constants.first_password == "" {
                 Constants.first_password = CommandLine.arguments[2]
             }
@@ -141,7 +144,7 @@ func macOSLAPS() {
         let ad_computer_record = ADTools.connect()
         // Get Expiration Time from Active Directory
         var ad_exp_time = ""
-        if pw_reset == true {
+        if Constants.pw_reset == true {
             ad_exp_time = "126227988000000000"
         } else {
             ad_exp_time = ADTools.check_pw_expiration(computer_record: ad_computer_record)!
@@ -154,7 +157,7 @@ func macOSLAPS() {
             ADTools.verify_dc_writability(computer_record: ad_computer_record)
             // Performs Password Change for local admin account
             laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
-            ADTools.password_change(computer_record: ad_computer_record, use_firstpass: use_firstpass)
+            ADTools.password_change(computer_record: ad_computer_record)
         }
         else {
             let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
@@ -167,13 +170,13 @@ func macOSLAPS() {
         // the password somewhere
         // Load the Keychain Item and compare the date
         var exp_date : Date?
-        if pw_reset == true {
+        if Constants.pw_reset == true {
             exp_date = Calendar.current.date(byAdding: .day, value: -7, to: Date())
         } else {
             exp_date = LocalTools.get_expiration_date()
         }
         if exp_date! < Date() {
-            LocalTools.password_change(use_firstpass: use_firstpass)
+            LocalTools.password_change()
             let new_exp_date = LocalTools.get_expiration_date()
             laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
             exit(0)
