@@ -4,6 +4,7 @@ xcuserdata/
 *.ipa
 *.xcworkspace
 *.xcuserstate
+*xcworkspace/xcuserdata/*
 
 ## Xcode 8 and earlier
 *.xcscmblueprint
