@@ -1,5 +1,9 @@
 ## User settings
-xcuserdata/*
+xcuserdata/
+*.hmap
+*.ipa
+*.xcworkspace
+*.xcuserstate
 
 ## Xcode 8 and earlier
 *.xcscmblueprint
