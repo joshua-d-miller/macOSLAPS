@@ -1,2 +1,11 @@
-DerivedData/
+## User settings
+xcuserdata/
+
+## Xcode 8 and earlier
+*.xcscmblueprint
+*.xccheckout
+
+## macOS Files
 .DS_Store
+.Trashes
+*.swp
