@@ -3,7 +3,7 @@
 -------------------------
 | macOSLAPS EA Password |
 -------------------------
-| Captures the Expiration date from the file outputted
+| Captures the Password from the file outputted
 | to the filesystem and sends the result to jamf
 | in the following format:
 |     | Expiration: ExpirationHere |
