@@ -6,7 +6,7 @@
 | Captures the Password from the file outputted
 | to the filesystem and sends the result to jamf
 | in the following format:
-|     | Expiration: ExpirationHere |
+|     | Password: $CURRENT_PASSWORD |
 ------------------------------------------------------------
 | Created: Richard Purves - https://github.com/franton
 | Last Update By: Joshua D. Miller - josh.miller@outlook.com
