@@ -11,7 +11,7 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh.miller@outlook.com
 ///  
-///  Last Updated March 18, 2022
+///  Last Updated June 20, 2022
 ///  -------------------------
 
 import Foundation
@@ -64,12 +64,23 @@ func macOSLAPS() {
             exit(0)
         case "-getPassword":
             if Constants.method == "Local" {
-                let (current_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
-                if current_password == nil {
-                    laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry", .error)
+                let (current_password, keychain_item_check) = KeychainService.loadPassword(service: "macOSLAPS")
+                if current_password == nil && keychain_item_check == nil {
+                    laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry.", .error)
+                    exit(1)
+                } else if current_password == nil && keychain_item_check == "Not Found" {
+                    laps_log.print("There does not appear to be a macOSLAPS Keychain Entry. Most likely, a password change has never been performed or the first password change has failed due to an incorrect password", .error)
                     exit(1)
                 } else {
                     do {
+                        // Verify Password
+                        let password_verify_status = Shell.run(launchPath: "/usr/bin/dscl", arguments: [".", "-authonly", Constants.local_admin, current_password!])
+                        if password_verify_status == "" {
+                            laps_log.print("Password has been verified to work. Extracting...", .info)
+                        } else {
+                            laps_log.print("Password cannot be verified. The password is out of sync. Please run sysadminctl to perform a reset to restart rottation", .error)
+                            exit(1)
+                        }
                         let current_expiration_date = LocalTools.get_expiration_date()
                         let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)
                         // Verify our output Directory exists and if not create it

@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///
-///  Last Update on March 18, 2022
+///  Last Update on June 20, 2022
 
 import Foundation
 import OpenDirectory
@@ -17,7 +17,7 @@ class LocalTools: NSObject {
             let local_admin_record = try local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName)
             return(local_admin_record)
         } catch {
-            laps_log.print("Unable to connect to local directory node using the admin account specified. Please check to make sure the admin account is correct and is available on the system.", .error)
+            laps_log.print("Unable to connect to local directory node using the administrator account specified. Please check to make sure the administrator account is correct and is available on the system.", .error)
             exit(1)
         }
     }
@@ -58,7 +58,7 @@ class LocalTools: NSObject {
             exit(1)
         }
         guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
-            laps_log.print("Unable to retrieve local adminsitrator record.", .error)
+            laps_log.print("Unable to retrieve local administrator record.", .error)
             exit(1)
         }
         // Attempt to load password from System Keychain
@@ -103,7 +103,7 @@ class LocalTools: NSObject {
                 try local_admin_record.changePassword(password, toPassword: old_password)
                 exit(1)
             } catch {
-                laps_log.print("Unable to revert back to the old password, Please reset the local admin account to the FirstPass key and start again", .error)
+                laps_log.print("Unable to revert back to the old password, Please reset the local administrator account to the FirstPass key and start again", .error)
                 exit(1)
             }
             exit(1)

@@ -223,7 +223,7 @@
 			isa = PBXProject;
 			attributes = {
 				LastSwiftUpdateCheck = 1230;
-				LastUpgradeCheck = 1330;
+				LastUpgradeCheck = 1340;
 				ORGANIZATIONNAME = "Joshua D. Miller";
 				TargetAttributes = {
 					E55B216C25FBD0CC003C3A5A = {
@@ -443,7 +443,7 @@
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -506,7 +506,7 @@
 				INSTALL_GROUP = staff;
 				INSTALL_OWNER = jdm51;
 				INSTALL_PATH = /usr/local/laps;
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				MACOSX_DEPLOYMENT_TARGET = 10.12;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -532,7 +532,7 @@
 				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 3.0.1;
 				ONLY_ACTIVE_ARCH = NO;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",
@@ -563,7 +563,7 @@
 				INSTALL_OWNER = "";
 				INSTALL_PATH = /usr/local/laps;
 				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				MARKETING_VERSION = 2.1.0;
+				MARKETING_VERSION = 3.0.1;
 				ONLY_ACTIVE_ARCH = NO;
 				"OTHER_LDFLAGS[arch=*]" = (
 					"-sectcreate",

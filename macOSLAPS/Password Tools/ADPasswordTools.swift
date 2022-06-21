@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  
-///  Last Update on March 18, 2022
+///  Last Update on June 20, 2022
 
 import Foundation
 import OpenDirectory
@@ -106,7 +106,7 @@ public class ADTools: NSObject {
             exit(1)
         }
         guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
-            laps_log.print("Unable to retrieve local adminsitrator record.", .error)
+            laps_log.print("Unable to retrieve local administrator record.", .error)
             exit(1)
         }
         // Have we determineed that the local admin is a FileVault User or that the local admin user has a secureToken?
@@ -117,7 +117,7 @@ public class ADTools: NSObject {
                     laps_log.print("Performing first password change using FirstPass key from configuration profile or string command line argument specified.", .info)
                     try local_admin_record.changePassword(Constants.first_password, toPassword: password)
                 } catch {
-                    laps_log.print("Unable to perform the first password change for secureToken admin account \(Constants.local_admin).")
+                    laps_log.print("Unable to perform the first password change for secureToken administrator account \(Constants.local_admin).")
                     exit(1)
                 }
             }
@@ -138,6 +138,7 @@ public class ADTools: NSObject {
                 try local_admin_record.changePassword(nil, toPassword: password)
             } catch {
                 laps_log.print("Unable to reset password for \(Constants.local_admin). Please make sure we are able to write to the local record and perform the password change.", .error)
+                exit(1)
             }
         }
         // Write our new password to System Keychain and Active Directory
@@ -153,7 +154,7 @@ public class ADTools: NSObject {
                 try local_admin_record.changePassword(password, toPassword: old_password)
                 exit(1)
             } catch {
-                laps_log.print("Unable to revert back to the old password, Please reset the local admin account to the FirstPass key and start again", .error)
+                laps_log.print("Unable to revert back to the old password, Please reset the local administrator account to the FirstPass key and start again", .error)
                 exit(1)
             }
         }
@@ -172,7 +173,7 @@ public class ADTools: NSObject {
             }
         }
         
-        laps_log.print("Password change has been written to Active Directory for the local admin \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
+        laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
         // Keychain Removal if enabled
         if Constants.remove_keychain == true {
             let local_admin_home = local_admin_record.value(forKeyPath: "dsAttrTypeStandard:NFSHomeDirectory") as! NSMutableArray

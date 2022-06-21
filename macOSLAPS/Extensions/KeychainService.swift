@@ -9,7 +9,7 @@
 ///  https://gitlab.com/orchardandgrove-oss/NoMADLogin-AD/blob/master/Mechs/KeychainAdd.swift
 ///  Unlocking System Keychain code inspired by NoMad Login - Thanks Joel Rennich
 ///  Another special thanks to Joel for critiqing my code to figure out the keychain function needed rewrote to compile in Xcode 11.1
-///  Last Updated February 6, 2021
+///  Last Updated June 20, 2022
 
 import Cocoa
 import Security
@@ -102,7 +102,7 @@ class KeychainService {
             let creationdate = String(comment[r])
             
             return (password, creationdate)
-        } else {
+        } else if status == -25293 {
             // Run macOSLAPS-repair to repair the keychain entry
             _ = Shell.run(launchPath: "/usr/local/laps/macOSLAPS-repair", arguments: [])
             // Construct second query to allow us to try again
@@ -130,6 +130,9 @@ class KeychainService {
                 return (password, creationdate)
             }
             
+        } else if status == -25300 {
+            // macOSLAPS Keychain Entry Not Found
+            return(nil, "Not Found")
         }
         return(nil,nil)
     }
