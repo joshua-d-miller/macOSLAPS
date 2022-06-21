@@ -1,12 +1,12 @@
 #!/bin/sh
 : '
--------------------------
-| macOSLAPS EA Password |
--------------------------
-| Captures the Expiration date from the file outputted
+---------------------------
+| macOSLAPS EA Expiration |
+---------------------------
+| Captures the Expiration from the file outputted
 | to the filesystem and sends the result to jamf
 | in the following format:
-|     | Expiration: ExpirationHere |
+|     | Expiration: Expiration Date |
 ------------------------------------------------------------
 | Created: Richard Purves - https://github.com/franton
 | Last Update By: Joshua D. Miller - josh.miller@outlook.com
@@ -16,20 +16,21 @@
 # Path to macOSLAPS binary
 LAPS=/usr/local/laps/macOSLAPS
 # Path to Password File
-PW_FILE="/var/root/Library/Application Support/macOSLAPS-password"
+EXP_FILE="/var/root/Library/Application Support/macOSLAPS-expiration"
 
 if [ -e $LAPS ] ; then
     # Ask macOSLAPS to write out the current password and echo it for the Jamf EA
     $LAPS -getPassword
-    CURRENT_PASSWORD=$(/bin/cat "$PW_FILE")
-    # Test $current_password to ensure there is a value
-    if [ -z "$CURRENT_PASSWORD" ]; then
-        # Don't Write anything to jamf as it might overwrite an
-        # old password in place that might still be needed
+    CURRENT_EXPIRATION=$(/bin/cat "$EXP_FILE")
+    # Test $CURRENT_EXPIRATION to ensure there is a value
+    if [ -z "$CURRENT_EXPIRATION" ]; then
+        # Write no expiration date is present and send to
+        # jamf Pro
+        /bin/echo "<result>No Expiration Date Present</result>"
         exit 0
     else
-        /bin/echo "<result>| Password: $CURRENT_PASSWORD |</result>"
-        # Run macOSLAPS a second time to remove the password file
+        /bin/echo "<result>| Expiration: $CURRENT_EXPIRATION |</result>"
+        # Run macOSLAPS a second time to remove the Expiration file
         # and expiration date file from the system
         $LAPS
     fi
