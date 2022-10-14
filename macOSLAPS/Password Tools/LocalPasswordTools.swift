@@ -24,7 +24,7 @@ class LocalTools: NSObject {
     class func get_expiration_date() -> Date? {
         let (_, creation_date) = KeychainService.loadPassword(service: "macOSLAPS")
         // Convert the date we received to an acceptable format
-        if creation_date == nil {
+        if creation_date == "Not Found" {
             return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
         } else {
             guard let formatted_date = Constants.dateFormatter.date(from: creation_date!) else {
