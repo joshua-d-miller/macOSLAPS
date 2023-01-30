@@ -37,14 +37,17 @@ struct Constants {
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
 }
-
-func macOSLAPS() {
+func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
     if current_running_User != "root" {
         laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
         exit(77)
+    } else {
+        return
     }
+}
+func macOSLAPS() {
     let output_dir = "/var/root/Library/Application Support"
     // Remove files from extracting password if they exist
     if FileManager.default.fileExists(atPath: "\(output_dir)/macOSLAPS-password") {
@@ -63,6 +66,7 @@ func macOSLAPS() {
             print(appVersion)
             exit(0)
         case "-getPassword":
+            verify_root()
             if Constants.method == "Local" {
                 let (current_password, keychain_item_check) = KeychainService.loadPassword(service: "macOSLAPS")
                 if current_password == nil && keychain_item_check == nil {
@@ -117,7 +121,7 @@ func macOSLAPS() {
                   macOSLAPS Help
                   ==============
                   
-                  These are the arguments that you can use with macOSLAPS. You may only use one argument at a time.
+                  These are the arguments that you can use with macOSLAPS.
                   
                   -version          Prints Current Version of macOSLAPS and gracefully exits
                   
@@ -151,6 +155,7 @@ func macOSLAPS() {
     }
     switch Constants.method {
     case "AD":
+        verify_root()
         // Active Directory Password Change Function
         let ad_computer_record = ADTools.connect()
         // Get Expiration Time from Active Directory
@@ -176,6 +181,7 @@ func macOSLAPS() {
             exit(0)
         }
     case "Local":
+        verify_root()
         // Local method to perform passwords changes locally vs relying on Active Directory.
         // It is assumed that users will be using either an MDM or some reporting method to store
         // the password somewhere
