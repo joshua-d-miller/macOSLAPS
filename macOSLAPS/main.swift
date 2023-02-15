@@ -82,7 +82,7 @@ func macOSLAPS() {
                         if password_verify_status == "" {
                             laps_log.print("Password has been verified to work. Extracting...", .info)
                         } else {
-                            laps_log.print("Password cannot be verified. The password is out of sync. Please run sysadminctl to perform a reset to restart rottation", .error)
+                            laps_log.print("Password cannot be verified. The password is out of sync. Please run sysadminctl to perform a reset to restart rotation", .error)
                             exit(1)
                         }
                         let current_expiration_date = LocalTools.get_expiration_date()
