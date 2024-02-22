@@ -4,34 +4,38 @@
 ///
 ///  Created by Joshua D. Miller on 3/17/22.
 ///
-///  Rreference: https://stackoverflow.com/questions/39284607/how-to-implement-a-regex-for-password-validation-in-swift
-///  Last Updated March 18, 2022
+///  Last Updated February 21, 2022
 
 import Foundation
 
 func ValidatePassword (generated_password: String) -> Bool {
-    // Build the Regex to be used
-    var lowercase_regex = ""
-    var uppercase_regex = ""
-    var number_regex = ""
-    var symbol_regex = ""
-    
-    if Constants.passwordrequirements["Lowercase"] as! Int != 0 {
-        lowercase_regex = "(?=" + String.init(repeating: ".*[a-z]", count: Constants.passwordrequirements["Lowercase"] as! Int) + ")"
+    // Set Counters
+    var lowercase_count:Int = 0
+    var uppercase_count:Int = 0
+    var number_count:Int = 0
+    var symbol_count:Int = 0
+    // Loop through password charactersand determine type of character
+    for char in generated_password {
+        // Count lowercase letters
+        if char.isLowercase {
+            lowercase_count += 1
+            // Count uppercase letters
+        } else if char.isUppercase {
+            uppercase_count += 1
+            // Count numbers
+        } else if char.isNumber {
+            number_count += 1
+            // Count symbols
+        } else if char.isSymbol || char.isPunctuation {
+            symbol_count += 1
+        }
     }
-    if Constants.passwordrequirements["Uppercase"] as! Int != 0 {
-        uppercase_regex = "(?=" + String.init(repeating: ".*[A-Z]", count: Constants.passwordrequirements["Uppercase"] as! Int) + ")"
+    // Do we match the requirements
+        if lowercase_count >= Constants.passwordrequirements["Lowercase"]! && uppercase_count >= Constants.passwordrequirements["Uppercase"]! &&
+        number_count >= Constants.passwordrequirements["Number"]! &&
+        symbol_count >= Constants.passwordrequirements["Symbol"]! {
+            return true
+    } else {
+            return false
     }
-    if Constants.passwordrequirements["Number"] as! Int != 0 {
-        number_regex = "(?=" + String.init(repeating: ".*[0-9]", count: Constants.passwordrequirements["Number"] as! Int) + ")"
-    }
-    if Constants.passwordrequirements["Symbol"] as! Int != 0 {
-        symbol_regex = "(?=" + String.init(repeating: "[.*! \"#$%&'()*+,-./:;<=>?@\\[\\\\\\]^_`{|}~]", count: Constants.passwordrequirements["Symbol"] as! Int) + ")"
-    }
-    var full_regex = "^" + lowercase_regex + uppercase_regex + number_regex + symbol_regex + ".{\(Constants.password_length)}$"
-    if full_regex.count < 8 {
-        full_regex = ".*"
-    }
-    let password_check = NSPredicate(format: "SELF MATCHES %@", full_regex)
-    return password_check.evaluate(with: generated_password)
 }

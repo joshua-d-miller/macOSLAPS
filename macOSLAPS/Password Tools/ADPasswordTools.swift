@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  
-///  Last Update on June 20, 2022
+///  Last Update on February 21, 2024
 
 import Foundation
 import OpenDirectory
@@ -81,18 +81,7 @@ public class ADTools: NSObject {
     class func password_change(computer_record: Array<ODRecord>) {
         let security_enabled_user = Determine_secureToken()
         // Generate random password
-        var password = PasswordGen(length: Constants.password_length)
-        var password_meets_requirements = ValidatePassword(generated_password: password)
-        var password_retry_count = 0
-        while password_meets_requirements == false && password_retry_count < 10 {
-            password = PasswordGen(length: Constants.password_length)
-            password_meets_requirements = ValidatePassword(generated_password: password)
-            password_retry_count = password_retry_count + 1
-        }
-        if password_meets_requirements == false {
-            laps_log.print("We were unable to generate a password with the requirements specified. Please run macOSLAPS again or change your password requirements", .error)
-            exit(1)
-        }
+        let password = PasswordGen(length: Constants.password_length)
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = TimeConversion.windows()
         // Format Expiration Date

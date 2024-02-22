@@ -9,13 +9,12 @@
 ///  https://gitlab.com/orchardandgrove-oss/NoMADLogin-AD/blob/master/Mechs/KeychainAdd.swift
 ///  Unlocking System Keychain code inspired by NoMad Login - Thanks Joel Rennich
 ///  Another special thanks to Joel for critiqing my code to figure out the keychain function needed rewrote to compile in Xcode 11.1
-///  Last Updated June 20, 2022
+///  Last Updated Feb 21, 2024
 
 import Cocoa
 import Security
-
+@available(*, deprecated, message: "Currently there is no replacement for SecKeychain as of macOS 14 (Sonoma)[2024]")
 class KeychainService {
-    
     class func savePassword(service: String, account: String, data: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
         var systemKeychain : SecKeychain?
