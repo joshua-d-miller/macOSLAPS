@@ -7,10 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		E51C8F5D260065D500C189D1 /* DateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51C8F59260065D500C189D1 /* DateFormatter.swift */; };
-		E51C8F5E260065D500C189D1 /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51C8F5A260065D500C189D1 /* Logging.swift */; };
-		E51C8F5F260065D500C189D1 /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51C8F5B260065D500C189D1 /* KeychainService.swift */; };
-		E51C8F60260065D500C189D1 /* Shell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E51C8F5C260065D500C189D1 /* Shell.swift */; };
 		E5289A0725E404C6005DE9EC /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52899FF25E404C6005DE9EC /* Logging.swift */; };
 		E5289A0825E404C6005DE9EC /* CharacterSetExlusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0025E404C6005DE9EC /* CharacterSetExlusion.swift */; };
 		E5289A0925E404C6005DE9EC /* secureToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0125E404C6005DE9EC /* secureToken.swift */; };
@@ -23,21 +19,10 @@
 		E5289A1625E404D8005DE9EC /* ADPasswordTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */; };
 		E5289A1725E404D8005DE9EC /* LocalPasswordTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */; };
 		E5289A1C25E404E6005DE9EC /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1B25E404E6005DE9EC /* Preferences.swift */; };
-		E55B217925FBD161003C3A5A /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E55B217825FBD161003C3A5A /* main.swift */; };
-		E5C0F4E427E35B55006DFA09 /* ValidatePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */; };
 		E5C72DB52367661700762B42 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA92367661700762B42 /* main.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
-		E55B216B25FBD0CC003C3A5A /* CopyFiles */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 2147483647;
-			dstPath = /usr/share/man/man1/;
-			dstSubfolderSpec = 0;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 1;
-		};
 		E56B73011E38D39700FC66CB /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -50,11 +35,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		E51C8F59260065D500C189D1 /* DateFormatter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DateFormatter.swift; sourceTree = "<group>"; };
-		E51C8F5A260065D500C189D1 /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
-		E51C8F5B260065D500C189D1 /* KeychainService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
-		E51C8F5C260065D500C189D1 /* Shell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Shell.swift; sourceTree = "<group>"; };
-		E51C8F7326013B5200C189D1 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		E52899FF25E404C6005DE9EC /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
 		E5289A0025E404C6005DE9EC /* CharacterSetExlusion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CharacterSetExlusion.swift; sourceTree = "<group>"; };
 		E5289A0125E404C6005DE9EC /* secureToken.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = secureToken.swift; sourceTree = "<group>"; };
@@ -67,22 +47,12 @@
 		E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ADPasswordTools.swift; sourceTree = "<group>"; };
 		E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalPasswordTools.swift; sourceTree = "<group>"; };
 		E5289A1B25E404E6005DE9EC /* Preferences.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
-		E55B216D25FBD0CC003C3A5A /* macOSLAPS-repair */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "macOSLAPS-repair"; sourceTree = BUILT_PRODUCTS_DIR; };
-		E55B217825FBD161003C3A5A /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		E56B73031E38D39700FC66CB /* macOSLAPS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macOSLAPS; sourceTree = BUILT_PRODUCTS_DIR; };
 		E57DC0DC25CE61FC009064DE /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ValidatePassword.swift; sourceTree = "<group>"; };
 		E5C72DA92367661700762B42 /* main.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		E55B216A25FBD0CC003C3A5A /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		E56B73001E38D39700FC66CB /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -93,17 +63,6 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		E51C8F7C260140EA00C189D1 /* Extensions */ = {
-			isa = PBXGroup;
-			children = (
-				E51C8F59260065D500C189D1 /* DateFormatter.swift */,
-				E51C8F5B260065D500C189D1 /* KeychainService.swift */,
-				E51C8F5A260065D500C189D1 /* Logging.swift */,
-				E51C8F5C260065D500C189D1 /* Shell.swift */,
-			);
-			path = Extensions;
-			sourceTree = "<group>";
-		};
 		E52899FE25E404C6005DE9EC /* Extensions */ = {
 			isa = PBXGroup;
 			children = (
@@ -123,7 +82,6 @@
 			isa = PBXGroup;
 			children = (
 				E5289A1225E404D8005DE9EC /* GeneratePassword.swift */,
-				E5C0F4E327E35B55006DFA09 /* ValidatePassword.swift */,
 				E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */,
 				E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */,
 			);
@@ -138,21 +96,10 @@
 			path = Preferences;
 			sourceTree = "<group>";
 		};
-		E55B216E25FBD0CC003C3A5A /* macOSLAPS-repair */ = {
-			isa = PBXGroup;
-			children = (
-				E51C8F7C260140EA00C189D1 /* Extensions */,
-				E55B217825FBD161003C3A5A /* main.swift */,
-				E51C8F7326013B5200C189D1 /* Info.plist */,
-			);
-			path = "macOSLAPS-repair";
-			sourceTree = "<group>";
-		};
 		E56B72FA1E38D39700FC66CB = {
 			isa = PBXGroup;
 			children = (
 				E5C72DA02367661700762B42 /* macOSLAPS */,
-				E55B216E25FBD0CC003C3A5A /* macOSLAPS-repair */,
 				E56B73041E38D39700FC66CB /* Products */,
 			);
 			sourceTree = "<group>";
@@ -161,7 +108,6 @@
 			isa = PBXGroup;
 			children = (
 				E56B73031E38D39700FC66CB /* macOSLAPS */,
-				E55B216D25FBD0CC003C3A5A /* macOSLAPS-repair */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -181,23 +127,6 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		E55B216C25FBD0CC003C3A5A /* macOSLAPS-repair */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = E55B217125FBD0CC003C3A5A /* Build configuration list for PBXNativeTarget "macOSLAPS-repair" */;
-			buildPhases = (
-				E55B216925FBD0CC003C3A5A /* Sources */,
-				E55B216A25FBD0CC003C3A5A /* Frameworks */,
-				E55B216B25FBD0CC003C3A5A /* CopyFiles */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = "macOSLAPS-repair";
-			productName = "macOSLAPS-repair";
-			productReference = E55B216D25FBD0CC003C3A5A /* macOSLAPS-repair */;
-			productType = "com.apple.product-type.tool";
-		};
 		E56B73021E38D39700FC66CB /* macOSLAPS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = E56B730A1E38D39700FC66CB /* Build configuration list for PBXNativeTarget "macOSLAPS" */;
@@ -226,10 +155,6 @@
 				LastUpgradeCheck = 1340;
 				ORGANIZATIONNAME = "Joshua D. Miller";
 				TargetAttributes = {
-					E55B216C25FBD0CC003C3A5A = {
-						CreatedOnToolsVersion = 12.3;
-						LastSwiftMigration = 1230;
-					};
 					E56B73021E38D39700FC66CB = {
 						CreatedOnToolsVersion = 8.1;
 						LastSwiftMigration = 1020;
@@ -250,7 +175,6 @@
 			projectRoot = "";
 			targets = (
 				E56B73021E38D39700FC66CB /* macOSLAPS */,
-				E55B216C25FBD0CC003C3A5A /* macOSLAPS-repair */,
 			);
 		};
 /* End PBXProject section */
@@ -277,18 +201,6 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		E55B216925FBD0CC003C3A5A /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				E51C8F5D260065D500C189D1 /* DateFormatter.swift in Sources */,
-				E51C8F5F260065D500C189D1 /* KeychainService.swift in Sources */,
-				E51C8F60260065D500C189D1 /* Shell.swift in Sources */,
-				E51C8F5E260065D500C189D1 /* Logging.swift in Sources */,
-				E55B217925FBD161003C3A5A /* main.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		E56B72FF1E38D39700FC66CB /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -299,7 +211,6 @@
 				E5289A0C25E404C6005DE9EC /* RandomItem.swift in Sources */,
 				E5C72DB52367661700762B42 /* main.swift in Sources */,
 				E5289A1525E404D8005DE9EC /* GeneratePassword.swift in Sources */,
-				E5C0F4E427E35B55006DFA09 /* ValidatePassword.swift in Sources */,
 				E5289A0725E404C6005DE9EC /* Logging.swift in Sources */,
 				E5289A0A25E404C6005DE9EC /* KeychainService.swift in Sources */,
 				E5289A0D25E404C6005DE9EC /* Shell.swift in Sources */,
@@ -313,76 +224,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		E55B217225FBD0CC003C3A5A /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALTERNATE_GROUP = "";
-				ALTERNATE_OWNER = "";
-				CODE_SIGN_IDENTITY = "Developer ID Application";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 115;
-				DEVELOPMENT_TEAM = 9UYK4F9BSM;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_PKGINFO_FILE = NO;
-				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS-repair/Info.plist";
-				INSTALL_GROUP = "";
-				INSTALL_OWNER = "";
-				INSTALL_PATH = /usr/local/laps;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@loader_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				ONLY_ACTIVE_ARCH = NO;
-				OTHER_LDFLAGS = (
-					"-sectcreate",
-					__info_plist,
-					__TEXT,
-					"$(INFOPLIST_FILE",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macOSLAPS-repair";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		E55B217325FBD0CC003C3A5A /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALTERNATE_GROUP = "";
-				ALTERNATE_OWNER = "";
-				CODE_SIGN_IDENTITY = "Developer ID Application";
-				CODE_SIGN_STYLE = Manual;
-				CURRENT_PROJECT_VERSION = 115;
-				DEVELOPMENT_TEAM = 9UYK4F9BSM;
-				ENABLE_HARDENED_RUNTIME = YES;
-				GENERATE_PKGINFO_FILE = NO;
-				INFOPLIST_FILE = "$(SRCROOT)/macOSLAPS-repair/Info.plist";
-				INSTALL_GROUP = "";
-				INSTALL_OWNER = "";
-				INSTALL_PATH = /usr/local/laps;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-					"@loader_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 10.12;
-				ONLY_ACTIVE_ARCH = NO;
-				OTHER_LDFLAGS = (
-					"-sectcreate",
-					__info_plist,
-					__TEXT,
-					"$(INFOPLIST_FILE)",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macOSLAPS-repair";
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
 		E56B73081E38D39700FC66CB /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -581,15 +422,6 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		E55B217125FBD0CC003C3A5A /* Build configuration list for PBXNativeTarget "macOSLAPS-repair" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				E55B217225FBD0CC003C3A5A /* Debug */,
-				E55B217325FBD0CC003C3A5A /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		E56B72FE1E38D39700FC66CB /* Build configuration list for PBXProject "macOSLAPS" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

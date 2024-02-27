@@ -11,7 +11,7 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh.miller@outlook.com
 ///  
-///  Last Updated February 21, 2024
+///  Last Updated February 27, 2024
 ///  -------------------------
 
 import Foundation
@@ -49,15 +49,10 @@ func verify_root() {
     }
 }
 func macOSLAPS() {
-    let output_dir = "/var/root/Library/Application Support"
-    // Remove files from extracting password if they exist
-    if FileManager.default.fileExists(atPath: "\(output_dir)/macOSLAPS-password") {
-        do {
-            try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-password")
-            try FileManager.default.removeItem(atPath: "/var/root/Library/Application Support/macOSLAPS-expiration")
-        } catch {
-            laps_log.print("Unable to remove files used for extraction of password for MDM. Please delete manually", .warn)
-        }
+    // Delete Keychain Entry
+    let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8)
+    if exp_keychain_id != nil && Constants.method == "Local" {
+        KeychainService.deleteExport(service: exp_keychain_id!)
     }
     // Iterate through supported Arguments
     for argument in Constants.arguments {
@@ -77,49 +72,37 @@ func macOSLAPS() {
                     laps_log.print("There does not appear to be a macOSLAPS Keychain Entry. Most likely, a password change has never been performed or the first password change has failed due to an incorrect password", .error)
                     exit(1)
                 } else {
-                    do {
-                        // Pull Local Administrator Record
-                        guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
-                            laps_log.print("Unable to connect to local node.", .error)
-                            exit(1)
-                        }
-                        guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
-                            laps_log.print("Unable to retrieve local administrator record.", .error)
-                            exit(1)
-                        }
-                        // Verify Password
-                        guard (try? local_admin_record.verifyPassword(current_password!)) != nil
-                        else {
-                            laps_log.print("Password verification failed. Please use sysadminctl to reset. Exiting...")
-                            exit(1)
-                        }
-                        laps_log.print("Password has been verified to work. Extracting...", .info)
-                        let current_expiration_date = LocalTools.get_expiration_date()
-                        let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)
-                        // Verify our output Directory exists and if not create it
-                        var isDir:ObjCBool = true
-                        // Write contents to file
-                        if !FileManager.default.fileExists(atPath: output_dir, isDirectory: &isDir) {
-                            do {
-                                laps_log.print("Creating directory \(output_dir) as it does not currently exist. This issue was first present in macOS 12.2.1 on Apple Silicon", .warn)
-                                try FileManager.default.createDirectory(atPath: output_dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755, .ownerAccountID: 0, .groupOwnerAccountID: 0])
-                                laps_log.print("Directory \(output_dir) has been created. Continuing...", .info)
-                            } catch {
-                                laps_log.print("An error occured attempting to create the directory \(output_dir). Unable to extract password. Exiting...", .error)
-                                exit(0)
-                            }
-                        }
-                        try current_password!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-password", atomically: true, encoding: String.Encoding.utf8)
-                        try current_expiration_string!.write(toFile: "/var/root/Library/Application Support/macOSLAPS-expiration", atomically: true, encoding: String.Encoding.utf8)
-                        exit(0)
+                    // Pull Local Administrator Record
+                    guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
+                        laps_log.print("Unable to connect to local node.", .error)
+                        exit(1)
                     }
-                    catch let error as NSError {
-                        laps_log.print("Unable to extract password from keychain. Error: \(error)", .error)
+                    guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
+                        laps_log.print("Unable to retrieve local administrator record.", .error)
+                        exit(1)
                     }
-                    exit(1)
+                    // Verify Password
+                    guard (try? local_admin_record.verifyPassword(current_password!)) != nil
+                    else {
+                        laps_log.print("Password verification failed. Please use sysadminctl to reset. Exiting...")
+                        exit(1)
+                    }
+                    laps_log.print("Password has been verified to work. Extracting...", .info)
+                    let current_expiration_date = LocalTools.get_expiration_date()
+                    let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)!
+                    let random_service_name = UUID().uuidString
+                    let copy_status : OSStatus = KeychainService.exportPassword(service: random_service_name, account: "root \(random_service_name)", data: current_password!, expiration: current_expiration_string)
+                    if copy_status == noErr {
+                        laps_log.print("Password was extracted to keychain item. This WILL BE deleted on next run.", .info)
+                    } else {
+                        laps_log.print("Unable to extract password to another keychain entry accessible by the security executable. Exiting...")
+                        exit(1)
+                    }
+                    try? random_service_name.write(toFile: "/var/root/.GeneratedLAPSServiceName", atomically: true, encoding: String.Encoding.utf8)
+                    exit(0)
                 }
             } else {
-                laps_log.print("Will not display password as our current method is Active Directory", .warn)
+                laps_log.print("Password WILL NOT be exported as the current method is set to Active Directory", .warn)
                 exit(0)
             }
         case "-resetpassword":

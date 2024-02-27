@@ -4,16 +4,14 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///
-///  Last updated: February 21, 2024
+///  Last updated: February 26, 2024
 
 import Foundation
 
 // Generate a randomized password using the ASCII Character Set
 func PasswordGen(length: Int) -> String {
     // Variables
-    var password_try:Int = 0
     var final_password:String = ""
-    var password_verified:Bool = false
     // Get Password Characters
     var get_passwordCharacters = [] as Array<Character>
     for c in 33 ..< 127 {
@@ -32,31 +30,53 @@ func PasswordGen(length: Int) -> String {
         }
     }
     var generated_passwords = [] as Array
-    // Try to generate and verify the password meets the requirements specified if any
-    while password_try <= 10 && password_verified != true  {
-        // Generate 10 Random Passwords
-        for _ in 0..<10 {
-            var random_password = ""
-            // Generate a Randomized Password
-            for _ in 0..<length {
-                let rand = arc4random_uniform(UInt32(passwordCharacters.count))
-                random_password.append(passwordCharacters[Int(rand)])
-                passwordCharacters.shuffle()
+    // Generate 10 Random Passwords
+    while generated_passwords.count < 10 {
+        var random_password = ""
+        // Determine requirements and put them into a string
+        if Constants.passwordrequirements.isEmpty == false {
+            // Set Counts to 0
+            var lowerletter_count: Int = 0
+            var upperletter_count: Int = 0
+            var number_count: Int = 0
+            var symbol_count: Int = 0
+            // While loop while the counts we have are not equal to the requirements in the password
+            while lowerletter_count != Constants.passwordrequirements["Lowercase"] && upperletter_count != Constants.passwordrequirements["Uppercase"] && number_count != Constants.passwordrequirements["Numbers"] &&
+                    symbol_count != Constants.passwordrequirements["Symbols"] {
+                let random_char = passwordCharacters.randomItem()
+                // Is the character a lower case letter?
+                if random_char.isLowercase {
+                    lowerletter_count += 1
+                }
+                else if random_char.isUppercase {
+                    upperletter_count += 1
+                }
+                // Is the character a number?
+                else if random_char.isNumber {
+                    number_count += 1
+                }
+                // Is the character a symbol?
+                else if random_char.isSymbol {
+                    symbol_count += 1
+                }
+                random_password.append(random_char)
             }
-            generated_passwords.append(random_password)
         }
-        // Select one of those random passwords
-        final_password = generated_passwords.randomItem() as! String
-        // Verify
-        password_verified = ValidatePassword(generated_password: final_password)
-        password_try += 1
+        // Mix up our requirements we gathered
+        if !random_password.isEmpty {
+            random_password = String(random_password.shuffled())
+        }
+        // Generate a Randomized Password
+        while random_password.count <= length {
+            let rand = arc4random_uniform(UInt32(passwordCharacters.count))
+            random_password.append(passwordCharacters[Int(rand)])
+            passwordCharacters.shuffle()
+        }
+        generated_passwords.append(random_password)
     }
-    if password_verified == false {
-        laps_log.print("We were unable to generate a password with the requirements specified. Please adjust the requirements or increase the length to ensure we can meet the requirements.", .error)
-        exit(1)
-    } else {
-        laps_log.print("Password has been verified to meet the requirements specified in configuration.", .info)
-    }
+    // Select one of those random passwords
+    final_password = generated_passwords.randomItem() as! String
+    // Perform Grouping if needed
     let password_grouping = GetPreference(preference_key: "PasswordGrouping") as! Int
     if (password_grouping > 0) {
         let chunks = stride(from: 0, to: final_password.count, by: password_grouping).map { (offset) -> Substring in

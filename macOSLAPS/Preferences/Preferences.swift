@@ -27,7 +27,7 @@ var defaultpreferences : [ String : Any ] = [
         "Lowercase"          :       0,
         "Number"             :       0,
         "Symbol"             :       0
-        ]
+        ],
     ]
 
 // Pull configuration settings from managed preferences or set defaults
