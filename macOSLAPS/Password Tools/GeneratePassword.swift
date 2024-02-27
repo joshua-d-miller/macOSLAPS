@@ -72,6 +72,8 @@ func PasswordGen(length: Int) -> String {
             random_password.append(passwordCharacters[Int(rand)])
             passwordCharacters.shuffle()
         }
+        // Shuffle one more time for good measure
+        random_password = String(random_password.shuffled())
         generated_passwords.append(random_password)
     }
     // Select one of those random passwords

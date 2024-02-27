@@ -7,9 +7,9 @@
 	<key>CFBundleName</key>
 	<string>macOSLAPS</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.1.0</string>
+	<string>4.0.0</string>
 	<key>CFBundleVersion</key>
-	<string>842</string>
+	<string>845</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.13</string>
 </dict>
