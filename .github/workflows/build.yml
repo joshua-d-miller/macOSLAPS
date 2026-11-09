@@ -159,13 +159,34 @@ jobs:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          AC_APPLE_ID: ${{ secrets.AC_APPLE_ID }}
+          AC_APP_PASSWORD: ${{ secrets.AC_APP_PASSWORD }}
+          AC_TEAM_ID: ${{ secrets.AC_TEAM_ID }}
           PKG: dist/${{ steps.package.outputs.pkg }}
         run: |
-          key="$RUNNER_TEMP/AuthKey.p8"
-          printf '%s' "$ASC_KEY_P8" > "$key"
-          xcrun notarytool submit "$PKG" --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
+          # Preferred: App Store Connect API key. Fallback: Apple ID + app-specific password.
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            key="$RUNNER_TEMP/AuthKey.p8"
+            printf '%s' "$ASC_KEY_P8" > "$key"
+            auth=(--key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+          elif [ -n "$AC_APPLE_ID" ] && [ -n "$AC_APP_PASSWORD" ]; then
+            auth=(--apple-id "$AC_APPLE_ID" --password "$AC_APP_PASSWORD" --team-id "${AC_TEAM_ID:-9UYK4F9BSM}")
+          else
+            echo "::error::Signing secrets are set but no notarization credentials (ASC_* or AC_*)."
+            exit 1
+          fi
+          out=$(xcrun notarytool submit "$PKG" "${auth[@]}" --wait --output-format json)
+          echo "$out"
+          status=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
+          if [ "$status" != "Accepted" ]; then
+            id=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
+            [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
+            echo "::error::Notarization status: $status"
+            exit 1
+          fi
           xcrun stapler staple "$PKG"
-          rm -f "$key"
+          xcrun stapler validate "$PKG"
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Checksums
         run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt
