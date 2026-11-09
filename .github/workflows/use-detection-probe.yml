@@ -1,43 +1,25 @@
-name: use-detection probe (temporary)
+name: signing probe (temporary)
 on:
   push:
     branches: [probe/use-detection]
 jobs:
   probe:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-15, macos-26]
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-15
     steps:
-      - name: Probe Endpoint Security events via eslogger
+      - name: Inspect signatures of past releases
         shell: bash {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          U=lapsprobe; PW='Probe-Pass-9911'
-          sudo sysadminctl -addUser $U -password "$PW" -admin >/dev/null 2>&1
-          sudo eslogger --list-events 2>&1 | grep -E "^(authentication|sudo|su|lw_session_login|authorization_judgement|openssh_login)$" | tr '\n' ' '; echo
-          sudo eslogger authentication sudo su authorization_judgement > /tmp/es.json 2>/tmp/es.err &
-          sleep 5; cat /tmp/es.err
-          dscl . -authonly $U "$PW"; echo "dscl authonly rc=$?"
-          dscl . -authonly $U wrong-pw >/dev/null 2>&1; echo "dscl wrong rc=$?"
-          sudo -u $U bash -c "echo '$PW' | sudo -S -k true" >/dev/null 2>&1; echo "sudo rc=$?"
-          expect -c "spawn su $U -c true; expect \"Password:\"; send \"$PW\r\"; expect eof" >/dev/null 2>&1; echo "su rc=$?"
-          sleep 5; sudo pkill eslogger; sleep 1
-          echo "events captured: $(wc -l < /tmp/es.json)"
-          python3 - <<'PY'
-          import json
-          for line in open('/tmp/es.json'):
-              try: e = json.loads(line)
-              except Exception: continue
-              ev = e.get('event', {}); kind = list(ev.keys())[0] if ev else '?'
-              s = json.dumps(ev)
-              if 'lapsprobe' not in s: continue
-              proc = e.get('process', {}).get('executable', {}).get('path')
-              if kind == 'authentication':
-                  a = ev['authentication']; od = (a.get('data') or {}).get('od') or {}
-                  print(f"authentication type={a.get('type')} success={a.get('success')} record={od.get('record_name')} by={proc}")
-              elif kind in ('sudo','su'):
-                  d = ev[kind]; print(f"{kind} success={d.get('success')} from={d.get('from_username')} to={d.get('to_username')} by={proc}")
-              else:
-                  print(kind, s[:200])
-          PY
+          for tag in "4.0.0(845)" "3.1.0(843)" "3.0.4(781)" "2.1.0(721)"; do
+            echo "================ $tag"
+            mkdir -p "r/$tag" && cd "r/$tag"
+            gh release download "$tag" --repo joshua-d-miller/macOSLAPS --pattern '*.pkg' >/dev/null 2>&1 || { echo "no pkg asset"; cd - >/dev/null; continue; }
+            pkg=$(ls *.pkg | head -1); echo "pkg: $pkg"
+            pkgutil --check-signature "$pkg" | sed -n '1,6p'
+            pkgutil --expand-full "$pkg" x >/dev/null 2>&1
+            bin=$(find x -type f -name 'macOSLAPS' -perm -u+x | head -1); echo "bin: $bin"
+            codesign -dv --verbose=2 "$bin" 2>&1 | grep -E "Identifier=|TeamIdentifier|Authority=Developer|Timestamp|flags"
+            echo "designated requirement:"; codesign -d -r- "$bin" 2>&1 | grep designated
+            cd - >/dev/null
+          done
