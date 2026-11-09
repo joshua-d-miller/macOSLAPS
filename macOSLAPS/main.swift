@@ -89,7 +89,7 @@ func macOSLAPS() {
     // Delete Keychain Entry
     let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8)
     if exp_keychain_id != nil && Constants.method == "Local" {
-        KeychainService.deleteExport(service: exp_keychain_id!)
+        _ = KeychainService.deleteExport(service: exp_keychain_id!)
     }
     // Iterate through supported Arguments
     for argument in Constants.arguments {
