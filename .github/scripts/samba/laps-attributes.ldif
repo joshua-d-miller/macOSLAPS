@@ -1,0 +1,49 @@
+dn: CN=ms-Mcs-AdmPwd,@SCHEMA@
+objectClass: top
+objectClass: attributeSchema
+cn: ms-Mcs-AdmPwd
+lDAPDisplayName: ms-Mcs-AdmPwd
+attributeID: 1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.1
+attributeSyntax: 2.5.5.5
+oMSyntax: 19
+isSingleValued: TRUE
+searchFlags: 904
+isMemberOfPartialAttributeSet: FALSE
+description: Local Administrator Password parameter
+
+dn: CN=ms-Mcs-AdmPwdExpirationTime,@SCHEMA@
+objectClass: top
+objectClass: attributeSchema
+cn: ms-Mcs-AdmPwdExpirationTime
+lDAPDisplayName: ms-Mcs-AdmPwdExpirationTime
+attributeID: 1.2.840.113556.1.8000.2554.50051.45980.28112.18903.35903.6685103.1224907.2.2
+attributeSyntax: 2.5.5.16
+oMSyntax: 65
+isSingleValued: TRUE
+searchFlags: 0
+isMemberOfPartialAttributeSet: FALSE
+description: Local Administrator Password Expiry Time Parameter
+
+dn: CN=ms-LAPS-Password,@SCHEMA@
+objectClass: top
+objectClass: attributeSchema
+cn: ms-LAPS-Password
+lDAPDisplayName: msLAPS-Password
+attributeID: 1.2.840.113556.1.6.44.1.2
+attributeSyntax: 2.5.5.5
+oMSyntax: 19
+isSingleValued: TRUE
+searchFlags: 904
+description: Windows LAPS password (JSON)
+
+dn: CN=ms-LAPS-PasswordExpirationTime,@SCHEMA@
+objectClass: top
+objectClass: attributeSchema
+cn: ms-LAPS-PasswordExpirationTime
+lDAPDisplayName: msLAPS-PasswordExpirationTime
+attributeID: 1.2.840.113556.1.6.44.1.1
+attributeSyntax: 2.5.5.16
+oMSyntax: 65
+isSingleValued: TRUE
+searchFlags: 0
+description: Windows LAPS password expiration time

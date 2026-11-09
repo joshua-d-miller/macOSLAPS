@@ -1,0 +1,27 @@
+name: AD Tests
+
+# Throwaway Samba AD domain controller with the legacy LAPS schema and the
+# Windows LAPS schema. Stage 1 checks the domain itself (a computer can write
+# its own LAPS attributes, admins can read them, ordinary users can't).
+# Stage 2 (added once Tailscale secrets exist) joins a macOS runner and runs
+# macOSLAPS in AD mode against it.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  samba-dc:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Provision Samba AD DC with LAPS schemas
+        env:
+          ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+        run: sudo -E bash .github/scripts/samba/provision-dc.sh
+      - name: Verify LAPS attributes and permissions
+        env:
+          ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+        run: sudo -E bash .github/scripts/samba/verify-dc.sh

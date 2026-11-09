@@ -1,0 +1,7 @@
+dn: CN=Computer,@SCHEMA@
+changetype: modify
+add: mayContain
+mayContain: ms-Mcs-AdmPwd
+mayContain: ms-Mcs-AdmPwdExpirationTime
+mayContain: msLAPS-Password
+mayContain: msLAPS-PasswordExpirationTime
