@@ -128,12 +128,26 @@ jobs:
             --scripts packaging/scripts --install-location / "$RUNNER_TEMP/component.pkg"
           if [ "$SIGNED" = "true" ]; then
             pkg="macOSLAPS-$VERSION.pkg"
-            productsign --sign "$INST_ID" --keychain "$KC" "$RUNNER_TEMP/component.pkg" "dist/$pkg"
+            productsign --timestamp --sign "$INST_ID" --keychain "$KC" "$RUNNER_TEMP/component.pkg" "dist/$pkg"
           else
             pkg="macOSLAPS-$VERSION-UNSIGNED-TEST.pkg"
             cp "$RUNNER_TEMP/component.pkg" "dist/$pkg"
           fi
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Check signing certificate expiry
+        if: steps.sign.outputs.signed == 'true'
+        run: |
+          # Developer ID certificates from the G2 authority last one year. Warn a month ahead
+          # so the DEVID_* secrets get renewed before releases can no longer be signed.
+          for name in "Developer ID Application" "Developer ID Installer"; do
+            end=$(security find-certificate -c "$name" -p "$KC" | openssl x509 -noout -enddate | cut -d= -f2)
+            days=$(( ( $(date -j -f "%b %e %T %Y %Z" "$end" +%s) - $(date +%s) ) / 86400 ))
+            echo "$name expires $end ($days days)"
+            if [ "$days" -lt 30 ]; then
+              echo "::warning::$name certificate expires in $days days. Renew it and update the DEVID_* secrets."
+            fi
+          done
 
       - name: Notarize pkg
         if: steps.sign.outputs.signed == 'true'
