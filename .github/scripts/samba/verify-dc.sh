@@ -42,7 +42,10 @@ else
   bad "computer could not write its own attributes: $(cat /tmp/self.err)"
 fi
 
-read_attr() { ldbsearch -H ldap://localhost -U "$1" -b "$PCDN" -s base "(objectClass=computer)" "$2" 2>/dev/null | sed -n "s/^$2: //p"; }
+# ldbsearch prints LDIF, which folds long values onto continuation lines starting
+# with a space; unfold before extracting.
+read_attr() { ldbsearch -H ldap://localhost -U "$1" -b "$PCDN" -s base "(objectClass=computer)" "$2" 2>/dev/null \
+  | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n //g' | sed -n "s/^$2: //p"; }
 [ "$(read_attr "Administrator%$ADMINPASS" ms-Mcs-AdmPwd)" = "$PW" ] && ok "admin reads ms-Mcs-AdmPwd" || bad "ms-Mcs-AdmPwd readback"
 [ "$(read_attr "Administrator%$ADMINPASS" msLAPS-PasswordExpirationTime)" = "$EXP" ] && ok "admin reads msLAPS-PasswordExpirationTime" || bad "msLAPS-PasswordExpirationTime readback"
 J=$(read_attr "Administrator%$ADMINPASS" msLAPS-Password)
