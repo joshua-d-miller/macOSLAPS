@@ -1,7 +1,7 @@
 name: Build & Test
 
 # Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
-# smoke-tests the pkg on macOS 14 / 15 / 26, and publishes a prerelease on v* tags.
+# smoke-tests the pkg on macOS 15 (arm64 + Intel) / 26, and publishes a prerelease on v* tags.
 #
 # Signing is optional. With no secrets set, the build is ad-hoc signed and the pkg
 # is unsigned (fine for community testing via `sudo installer -pkg`). Add these
@@ -31,7 +31,7 @@ jobs:
   generator-tests:
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Compile and run password generator tests
         run: |
           swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
@@ -44,7 +44,7 @@ jobs:
       version: ${{ steps.binary.outputs.version }}
       signed: ${{ steps.sign.outputs.signed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Show toolchain
         run: xcodebuild -version && swift --version
@@ -152,7 +152,7 @@ jobs:
       - name: Checksums
         run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: macOSLAPS-${{ steps.binary.outputs.version }}
           path: |
@@ -169,11 +169,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15, macos-26]
+        os: [macos-15, macos-15-intel, macos-26]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
@@ -187,7 +187,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
