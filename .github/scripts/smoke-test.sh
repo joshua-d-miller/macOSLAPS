@@ -99,6 +99,21 @@ for i in $(seq 1 "$ROUNDS"); do
 done
 echo "::endgroup::"
 
+echo "::group::-stageMigration hands the current password to the next version"
+CURRENT=$(get_pw)
+"$LAPS" -stageMigration && pass "-stageMigration exited 0" || fail "-stageMigration failed"
+if [ -f /var/root/.macOSLAPS-migration ]; then
+    STAGE=$(tr -d '\n' < /var/root/.macOSLAPS-migration)
+    STAGED=$(security find-generic-password -w -s "$STAGE" "$SYSKC" 2>/dev/null)
+    [ "$STAGED" = "$CURRENT" ] && pass "staged password readable via /usr/bin/security and current" \
+        || fail "staged password missing or does not match current password"
+    security delete-generic-password -s "$STAGE" "$SYSKC" >/dev/null 2>&1
+    rm -f /var/root/.macOSLAPS-migration
+else
+    fail "-stageMigration did not write /var/root/.macOSLAPS-migration"
+fi
+echo "::endgroup::"
+
 if [ "$HAS_TOKEN" -eq 1 ]; then
     echo "::group::secureToken: -firstPass on the command line (after -resetPassword)"
     KNOWN='Known-Pass-5678'

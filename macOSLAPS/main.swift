@@ -48,6 +48,41 @@ func verify_root() {
         return
     }
 }
+/// Hands the stored password to the next macOSLAPS release, which is signed with a
+/// different code-signing identifier and therefore cannot read the "macOSLAPS" item
+/// directly. Works for both the AD and Local methods. The staged item trusts this
+/// binary and /usr/bin/security; its name is written to migrationStageFile. The new
+/// version reads it, verifies it, stores it under its own item and deletes the stage.
+let migrationStageFile = "/var/root/.macOSLAPS-migration"
+func stageMigration() -> Never {
+    let (stored_password, created) = KeychainService.loadPassword(service: "macOSLAPS")
+    guard let password = stored_password else {
+        laps_log.print("No stored macOSLAPS password to stage. The next version will start fresh using FirstPass or a standard reset.", .info)
+        exit(0)
+    }
+    let local_admin_record = LocalTools.connect()
+    guard (try? local_admin_record.verifyPassword(password)) != nil else {
+        laps_log.print("The stored password does not match \(Constants.local_admin). Not staging it. Reset the account with sysadminctl and use -firstPass after upgrading.", .error)
+        exit(1)
+    }
+    let created_date = (created == nil || created == "Not Found") ? Constants.dateFormatter.string(from: Date()) : created!
+    let stage_service = "macOSLAPS-migration-\(UUID().uuidString)"
+    let status = KeychainService.exportPassword(service: stage_service, account: "root \(stage_service)", data: password, expiration: created_date)
+    guard status == noErr else {
+        laps_log.print("Unable to create the migration keychain item (OSStatus \(status)).", .error)
+        exit(1)
+    }
+    do {
+        try stage_service.write(toFile: migrationStageFile, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: migrationStageFile)
+    } catch {
+        _ = KeychainService.deleteExport(service: stage_service)
+        laps_log.print("Unable to write \(migrationStageFile): \(error.localizedDescription)", .error)
+        exit(1)
+    }
+    laps_log.print("Stored password verified and staged for the next macOSLAPS version.", .info)
+    exit(0)
+}
 func macOSLAPS() {
     // Delete Keychain Entry
     let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8)
@@ -107,6 +142,9 @@ func macOSLAPS() {
             }
         case "-resetpassword":
             Constants.pw_reset = true
+        case "-stagemigration":
+            verify_root()
+            stageMigration()
         case "-showconfig":
             printEffectiveConfiguration()
             exit(0)
@@ -129,6 +167,10 @@ func macOSLAPS() {
                                     Profile key or the password you specify after this flag.
                                     The password of the admin MUST be this password or the
                                     change WILL FAIL.
+                  
+                  -stagemigration   Used by the next macOSLAPS installer. Verifies the
+                                    stored password and copies it to a temporary
+                                    keychain item so the new version can take it over.
                   
                   -showconfig       Prints the settings macOSLAPS will use, which
                                     preference domain they came from, and whether

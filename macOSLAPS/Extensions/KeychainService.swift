@@ -72,19 +72,25 @@ class KeychainService {
             let existingItem = item as? [String: Any]
             let passwordData = existingItem![String(kSecValueData)] as? Data
             let password = String(data: passwordData!, encoding: String.Encoding.utf8)
-            guard let comment = existingItem?[String(kSecAttrComment)] as? String else {
-                laps_log.print("There is currently no expriation date comment", .warn)
+            guard let comment = existingItem?[String(kSecAttrComment)] as? String,
+                  comment.hasPrefix("Created: ") else {
+                laps_log.print("There is currently no expiration date comment", .warn)
                 return(password, nil)
             }
-            let r = comment.index(comment.startIndex, offsetBy: 9)..<comment.endIndex
-            let creationdate = String(comment[r])
+            let creationdate = String(comment.dropFirst("Created: ".count))
             
             return (password, creationdate)
-        } else if status == -25300 {
+        } else if status == errSecItemNotFound {
             // macOSLAPS Keychain Entry Not Found
             return(nil, "Not Found")
         }
-        return(nil,nil)
+        // Any other status means the item may exist but we cannot read it (for example
+        // errSecInteractionNotAllowed when the item's access list does not trust this
+        // binary). Never treat that as "no password stored": callers would fall back to
+        // FirstPass and could lock the account out of its secureToken.
+        let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error"
+        laps_log.print("Unable to read the \(service) keychain item (OSStatus \(status): \(message)). Refusing to continue so the stored password is not lost.", .error)
+        exit(1)
     }
     class func exportPassword(service: String, account: String, data: String, expiration: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
