@@ -1,0 +1,28 @@
+name: use-detection probe (temporary)
+on:
+  push:
+    branches: [probe/use-detection]
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Probe
+        shell: bash
+        run: |
+          U=lapsprobe; PW='Probe-Pass-9911'
+          sudo sysadminctl -addUser $U -password "$PW" -admin >/dev/null 2>&1
+          snap() { echo "--- $1"; sudo dscl . -read /Users/$U accountPolicyData | plutil -p - 2>/dev/null | grep -E "Timestamp|Count|Time" ; last -3 $U | head -3; }
+          mark() { date -u +%Y-%m-%dT%H:%M:%S; }
+          logs() { echo "  log entries mentioning $U since $1:"; sudo log show --start "$(date -j -f %Y-%m-%dT%H:%M:%S "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$1")" --style compact --info 2>/dev/null | grep -i "$U" | sed 's/^/    /' | head -8; echo "  same window, private-redacted lines from authd/opendirectoryd/sudo/su:"; sudo log show --start "$(date -j -f %Y-%m-%dT%H:%M:%S "$1" '+%Y-%m-%d %H:%M:%S')" --style compact --info --predicate 'process IN {"authd","opendirectoryd","sudo","su","login","sshd"}' 2>/dev/null | grep -iE "succeed|success|authenticat|session|<private>" | sed 's/^/    /' | head -8; }
+          snap baseline
+          sleep 2; T=$(mark); dscl . -authonly $U "$PW"; echo "dscl authonly rc=$?"; sleep 2; snap "after dscl -authonly"; logs $T
+          sleep 2; T=$(mark); sudo -u $U bash -c "echo '$PW' | sudo -S -k true" 2>&1 | tail -1; echo "sudo as $U rc=${PIPESTATUS[0]}"; sleep 2; snap "after sudo by $U"; logs $T
+          sleep 2; T=$(mark); expect -c "spawn su $U -c true; expect \"Password:\"; send \"$PW\r\"; expect eof" >/dev/null 2>&1; echo "su rc=$?"; sleep 2; snap "after su"; logs $T
+          sleep 2; T=$(mark); sudo -u runner security authorize -u -p "$U" 2>&1 | tail -1 || true; sleep 2; snap "after security authorize"; logs $T
+          sleep 2; T=$(mark); dscl . -authonly $U wrong-password; echo "wrong pw rc=$?"; sleep 2; snap "after failed auth"; logs $T
+          echo "--- sudo log file / utmpx"; sudo grep -h "$U" /var/log/system.log 2>/dev/null | tail -3; last | grep $U | head
+          echo "--- private data logging state"; sudo log config --status 2>&1 | head -3
