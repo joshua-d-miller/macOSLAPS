@@ -1,0 +1,113 @@
+name: Re-sign legacy release pkgs
+
+# Apple retires the original Developer ID Sub-CA on 2027-02-01; pkgs signed under it
+# stop installing. This re-signs the existing release pkgs with the current (G2)
+# Developer ID Installer certificate, notarizes and staples them. The payload is
+# untouched (pkgutil --expand / --flatten only drops the old signature).
+#
+# Push to ci/resign-legacy -> dry run: re-signed pkgs are uploaded as a workflow artifact.
+# workflow_dispatch with upload=true (after this file is on master) -> replaces the
+# assets on the existing GitHub releases (same file names, so existing links keep working).
+
+on:
+  push:
+    branches: [ci/resign-legacy]
+  workflow_dispatch:
+    inputs:
+      upload:
+        description: Replace the release assets (otherwise artifact only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  resign:
+    runs-on: macos-15
+    strategy:
+      fail-fast: false
+      matrix:
+        tag: ["3.0.4(781)", "4.0.0(845)"]
+    steps:
+      - name: Download original pkg
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.tag }}
+        run: |
+          mkdir -p orig out
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern '*.pkg' --dir orig
+          ls -l orig
+          for p in orig/*.pkg; do pkgutil --check-signature "$p" | sed -n '1,8p'; done
+
+      - name: Set up signing keychain
+        env:
+          DEVID_INSTALLER_P12: ${{ secrets.DEVID_INSTALLER_P12 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/resign.keychain-db"; KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$DEVID_INSTALLER_P12" | base64 --decode > "$RUNNER_TEMP/inst.p12"
+          security import "$RUNNER_TEMP/inst.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/productsign
+          rm -f "$RUNNER_TEMP/inst.p12"
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/g2.cer"
+          security import "$RUNNER_TEMP/g2.cer" -k "$KC" || true
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          echo "KC=$KC" >> "$GITHUB_ENV"
+          echo "INST_ID=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/{print $2; exit}')" >> "$GITHUB_ENV"
+
+      - name: Re-sign, notarize and staple
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          AC_APPLE_ID: ${{ secrets.AC_APPLE_ID }}
+          AC_APP_PASSWORD: ${{ secrets.AC_APP_PASSWORD }}
+          AC_TEAM_ID: ${{ secrets.AC_TEAM_ID }}
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            printf '%s' "$ASC_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+            auth=(--key "$RUNNER_TEMP/AuthKey.p8" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+          else
+            auth=(--apple-id "$AC_APPLE_ID" --password "$AC_APP_PASSWORD" --team-id "${AC_TEAM_ID:-9UYK4F9BSM}")
+          fi
+          for p in orig/*.pkg; do
+            name=$(basename "$p")
+            rm -rf "$RUNNER_TEMP/x"
+            pkgutil --expand "$p" "$RUNNER_TEMP/x"
+            pkgutil --flatten "$RUNNER_TEMP/x" "$RUNNER_TEMP/unsigned.pkg"
+            productsign --timestamp --sign "$INST_ID" --keychain "$KC" "$RUNNER_TEMP/unsigned.pkg" "out/$name"
+            # Payload must be identical to the original.
+            pkgutil --payload-files "$p" | sort > "$RUNNER_TEMP/a.txt"
+            pkgutil --payload-files "out/$name" | sort > "$RUNNER_TEMP/b.txt"
+            diff "$RUNNER_TEMP/a.txt" "$RUNNER_TEMP/b.txt" && echo "payload file list identical"
+            out=$(xcrun notarytool submit "out/$name" "${auth[@]}" --wait --output-format json); echo "$out"
+            echo "$out" | grep -q '"status":"Accepted"' || { echo "::error::notarization failed for $name"; exit 1; }
+            xcrun stapler staple "out/$name"
+            pkgutil --check-signature "out/$name" | sed -n '1,8p'
+            spctl --assess --type install -vv "out/$name"
+          done
+          rm -f "$RUNNER_TEMP/AuthKey.p8"
+          (cd out && shasum -a 256 *.pkg | tee SHA256SUMS.txt)
+
+      - name: Test install
+        run: for p in out/*.pkg; do sudo installer -pkg "$p" -target / && /usr/local/laps/macOSLAPS -version; done
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: resigned-${{ strategy.job-index }}
+          path: out/
+
+      - name: Replace release assets
+        if: github.event_name == 'workflow_dispatch' && inputs.upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ matrix.tag }}
+        run: gh release upload "$TAG" out/*.pkg --clobber --repo "$GITHUB_REPOSITORY"
+
+      - name: Clean up keychain
+        if: always()
+        run: '[ -n "${KC:-}" ] && security delete-keychain "$KC" || true'
