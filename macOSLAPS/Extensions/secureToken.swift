@@ -10,6 +10,13 @@ import Foundation
 
 
 func Determine_secureToken() -> Bool {
+    // Test-only switch used by CI: treat the account as a secureToken holder so the
+    // "old password must be known" path is exercised on runners where the test
+    // account cannot get a real token. It can only make macOSLAPS stricter.
+    if ProcessInfo.processInfo.environment["MACOSLAPS_TEST_ASSUME_SECURETOKEN"] == "1" {
+        laps_log.print("Test mode: treating \(Constants.local_admin) as a secureToken holder (old password required).", .warn)
+        return(true)
+    }
     /* --- Change the password for the account --- */
     // Check OS Version as that will determine how we proceed
     if ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion.init(majorVersion: 10, minorVersion: 13, patchVersion: 0)) {

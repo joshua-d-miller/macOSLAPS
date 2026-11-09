@@ -114,6 +114,33 @@ else
 fi
 echo "::endgroup::"
 
+echo "::group::Simulated secureToken: old password must be known"
+export MACOSLAPS_TEST_ASSUME_SECURETOKEN=1
+KNOWN='Known-Pass-5678'
+dscl . -passwd "/Users/$ACCT" "$KNOWN" || fail "could not reset account to a known password"
+STORED_BEFORE=$(get_pw 2>/dev/null)
+# Wrong FirstPass: must fail and change nothing.
+if "$LAPS" -firstPass 'Wrong-Pass-0000' -resetPassword >/dev/null 2>&1; then
+    fail "rotation with a wrong FirstPass succeeded (old password is not being enforced)"
+else
+    pass "rotation with a wrong FirstPass failed"
+fi
+dscl . -authonly "$ACCT" "$KNOWN" >/dev/null 2>&1 && pass "account unchanged after failed rotation" || fail "account changed after failed rotation"
+[ "$(get_pw 2>/dev/null)" = "$STORED_BEFORE" ] && pass "keychain unchanged after failed rotation" || fail "keychain changed after failed rotation"
+# Correct FirstPass, flag after -resetPassword (#92 argument order).
+"$LAPS" -resetPassword -firstPass "$KNOWN" && pass "-resetPassword -firstPass <pw> succeeded" || fail "-resetPassword -firstPass <pw> failed"
+PWA=$(get_pw) && check_pw "$PWA" "token sim, CLI firstPass (after)"
+# Correct FirstPass, flag first.
+dscl . -passwd "/Users/$ACCT" "$KNOWN"
+"$LAPS" -firstPass "$KNOWN" -resetPassword && pass "-firstPass <pw> -resetPassword succeeded" || fail "-firstPass <pw> -resetPassword failed"
+PWB=$(get_pw) && check_pw "$PWB" "token sim, CLI firstPass (before)"
+# Stored-password path.
+"$LAPS" -resetPassword && pass "rotation with the stored password succeeded" || fail "rotation with the stored password failed"
+PWC=$(get_pw) && check_pw "$PWC" "token sim, stored password"
+dscl . -authonly "$ACCT" "$PWB" >/dev/null 2>&1 && fail "previous password still works" || pass "previous password invalidated"
+unset MACOSLAPS_TEST_ASSUME_SECURETOKEN
+echo "::endgroup::"
+
 if [ "$HAS_TOKEN" -eq 1 ]; then
     echo "::group::secureToken: -firstPass on the command line (after -resetPassword)"
     KNOWN='Known-Pass-5678'
