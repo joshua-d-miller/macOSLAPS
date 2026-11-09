@@ -1,0 +1,197 @@
+name: Build & Test
+
+# Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
+# smoke-tests the pkg on macOS 14 / 15 / 26, and publishes a prerelease on v* tags.
+#
+# Signing is optional. With no secrets set, the build is ad-hoc signed and the pkg
+# is unsigned (fine for community testing via `sudo installer -pkg`). Add these
+# repository secrets to get Developer ID signed + notarized output:
+#   DEVID_APP_P12        base64 of the "Developer ID Application" .p12
+#   DEVID_INSTALLER_P12  base64 of the "Developer ID Installer" .p12
+#   P12_PASSWORD         password for both .p12 files
+#   ASC_KEY_ID           App Store Connect API key ID   (for notarytool)
+#   ASC_ISSUER_ID        App Store Connect issuer ID
+#   ASC_KEY_P8           contents of the AuthKey_XXXX.p8 file
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write  # only used by the release job on tags
+
+env:
+  # Xcode 26 no longer targets 10.13. 12.0 covers every macOS Apple still patches.
+  MIN_MACOS: "12.0"
+
+jobs:
+  build:
+    runs-on: macos-26
+    outputs:
+      pkg: ${{ steps.package.outputs.pkg }}
+      version: ${{ steps.binary.outputs.version }}
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: xcodebuild -version && swift --version
+
+      - name: Set build number
+        run: |
+          # The project's "Increment Build" phase adds 1, so seed it one lower.
+          build=$((845 + GITHUB_RUN_NUMBER))
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((build - 1))" macOSLAPS/Info.plist
+
+      - name: Build universal binary
+        run: |
+          xcodebuild -project macOSLAPS.xcodeproj -scheme macOSLAPS -configuration Release \
+            -derivedDataPath build \
+            ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
+            MACOSX_DEPLOYMENT_TARGET="$MIN_MACOS" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="" CODE_SIGNING_REQUIRED=NO \
+            build > xcodebuild.log 2>&1 || { tail -60 xcodebuild.log; exit 1; }
+          grep -E "(\*\* BUILD|error:|warning:)" xcodebuild.log | sort -u || true
+
+      - name: Locate binary and read embedded version
+        id: binary
+        run: |
+          bin=build/Build/Products/Release/macOSLAPS
+          test -x "$bin" || { echo "::error::binary not found"; ls -la build/Build/Products/Release; exit 1; }
+          lipo -info "$bin"
+          launchctl plist __TEXT,__info_plist "$bin" > embedded.txt
+          short=$(awk -F'"' '/CFBundleShortVersionString/{print $4}' embedded.txt)
+          build=$(awk -F'"' '/"CFBundleVersion"/{print $4}' embedded.txt)
+          echo "Embedded version: $short ($build)"
+          echo "bin=$bin" >> "$GITHUB_OUTPUT"
+          echo "version=$short.$build" >> "$GITHUB_OUTPUT"
+
+      - name: Sign binary
+        id: sign
+        env:
+          DEVID_APP_P12: ${{ secrets.DEVID_APP_P12 }}
+          DEVID_INSTALLER_P12: ${{ secrets.DEVID_INSTALLER_P12 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          BIN: ${{ steps.binary.outputs.bin }}
+        run: |
+          if [ -z "$DEVID_APP_P12" ]; then
+            echo "::warning::No signing secrets set. Producing an ad-hoc signed TEST build."
+            codesign --force --sign - --options runtime --identifier edu.psu.macOSLAPS "$BIN"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          KC="$RUNNER_TEMP/build.keychain-db"; KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$DEVID_APP_P12"       | base64 --decode > "$RUNNER_TEMP/app.p12"
+          echo "$DEVID_INSTALLER_P12" | base64 --decode > "$RUNNER_TEMP/inst.p12"
+          security import "$RUNNER_TEMP/app.p12"  -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security import "$RUNNER_TEMP/inst.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          rm -f "$RUNNER_TEMP"/*.p12
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          APP_ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
+          INST_ID=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/{print $2; exit}')
+          codesign --force --timestamp --options runtime --identifier edu.psu.macOSLAPS --sign "$APP_ID" "$BIN"
+          codesign --verify --strict --verbose=2 "$BIN"
+          echo "KC=$KC" >> "$GITHUB_ENV"
+          echo "INST_ID=$INST_ID" >> "$GITHUB_ENV"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build pkg
+        id: package
+        env:
+          BIN: ${{ steps.binary.outputs.bin }}
+          VERSION: ${{ steps.binary.outputs.version }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+        run: |
+          root="$RUNNER_TEMP/pkgroot"
+          mkdir -p "$root/usr/local/laps" "$root/Library/LaunchDaemons" dist
+          cp "$BIN" "$root/usr/local/laps/macOSLAPS"
+          cp LaunchDaemon/edu.psu.macoslaps-check.plist "$root/Library/LaunchDaemons/"
+          chmod 755 "$root/usr/local/laps/macOSLAPS" packaging/scripts/postinstall
+          chmod 644 "$root/Library/LaunchDaemons/edu.psu.macoslaps-check.plist"
+          pkgbuild --root "$root" --identifier edu.psu.macoslaps --version "$VERSION" \
+            --scripts packaging/scripts --install-location / "$RUNNER_TEMP/component.pkg"
+          if [ "$SIGNED" = "true" ]; then
+            pkg="macOSLAPS-$VERSION.pkg"
+            productsign --sign "$INST_ID" --keychain "$KC" "$RUNNER_TEMP/component.pkg" "dist/$pkg"
+          else
+            pkg="macOSLAPS-$VERSION-UNSIGNED-TEST.pkg"
+            cp "$RUNNER_TEMP/component.pkg" "dist/$pkg"
+          fi
+          echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize pkg
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          PKG: dist/${{ steps.package.outputs.pkg }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$ASC_KEY_P8" > "$key"
+          xcrun notarytool submit "$PKG" --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait
+          xcrun stapler staple "$PKG"
+          rm -f "$key"
+
+      - name: Checksums
+        run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macOSLAPS-${{ steps.binary.outputs.version }}
+          path: |
+            dist/*.pkg
+            dist/SHA256SUMS.txt
+            xcodebuild.log
+
+      - name: Clean up signing keychain
+        if: always()
+        run: '[ -n "${KC:-}" ] && security delete-keychain "$KC" || true'
+
+  smoke-test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Install pkg
+        run: sudo installer -pkg "artifact/dist/${{ needs.build.outputs.pkg }}" -target /
+      - name: Run smoke test
+        run: sudo bash .github/scripts/smoke-test.sh
+
+  release:
+    needs: [build, smoke-test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Create prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SIGNED: ${{ needs.build.outputs.signed }}
+        run: |
+          note="Automated build $VERSION from ${GITHUB_SHA::7}."
+          if [ "$SIGNED" != "true" ]; then
+            note="$note UNSIGNED TEST BUILD. Install with: sudo installer -pkg <file> -target /  (double-clicking will be blocked by Gatekeeper). Not for production deployment."
+          fi
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease \
+            --title "macOSLAPS $VERSION" --notes "$note" \
+            artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt
