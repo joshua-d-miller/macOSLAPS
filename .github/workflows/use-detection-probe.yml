@@ -11,11 +11,11 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Probe
-        shell: bash
+        shell: bash {0}
         run: |
           U=lapsprobe; PW='Probe-Pass-9911'
           sudo sysadminctl -addUser $U -password "$PW" -admin >/dev/null 2>&1
-          snap() { echo "--- $1"; sudo dscl . -read /Users/$U accountPolicyData | plutil -p - 2>/dev/null | grep -E "Timestamp|Count|Time" ; last -3 $U | head -3; }
+          snap() { echo "--- $1"; sudo dscl . -read /Users/$U accountPolicyData | plutil -p - 2>/dev/null | grep -E "Timestamp|Count|Time" || echo "  (no accountPolicyData timestamps)"; last -3 $U | head -3; }
           mark() { date -u +%Y-%m-%dT%H:%M:%S; }
           logs() { echo "  log entries mentioning $U since $1:"; sudo log show --start "$(date -j -f %Y-%m-%dT%H:%M:%S "$1" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "$1")" --style compact --info 2>/dev/null | grep -i "$U" | sed 's/^/    /' | head -8; echo "  same window, private-redacted lines from authd/opendirectoryd/sudo/su:"; sudo log show --start "$(date -j -f %Y-%m-%dT%H:%M:%S "$1" '+%Y-%m-%d %H:%M:%S')" --style compact --info --predicate 'process IN {"authd","opendirectoryd","sudo","su","login","sshd"}' 2>/dev/null | grep -iE "succeed|success|authenticat|session|<private>" | sed 's/^/    /' | head -8; }
           snap baseline
