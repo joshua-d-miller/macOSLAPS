@@ -13,16 +13,40 @@
 
 import Cocoa
 import Security
-@available(macOS, introduced: 10.2, deprecated: 10.10, message: "SecKeychain, SecTrustedApplicationCreateFromPath and SecAccessCreate are all deprecated but still currently work as of macOS 14 (Sonoma)[2024]")
+/// Storage in the System keychain.
+///
+/// A root launchd daemon has no modern alternative: the data protection keychain
+/// (and the Secure Enclave) are unavailable outside a user context (Apple DTS,
+/// developer.apple.com/forums/thread/786171, TN3137). Targeting the System keychain
+/// still needs the file-based keychain APIs, which Apple marks deprecated but keeps
+/// supporting for daemons. The deprecated calls are confined to this file:
+///   - `systemKeychain()` (SecKeychainOpen): the one way to address System.keychain
+///   - `withoutUserInteraction` (SecKeychainSetUserInteractionAllowed): never prompt
+///   - `exportPassword` (SecAccessCreate/SecTrustedApplication): legacy -getPassword
+///     export only, removed in 5.0 together with -getPassword
+/// Everything else uses the non-deprecated SecItem API.
 class KeychainService {
+    private static let systemKeychainPath = "/Library/Keychains/System.keychain"
+
+    /// The System keychain. It is unlocked by the system (SystemKey), so no unlock call is needed.
+    private class func systemKeychain() -> SecKeychain? {
+        var keychain : SecKeychain?
+        guard SecKeychainOpen(systemKeychainPath, &keychain) == errSecSuccess else { return nil }
+        return keychain
+    }
+
+    /// Runs `body` with keychain UI disabled so a mismatched access list fails instead of prompting.
+    private class func withoutUserInteraction<T>(_ body: () -> T) -> T {
+        SecKeychainSetUserInteractionAllowed(false)
+        defer { SecKeychainSetUserInteractionAllowed(true) }
+        return body()
+    }
+
     class func savePassword(service: String, account: String, data: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
-        var systemKeychain : SecKeychain?
+        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
         
-        SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
-        SecKeychainUnlock(systemKeychain, 0, nil, false)
-        
-        guard let keychain = systemKeychain, let passwordData = dataFromString else {
+        guard let keychain = keychainRef, let passwordData = dataFromString else {
             return errSecParam
         }
         let creation_date = Constants.dateFormatter.string(from: Date())
@@ -59,10 +83,7 @@ class KeychainService {
     class func loadPassword(service: String) -> (String?, String?) {
         // Instantiate a new default keychain query
         // Tell the query to return a result
-        var systemKeychain : SecKeychain?
-        
-        SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
-        SecKeychainUnlock(systemKeychain, 0, nil, false)
+        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
         
         let query : [String : Any] = [
             kSecClass as String            : kSecClassGenericPassword,
@@ -70,12 +91,10 @@ class KeychainService {
             kSecReturnData as String       : kCFBooleanTrue!,
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
-            kSecUseKeychain as String      : systemKeychain!]
+            kSecUseKeychain as String      : keychainRef!]
         
         var item: AnyObject? = nil
-        SecKeychainSetUserInteractionAllowed(false)
-                defer { SecKeychainSetUserInteractionAllowed(true) }
-        let status: OSStatus = SecItemCopyMatching(query as CFDictionary, &item)
+        let status: OSStatus = withoutUserInteraction { SecItemCopyMatching(query as CFDictionary, &item) }
         if status == noErr {
             let existingItem = item as? [String: Any]
             let passwordData = existingItem![String(kSecValueData)] as? Data
@@ -102,10 +121,7 @@ class KeychainService {
     }
     class func exportPassword(service: String, account: String, data: String, expiration: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
-        var systemKeychain : SecKeychain?
-        
-        SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
-        SecKeychainUnlock(systemKeychain, 0, nil, false)
+        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
         
         // Create access for our two binaries to access the Keychain
         // Item. This shold ensure we always have access
@@ -134,7 +150,7 @@ class KeychainService {
             kSecAttrAccount as String  : account,
             kSecAttrAccess as String   : access!,
             kSecValueData as String    : dataFromString!,
-            kSecUseKeychain as String  : systemKeychain!]
+            kSecUseKeychain as String  : keychainRef!]
 
         // Create new keychain entry
         SecItemAdd(query as CFDictionary, nil)
@@ -144,17 +160,14 @@ class KeychainService {
         let newquery : [ String : Any ] = [
             kSecClass as String       : kSecClassGenericPassword,
             kSecAttrService as String : service,
-            kSecUseKeychain as String : systemKeychain!]
+            kSecUseKeychain as String : keychainRef!]
         let comment_attribute : [ String : Any ] = [
             kSecAttrComment as String : "Created: \(expiration)"
         ]
         return SecItemUpdate(newquery as CFDictionary, comment_attribute as CFDictionary)
     }
     class func deleteExport(service: String) -> OSStatus {
-        var systemKeychain : SecKeychain?
-        
-        SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
-        SecKeychainUnlock(systemKeychain, 0, nil, false)
+        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
     
         // The query used to save our newly created keychain entry
         let query : [String : Any] = [
@@ -163,7 +176,7 @@ class KeychainService {
             kSecReturnData as String       : kCFBooleanTrue!,
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
-            kSecUseKeychain as String      : systemKeychain!]
+            kSecUseKeychain as String      : keychainRef!]
         return SecItemDelete(query as CFDictionary)
     }
 }
