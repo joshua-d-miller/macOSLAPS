@@ -38,6 +38,8 @@ struct Constants {
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
 }
+// Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-stagemigration", "-showconfig"]
 func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
@@ -183,14 +185,21 @@ func macOSLAPS() {
         case "-firstpass":
             Constants.pw_reset = true
             Constants.use_firstpass = true
-            if Constants.first_password == "" {
-                Constants.first_password = CommandLine.arguments[2]
+            // The value is the argument right after -firstPass, in its original case and in
+            // any position (#92). A value on the command line overrides the FirstPass key.
+            let raw_arguments = CommandLine.arguments
+            if let flag_index = raw_arguments.firstIndex(where: { $0.lowercased() == "-firstpass" }),
+               flag_index + 1 < raw_arguments.count,
+               !knownArguments.contains(raw_arguments[flag_index + 1].lowercased()) {
+                Constants.first_password = raw_arguments[flag_index + 1]
+                laps_log.print("The -firstPass argument was invoked. Using the password given on the command line.", .info)
+            } else {
+                laps_log.print("The -firstPass argument was invoked. Using the FirstPass value from the configuration.", .info)
             }
             if Constants.first_password == "" {
                 laps_log.print("No password is specified via the FirstPass key OR in the command line. Exiting...", .error)
                 exit(1)
             }
-            laps_log.print("the -firstPass argument was invoked. Using the Configuration Profile specified password or the argument password that was specified.", .info)
         default:
             continue
         }

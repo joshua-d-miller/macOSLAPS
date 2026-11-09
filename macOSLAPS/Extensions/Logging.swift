@@ -66,3 +66,9 @@ func writeToFile(content: String, fileName: String) {
         }
     }
 }
+
+/// Error details for logs: domain, code and message (catch blocks used to drop these).
+func describe(_ error: Error) -> String {
+    let e = error as NSError
+    return "\(e.domain) \(e.code): \(e.localizedDescription)"
+}

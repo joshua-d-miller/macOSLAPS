@@ -24,6 +24,8 @@ PW_FILE="/var/root/Library/Application Support/macOSLAPS-password"
 EXP_FILE="/var/root/Library/Application Support/macOSLAPS-expiration"
 ## Local Admin Account ##
 LOCAL_ADMIN=$(/usr/bin/defaults read \
+    "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" LocalAdminAccount 2>/dev/null || \
+    /usr/bin/defaults read \
     "/Library/Managed Preferences/edu.psu.macoslaps.plist" LocalAdminAccount)
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ----------------------- ###

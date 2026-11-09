@@ -8,7 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E5289A0725E404C6005DE9EC /* Logging.swift in Sources */ = {isa = PBXBuildFile; fileRef = E52899FF25E404C6005DE9EC /* Logging.swift */; };
-		E5289A0825E404C6005DE9EC /* CharacterSetExlusion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0025E404C6005DE9EC /* CharacterSetExlusion.swift */; };
+		E5289A0825E404C6005DE9EC /* PasswordPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0025E404C6005DE9EC /* PasswordPolicy.swift */; };
 		E5289A0925E404C6005DE9EC /* secureToken.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0125E404C6005DE9EC /* secureToken.swift */; };
 		E5289A0A25E404C6005DE9EC /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0225E404C6005DE9EC /* KeychainService.swift */; };
 		E5289A0B25E404C6005DE9EC /* TimeConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0325E404C6005DE9EC /* TimeConversion.swift */; };
@@ -36,7 +36,7 @@
 
 /* Begin PBXFileReference section */
 		E52899FF25E404C6005DE9EC /* Logging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Logging.swift; sourceTree = "<group>"; };
-		E5289A0025E404C6005DE9EC /* CharacterSetExlusion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = CharacterSetExlusion.swift; sourceTree = "<group>"; };
+		E5289A0025E404C6005DE9EC /* PasswordPolicy.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = PasswordPolicy.swift; sourceTree = "<group>"; };
 		E5289A0125E404C6005DE9EC /* secureToken.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = secureToken.swift; sourceTree = "<group>"; };
 		E5289A0225E404C6005DE9EC /* KeychainService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		E5289A0325E404C6005DE9EC /* TimeConversion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TimeConversion.swift; sourceTree = "<group>"; };
@@ -67,7 +67,7 @@
 			isa = PBXGroup;
 			children = (
 				E52899FF25E404C6005DE9EC /* Logging.swift */,
-				E5289A0025E404C6005DE9EC /* CharacterSetExlusion.swift */,
+				E5289A0025E404C6005DE9EC /* PasswordPolicy.swift */,
 				E5289A0125E404C6005DE9EC /* secureToken.swift */,
 				E5289A0225E404C6005DE9EC /* KeychainService.swift */,
 				E5289A0325E404C6005DE9EC /* TimeConversion.swift */,
@@ -215,7 +215,7 @@
 				E5289A0A25E404C6005DE9EC /* KeychainService.swift in Sources */,
 				E5289A0D25E404C6005DE9EC /* Shell.swift in Sources */,
 				E5289A1C25E404E6005DE9EC /* Preferences.swift in Sources */,
-				E5289A0825E404C6005DE9EC /* CharacterSetExlusion.swift in Sources */,
+				E5289A0825E404C6005DE9EC /* PasswordPolicy.swift in Sources */,
 				E5289A1725E404D8005DE9EC /* LocalPasswordTools.swift in Sources */,
 				E5289A1625E404D8005DE9EC /* ADPasswordTools.swift in Sources */,
 			);

@@ -79,7 +79,6 @@ public class ADTools: NSObject {
         }
     }
     class func password_change(computer_record: Array<ODRecord>) {
-        let security_enabled_user = Determine_secureToken()
         // Generate random password
         let password = PasswordGen(length: Constants.password_length)
         // Set out next expiration date in a variable x days from what we specified
@@ -87,116 +86,45 @@ public class ADTools: NSObject {
         // Format Expiration Date
         let print_exp_date = TimeConversion.epoch(exp_time: new_ad_exp_date!)
         let formatted_new_exp_date = Constants.dateFormatter.string(from: print_exp_date!)
-        // Attempt to load password from System Keychain
-        let (old_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
-        // Connect to local node in order to change the password locally
-        guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
-            laps_log.print("Unable to connect to local node.", .error)
+        // Change and verify the local password (shared with the Local method)
+        let local_admin_record = LocalTools.connect()
+        let previous_password = LocalTools.changeAndVerify(record: local_admin_record, to: password)
+
+        // Write our new password to the System Keychain
+        let save_status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
+        guard save_status == noErr else {
+            laps_log.print("New password could not be saved to the keychain (OSStatus \(save_status)). Reverting changes and exiting...", .error)
+            _ = LocalTools.revert(record: local_admin_record, from: password, to: previous_password)
             exit(1)
         }
-        guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
-            laps_log.print("Unable to retrieve local administrator record.", .error)
-            exit(1)
-        }
-        // Have we determineed that the local admin is a FileVault User or that the local admin user has a secureToken?
-        if security_enabled_user == true {
-            // If the attribute is nil then use our first password from config profile to change the password
-            if old_password == nil || Constants.use_firstpass == true {
-                do {
-                    laps_log.print("Performing first password change using FirstPass key from configuration profile or string command line argument specified.", .info)
-                    try local_admin_record.changePassword(Constants.first_password, toPassword: password)
-                } catch {
-                    laps_log.print("Unable to perform the first password change for secureToken administrator account \(Constants.local_admin).")
-                    exit(1)
-                }
-            }
-            else {
-                do {
-                    laps_log.print("Performing password change using stored keychain item.", .info)
-                    // Use the System Keychain password to change the old password to the new one and retain secureToken
-                    try local_admin_record.changePassword(old_password, toPassword: password)
-                } catch {
-                    laps_log.print("Unable to perform password change using keychain item. The keychain item might have the wrong password stored.", .error)
-                    exit(1)
-                }
-            }
-        }
-        else {
-            do {
-                // Do the standard reset as FileVault and secureToken are not present
-                try local_admin_record.changePassword(nil, toPassword: password)
-            } catch {
-                laps_log.print("Unable to reset password for \(Constants.local_admin). Please make sure we are able to write to the local record and perform the password change.", .error)
-                exit(1)
-            }
-        }
-        // Write our new password to System Keychain and Active Directory
-        var save_status : OSStatus
-        save_status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
-        // Error Catching for writing to keychain
-        if save_status == noErr {
-            laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
-        }
-        else {
-            do {
-                laps_log.print("New Password could not be saved to the keychain. Reverting Changes and exiting...", .error)
-                try local_admin_record.changePassword(password, toPassword: old_password)
-                exit(1)
-            } catch {
-                laps_log.print("Unable to revert back to the old password, Please reset the local administrator account to the FirstPass key and start again", .error)
-                exit(1)
-            }
-        }
-        save_status = ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!)
-        // Error catching should the Writing of the password fail. Revert the changes and exit
-        if save_status != 0 {
-            do {
-                try local_admin_record.changePassword(password, toPassword: old_password)
-                // Write our old password back to System Keychain
-                _ = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: old_password!)
+        laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
+
+        // Write to Active Directory. On failure, put the account and keychain back.
+        if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!) != 0 {
+            if LocalTools.revert(record: local_admin_record, from: password, to: previous_password), let previous = previous_password {
+                _ = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: previous)
                 laps_log.print("Since the Password or Expiration Time was unable to be written back to Active Directory, changes have been reverted and the application will now exit", .error)
-                exit(1)
-            } catch {
-                laps_log.print("Unable to revert the changes. In order to restore functionality it is recommended that sysadminctl be used to reset the password to either the keychain password or the FirstPass atrribute for \(Constants.local_admin).", .error)
-                exit(1)
+            } else {
+                laps_log.print("Active Directory could not be updated and the local change could not be reverted. The keychain holds the current password; run macOSLAPS -resetPassword once Active Directory is reachable.", .error)
             }
-        }
-        
-        laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
-        // Keychain Removal if enabled
-        if Constants.remove_keychain == true {
-            let local_admin_home = local_admin_record.value(forKeyPath: "dsAttrTypeStandard:NFSHomeDirectory") as! NSMutableArray
-            let local_admin_keychain_path = local_admin_home[0] as! String + "/Library/Keychains"
-            do {
-                if FileManager.default.fileExists(atPath: local_admin_keychain_path) {
-                    laps_log.print("Removing Keychain for local administrator account \(Constants.local_admin)...", .info)
-                    try FileManager.default.removeItem(atPath: local_admin_keychain_path)
-                }
-                else {
-                    laps_log.print("Keychain does not currently exist. This may be due to the fact that the user account has never been logged into and is only used for elevation...", .info)
-                }
-            } catch {
-                laps_log.print("Unable to remove \(Constants.local_admin)'s Keychain. If logging in as this user you may be presented with prompts for keychain", .warn)
-            }
-        }
-        else {
-            laps_log.print("Keychain has NOT been modified. Keep in mind that this may cause keychain prompts and the old password may not be accessible.", .warn)
             exit(1)
         }
-        // Throw an error if we for some reason cannot connect to the Local Directory to perform the password change
+
+        laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
+        LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
     }
     class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
         do {
             try computer_record[0].setValue(password, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
         } catch {
-            laps_log.print("There was an error setting the password for this device...", .error)
+            laps_log.print("There was an error setting the password for this device (\(describe(error)))", .error)
             return(1)
         }
         
         do {
             try computer_record[0].setValue(new_ad_exp_date, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
         } catch {
-            laps_log.print("There was an error setting the new password expiration for this device...", .warn)
+            laps_log.print("There was an error setting the new password expiration for this device (\(describe(error)))", .warn)
             return(2)
         }
         return(0)

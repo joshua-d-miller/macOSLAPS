@@ -47,8 +47,13 @@ done
 trap selfCleanup EXIT
 
 # Grab the managed admin account from macOSLAPS preferences
-if [ -e "/Library/Managed Preferences/edu.psu.macoslaps.plist" ]; then
+# (new io.github.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
+if [ -e "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" ]; then
+	preferenceFile="/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist"
+elif [ -e "/Library/Managed Preferences/edu.psu.macoslaps.plist" ]; then
 	preferenceFile="/Library/Managed Preferences/edu.psu.macoslaps.plist"
+elif [ -e "/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist" ]; then
+	preferenceFile="/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist"
 elif [ -e "/Library/Preferences/edu.psu.macoslaps.plist" ]; then
 	preferenceFile="/Library/Preferences/edu.psu.macoslaps.plist"
 else

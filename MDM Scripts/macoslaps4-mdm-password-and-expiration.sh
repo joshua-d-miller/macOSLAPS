@@ -74,17 +74,19 @@ else
 	# Get current macOSLAPS version to determine the password retrieval method
 	currentVersion=$(/usr/local/laps/macOSLAPS -version)
 	# Determine managed vs. local settings (prefer managed over local)
-	if [ -f "/Library/Managed Preferences/edu.psu.macoslaps.plist" ]; then
-		plistLocation="/Library/Managed Preferences"
-	elif [ -f "/Library/Preferences/edu.psu.macoslaps.plist" ]; then
-		plistLocation="/Library/Preferences"
-	else
+	# (new io.github.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
+	plistFile=""
+	for candidate in "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist" \
+	                 "/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist" "/Library/Preferences/edu.psu.macoslaps.plist"; do
+		if [ -f "$candidate" ]; then plistFile="$candidate"; break; fi
+	done
+	if [ -z "$plistFile" ]; then
 		echo "macOSLAPS installed but no preferences found."
 		exit 0
 	fi
 
 	# Check if macOSLAPS is in AD mode
-	if [[ $( /usr/libexec/PlistBuddy -c "Print :Method" "$plistLocation/edu.psu.macoslaps.plist" ) == "AD" ]]; then
+	if [[ $( /usr/libexec/PlistBuddy -c "Print :Method" "$plistFile" ) == "AD" ]]; then
 		echo "macOSLAPS running in AD mode."
 		exit 0
 	fi
@@ -116,7 +118,7 @@ else
 	# Following test no longer needed as macOSLAPS starting from version 3.x tests the password with -getPassword flag.
 	# Uncomment following section if you're still using macOSLAPS 1.x/2.x.
 
-	# localAdmin=$( /usr/libexec/PlistBuddy -c "Print :LocalAdminAccount" "$plistLocation/edu.psu.macoslaps.plist" )
+	# localAdmin=$( /usr/libexec/PlistBuddy -c "Print :LocalAdminAccount" "$plistFile" )
 
 	# if ! dscl . -authonly "$localAdmin" "$currentAdminPassword" >/dev/null 2>&1; then
 	# 	echo "Password testing failed!"

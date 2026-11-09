@@ -28,6 +28,15 @@ env:
   MIN_MACOS: "12.0"
 
 jobs:
+  generator-tests:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run password generator tests
+        run: |
+          swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
+          ./generator-tests
+
   build:
     runs-on: macos-26
     outputs:
@@ -174,7 +183,7 @@ jobs:
         run: sudo bash .github/scripts/smoke-test.sh
 
   release:
-    needs: [build, smoke-test]
+    needs: [generator-tests, build, smoke-test]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:

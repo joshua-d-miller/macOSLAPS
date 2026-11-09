@@ -22,30 +22,38 @@ class KeychainService {
         SecKeychainOpen("/Library/Keychains/System.keychain", &systemKeychain)
         SecKeychainUnlock(systemKeychain, 0, nil, false)
         
-        // The query used to save our newly created keychain entry
+        guard let keychain = systemKeychain, let passwordData = dataFromString else {
+            return errSecParam
+        }
+        let creation_date = Constants.dateFormatter.string(from: Date())
+        let comment_attribute : [ String : Any ] = [
+            kSecAttrComment as String : "Created: \(creation_date)"
+        ]
+        let match : [ String : Any ] = [
+            kSecClass as String       : kSecClassGenericPassword,
+            kSecAttrService as String : service,
+            kSecUseKeychain as String : keychain]
+
+        // Update the existing item in place so a failure never leaves us with no item at all.
+        var update = comment_attribute
+        update[kSecValueData as String] = passwordData
+        let update_status = SecItemUpdate(match as CFDictionary, update as CFDictionary)
+        if update_status != errSecItemNotFound {
+            return update_status
+        }
+
+        // No item yet: create it, then add the creation date comment.
         let query : [String : Any] = [
             kSecClass as String        : kSecClassGenericPassword as String,
             kSecAttrService as String  : service,
             kSecAttrAccount as String  : account,
-            kSecValueData as String    : dataFromString!,
-            kSecUseKeychain as String  : systemKeychain!]
-        
-        // Remove old keychain entry
-        SecItemDelete(query as CFDictionary)
-        // Create new keychain entry
-        SecItemAdd(query as CFDictionary, nil)
-        
-        // Add Creation Date as Comment
-        // This seemed to require another query and update as it failed with the original
-        let creation_date = Constants.dateFormatter.string(from: Date())
-        let newquery : [ String : Any ] = [
-            kSecClass as String       : kSecClassGenericPassword,
-            kSecAttrService as String : service,
-            kSecUseKeychain as String : systemKeychain!]
-        let comment_attribute : [ String : Any ] = [
-            kSecAttrComment as String : "Created: \(creation_date)"
-        ]
-        return SecItemUpdate(newquery as CFDictionary, comment_attribute as CFDictionary)
+            kSecValueData as String    : passwordData,
+            kSecUseKeychain as String  : keychain]
+        let add_status = SecItemAdd(query as CFDictionary, nil)
+        guard add_status == noErr else {
+            return add_status
+        }
+        return SecItemUpdate(match as CFDictionary, comment_attribute as CFDictionary)
     }
     
     class func loadPassword(service: String) -> (String?, String?) {
