@@ -107,6 +107,9 @@ func macOSLAPS() {
             }
         case "-resetpassword":
             Constants.pw_reset = true
+        case "-showconfig":
+            printEffectiveConfiguration()
+            exit(0)
             
         case "-help":
             print("""
@@ -126,6 +129,11 @@ func macOSLAPS() {
                                     Profile key or the password you specify after this flag.
                                     The password of the admin MUST be this password or the
                                     change WILL FAIL.
+                  
+                  -showconfig       Prints the settings macOSLAPS will use, which
+                                    preference domain they came from, and whether
+                                    each key is managed, set, or a default.
+                                    FirstPass is never printed.
                   
                   -help             Displays this screen
                   """)
@@ -195,7 +203,8 @@ func macOSLAPS() {
             exit(0)
         }
     default:
-        exit(0)
+        laps_log.print("Unknown Method \"\(Constants.method)\". Set Method to AD or Local in \(PreferenceStore.shared.domain).", .error)
+        exit(1)
     }
 }
 
