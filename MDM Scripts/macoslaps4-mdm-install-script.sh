@@ -340,7 +340,7 @@ readCurrentSettings () {
     fi
     runCount=1
     echoOut "readCurrentSettings: Checking edu.psu.macoslaps.plist (round # $runCount) from /Library/Preferences and /Library/Managed Preferences..."
-    until [ -f "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" ] || [ -f "/Library/Managed Preferences/edu.psu.macoslaps.plist" ] || [ -f "/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist" ] || [ -f "/Library/Preferences/edu.psu.macoslaps.plist" ]; do
+    until [ -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" ] || [ -f "/Library/Managed Preferences/edu.psu.macoslaps.plist" ] || [ -f "/Library/Preferences/com.joshua-d-miller.macoslaps.plist" ] || [ -f "/Library/Preferences/edu.psu.macoslaps.plist" ]; do
     sleep 5
     runCount=$((runCount+1))
     if [ $runCount -gt $runCountMax ]; then
@@ -350,10 +350,10 @@ readCurrentSettings () {
     done
 
     # Grab the managed admin account from macOSLAPS preferences
-    # (new io.github.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
-    if [ -f "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" ]; then
+    # (new com.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
+    if [ -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" ]; then
         echoOut "Reading macOSLAPS managed settings..."
-        preferenceFile="/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist"
+        preferenceFile="/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist"
         managedAdminAccount=$(defaults read "$preferenceFile" LocalAdminAccount)
     elif [ -f "/Library/Managed Preferences/edu.psu.macoslaps.plist" ]; then
         echoOut "Reading macOSLAPS managed settings..."
@@ -361,9 +361,9 @@ readCurrentSettings () {
         managedAdminAccount=$(defaults read "$preferenceFile" LocalAdminAccount)
     fi
     if [[ -z "$managedAdminAccount" ]] || [[ "$managedAdminAccount" = "" ]]; then
-        if [ -e "/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist" ]; then
+        if [ -e "/Library/Preferences/com.joshua-d-miller.macoslaps.plist" ]; then
             echoOut "Reading macOSLAPS local settings..."
-            preferenceFile="/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist"
+            preferenceFile="/Library/Preferences/com.joshua-d-miller.macoslaps.plist"
             managedAdminAccount=$(defaults read "$preferenceFile" LocalAdminAccount)
         elif [ -e "/Library/Preferences/edu.psu.macoslaps.plist" ]; then
             echoOut "Reading macOSLAPS local settings..."

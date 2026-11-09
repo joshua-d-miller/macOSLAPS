@@ -28,7 +28,7 @@
 import Foundation
 
 // New preference domain. Configuration profiles should use this as their PayloadType.
-let preferenceDomain = "io.github.joshua-d-miller.macoslaps"
+let preferenceDomain = "com.joshua-d-miller.macoslaps"
 // Original domain. Still read for compatibility; logs a deprecation warning when used.
 let legacyPreferenceDomain = "edu.psu.macoslaps"
 

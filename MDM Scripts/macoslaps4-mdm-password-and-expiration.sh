@@ -74,10 +74,10 @@ else
 	# Get current macOSLAPS version to determine the password retrieval method
 	currentVersion=$(/usr/local/laps/macOSLAPS -version)
 	# Determine managed vs. local settings (prefer managed over local)
-	# (new io.github.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
+	# (new com.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
 	plistFile=""
-	for candidate in "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist" \
-	                 "/Library/Preferences/io.github.joshua-d-miller.macoslaps.plist" "/Library/Preferences/edu.psu.macoslaps.plist"; do
+	for candidate in "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist" \
+	                 "/Library/Preferences/com.joshua-d-miller.macoslaps.plist" "/Library/Preferences/edu.psu.macoslaps.plist"; do
 		if [ -f "$candidate" ]; then plistFile="$candidate"; break; fi
 	done
 	if [ -z "$plistFile" ]; then

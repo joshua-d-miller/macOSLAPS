@@ -22,7 +22,7 @@ LAPS=/usr/local/laps/macOSLAPS
 PW_FILE="/var/root/Library/Application Support/macOSLAPS-password"
 ## Local Admin Account ##
 LOCAL_ADMIN=$(/usr/bin/defaults read \
-    "/Library/Managed Preferences/io.github.joshua-d-miller.macoslaps.plist" LocalAdminAccount 2>/dev/null || \
+    "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" LocalAdminAccount 2>/dev/null || \
     /usr/bin/defaults read \
     "/Library/Managed Preferences/edu.psu.macoslaps.plist" LocalAdminAccount)
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
