@@ -101,6 +101,10 @@ jobs:
           security import "$RUNNER_TEMP/app.p12"  -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
           security import "$RUNNER_TEMP/inst.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
           rm -f "$RUNNER_TEMP"/*.p12
+          # The .p12 files may hold only the leaf certificates (e.g. exported on Windows),
+          # so add Apple's Developer ID G2 intermediate to complete the chain.
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/DeveloperIDG2CA.cer"
+          security import "$RUNNER_TEMP/DeveloperIDG2CA.cer" -k "$KC" || true
           security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           APP_ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
