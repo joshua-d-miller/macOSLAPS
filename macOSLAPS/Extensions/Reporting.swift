@@ -140,6 +140,9 @@ enum Status {
         print("macOSLAPS \(report.version) status on macOS \(report.osVersion)\n")
         print("Settings: \(report.settingsDomain) (\(report.settingsSource))")
         print("Method: \(report.method)\(report.adSchema.map { " (ADSchema \($0))" } ?? "")\n")
+        if let schema = report.adSchema, schema != "legacy" {
+            warnLine("ADSchema \(schema) is experimental in 4.0: not yet tested from a Mac against a production domain. Please report results.")
+        }
         line(report.accountExists, "Local admin account \(report.account) exists",
              "Create the account, or set LocalAdminAccount to the right name.")
         if report.accountExists {

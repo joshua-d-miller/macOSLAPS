@@ -139,19 +139,15 @@ public class ADTools: NSObject {
         }
         laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
 
-        // Write to Active Directory. On failure, put the account and keychain back.
-        let write_status = ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!)
-        if write_status != 0 {
+        // Write to Active Directory. On failure, put the account, keychain and every LAPS
+        // attribute this ADSchema writes back, so AD never holds a password the Mac doesn't.
+        if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!) != 0 {
             if LocalTools.revert(record: local_admin_record, from: password, to: previous_password), let previous = previous_password {
                 _ = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: previous)
-                // Status 2 with ADSchema both: the legacy attributes already hold the new password
-                // but the Windows LAPS ones failed. Put the previous password back, already
-                // expired, so the directory matches the Mac and the next run retries.
-                if write_status == 2 && writesLegacy {
-                    _ = ADTools.set_password(computer_record: computer_record, password: previous, new_ad_exp_date: "126227988000000000")
-                }
+                ADTools.restore(computer_record: computer_record, previousPassword: previous)
                 laps_log.print("Since the Password or Expiration Time was unable to be written back to Active Directory, changes have been reverted and the application will now exit", .error)
             } else {
+                ADTools.restore(computer_record: computer_record, previousPassword: nil)
                 laps_log.print("Active Directory could not be updated and the local change could not be reverted. The keychain holds the current password; run macOSLAPS -resetPassword once Active Directory is reachable.", .error)
             }
             exit(1)
@@ -162,8 +158,14 @@ public class ADTools: NSObject {
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
         InventoryHook.run(reason: "password change")
     }
+    /// Writes the new password and expiration to every attribute the ADSchema uses.
+    /// Returns 0 on success, 1 if a legacy attribute failed, 2 if a Windows LAPS one failed.
+    /// A failure can leave some attributes written; callers then use restore(...).
     class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
         let record = computer_record[0]
+        if writesWindowsLAPS && schema != "legacy" {
+            ADTools.noteExperimentalSchemaOnce()
+        }
         if writesLegacy {
             do {
                 try record.setValue(password, forAttribute: legacyPassword)
@@ -183,5 +185,38 @@ public class ADTools: NSObject {
             }
         }
         return(0)
+    }
+
+    /// Best effort after a failed write: put every attribute this ADSchema uses back on
+    /// the previous password, already expired so the next run rotates again. When the
+    /// previous password is unknown, only the expiration is reset (to "expired").
+    class func restore(computer_record: Array<ODRecord>, previousPassword: String?) {
+        let record = computer_record[0]
+        let expired = "126227988000000000"   // 2001-01-01
+        var problems : [String] = []
+        func attempt(_ value: String, _ attribute: String) {
+            do { try record.setValue(value, forAttribute: attribute) }
+            catch { problems.append("\(attribute.replacingOccurrences(of: "dsAttrTypeNative:", with: "")): \(describe(error))") }
+        }
+        if writesLegacy {
+            if let previous = previousPassword { attempt(previous, legacyPassword) }
+            attempt(expired, legacyExpiration)
+        }
+        if writesWindowsLAPS {
+            if let previous = previousPassword { attempt(windowsLAPSValue(account: Constants.local_admin, password: previous), windowsPassword) }
+            attempt(expired, windowsExpiration)
+        }
+        if problems.isEmpty {
+            laps_log.print("Active Directory LAPS attributes restored\(previousPassword == nil ? " (marked expired; the previous password is unknown)" : " to the previous password, marked expired") so the next run retries.", .warn)
+        } else {
+            laps_log.print("Could not restore some Active Directory LAPS attributes (\(problems.joined(separator: "; "))). The directory may not match this Mac until the next successful rotation.", .error)
+        }
+    }
+
+    private static var experimentalNoted = false
+    static func noteExperimentalSchemaOnce() {
+        guard !experimentalNoted else { return }
+        experimentalNoted = true
+        laps_log.print("ADSchema \(schema) is new in 4.0 and experimental: it has not yet been tested from a Mac against a production domain. Please report how it works for you.", .warn)
     }
 }
