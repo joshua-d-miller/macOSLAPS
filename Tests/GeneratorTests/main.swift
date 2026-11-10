@@ -115,7 +115,8 @@ expectThrows(PasswordPolicy(length: 6, requirements: ["Uppercase": 3, "Number": 
 if let pw = generateOrFail(PasswordPolicy(length: 10, grouping: 4, separator: "-"), "uneven groups") {
     expect(pw.count == 12 && pw.split(separator: "-").map(\.count) == [4, 4, 2], "uneven grouping: \(pw)")
 }
-if let pw = generateOrFail(PasswordPolicy(length: 8, grouping: 8, separator: "-"), "group >= length") {
+// "-" is an ordinary character when no grouping happens, so exclude it to make the check meaningful.
+if let pw = generateOrFail(PasswordPolicy(length: 8, excludedCharacters: ["-"], grouping: 8, separator: "-"), "group >= length") {
     expect(pw.count == 8 && !pw.contains("-"), "grouping >= length should not add separators: \(pw)")
 }
 // The separator is never used as a password character when grouping.
