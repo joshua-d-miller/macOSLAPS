@@ -79,6 +79,14 @@ else
 fi
 echo "::endgroup::"
 
+echo "::group::Use a password with shell and JSON special characters for the script checks"
+# Random passwords only sometimes contain these, so set one that always does.
+TRICKY='Ab\c"d/e$f`g*h\b1'
+dscl . -passwd "/Users/$ACCT" "$NEW_PW" "$TRICKY" && "$LAPS" -firstPass "$TRICKY" -initialize >/dev/null 2>&1 \
+    && [ "$(get_pw)" = "$TRICKY" ] && pass "stored a password containing \\ \" / \$ \` * " || fail "could not set the special-character password"
+NEW_PW=$TRICKY
+echo "::endgroup::"
+
 redact() { python3 -c 'import sys; print(sys.argv[1].replace(sys.argv[2], "<password>"))' "$1" "$NEW_PW"; }
 echo "::group::Scripts admins already deploy keep working"
 OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-and-expiration.sh" 2>&1)

@@ -394,12 +394,12 @@ getCurrentLAPSPassword () {
         currentAdminPassword=$(security find-generic-password -w -s "$currentAdminPasswordUUID")
         security delete-generic-password -s "$currentAdminPasswordUUID" >/dev/null 2>&1
         rm "/var/root/.GeneratedLAPSServiceName" >/dev/null 2>&1
-        echo "$currentAdminPassword"
+        print -r -- "$currentAdminPassword"
     else
         # macOSLAPS 3.x or older, follow the file procedure
         currentAdminPassword=$(cat "/var/root/Library/Application Support/macOSLAPS-password")
         rm "/var/root/Library/Application Support/macOSLAPS-password" >/dev/null 2>&1
-        echo "$currentAdminPassword"
+        print -r -- "$currentAdminPassword"
     fi
 }
 

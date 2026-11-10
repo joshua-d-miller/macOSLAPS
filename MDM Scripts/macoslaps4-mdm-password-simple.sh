@@ -85,9 +85,9 @@ if [ $gotError = false ]; then
 	fi
 fi
 if [ $gotError = false ]; then
-	echo "$outMsg"
+	print -r -- "$outMsg"
 	exit 0
 else
-	echo "$outMsg"
+	print -r -- "$outMsg"
 	exit 1
 fi

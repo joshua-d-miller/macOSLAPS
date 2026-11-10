@@ -126,7 +126,7 @@ else
 	# 	exit 0
 	# fi
 
-	echo "Successfully retrieved following password: $currentAdminPassword (expires $currentAdminExpiration)"
+	print -r -- "Successfully retrieved following password: $currentAdminPassword (expires $currentAdminExpiration)"
 	exit 0
 fi
 
