@@ -57,7 +57,7 @@ RECEIPTS=$(pkgutil --pkgs | grep -i laps | sort | tr '\n' ' ')
 [ "$RECEIPTS" = "edu.psu.macOSLAPS edu.psu.macOSLAPS-check " ] && pass "same two receipts as before, no extras" || fail "receipts after upgrade: $RECEIPTS"
 [ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps present" || fail "/etc/paths.d/laps missing"
 NEW_VERSION=$("$LAPS" -version 2>/dev/null)
-re='^[0-9]+\.[0-9]+\.[0-9]+$'
+re='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 [[ "$NEW_VERSION" =~ $re ]] && pass "-version prints only the version with an export pending ($NEW_VERSION)" || fail "-version output: $(printf '%q' "$NEW_VERSION")"
 echo "::endgroup::"
 

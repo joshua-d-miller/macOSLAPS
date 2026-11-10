@@ -49,7 +49,7 @@ launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null || true
 version_is_clean() {
     local label="$1" out
     out=$("$LAPS" -version 2>/dev/null)
-    local re='^[0-9]+\.[0-9]+\.[0-9]+$'
+    local re='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
     [[ "$out" =~ $re ]] && pass "-version prints only the version ($label)" || fail "-version output is not just a version ($label): $(printf '%q' "$out")"
 }
 version_is_clean "no configuration"

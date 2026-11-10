@@ -42,6 +42,14 @@ struct Constants {
 }
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
 let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize"]
+/// Version with build number, e.g. 4.0.0.868, so testers can tell builds apart
+/// and version comparisons (sort -V, is-at-least) order builds correctly.
+func fullVersion() -> String {
+    let info = Bundle.main.infoDictionary
+    let short = info?["CFBundleShortVersionString"] as? String ?? "unknown"
+    guard let build = info?["CFBundleVersion"] as? String, !build.isEmpty else { return short }
+    return "\(short).\(build)"
+}
 func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
@@ -112,7 +120,7 @@ func macOSLAPS() {
     // -version and -help must print exactly their own output and touch nothing else:
     // MDM scripts parse `macOSLAPS -version`.
     if Constants.arguments.contains("-version") {
-        print(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")
+        print(fullVersion())
         exit(0)
     }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.

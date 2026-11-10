@@ -94,7 +94,7 @@ enum Status {
         let osv = ProcessInfo.processInfo.operatingSystemVersion
 
         return StatusReport(
-            version: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+            version: fullVersion(),
             method: Constants.method,
             adSchema: Constants.method == "AD" ? ADTools.schema : nil,
             account: account,
