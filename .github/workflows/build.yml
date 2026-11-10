@@ -290,11 +290,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      # Only the test scripts: "jamf Extension Attributes/Password:Expiration Combined.zsh"
-      # has a colon in its name, which Windows can't check out.
       - uses: actions/checkout@v5
-        with:
-          sparse-checkout: .github
       - uses: actions/download-artifact@v5
         with:
           name: cms-escrow-sample

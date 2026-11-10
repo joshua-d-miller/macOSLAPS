@@ -97,7 +97,7 @@ echo "$OUT" | grep -qF "$NEW_PW (expires 20" && pass "MDM password-simple script
 # The Jamf extension attributes read LocalAdminAccount from a managed profile.
 mkdir -p "/Library/Managed Preferences"
 cp "$DOMAIN.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist"
-OUT=$(zsh "$REPO/jamf Extension Attributes/Password:Expiration Combined.zsh" 2>&1)
+OUT=$(zsh "$REPO/jamf Extension Attributes/Password and Expiration Combined.zsh" 2>&1)
 echo "$OUT" | grep -qE "^<result>\| Password: .+ \| Expiration: 20[0-9-]+ [0-9:]+ \|</result>$" && echo "$OUT" | grep -qF "Password: $NEW_PW |" \
     && pass "Jamf combined extension attribute" || fail "Jamf combined EA output: $(redact "$OUT")"
 OUT=$(zsh "$REPO/jamf Extension Attributes/Password Only.zsh" 2>&1)
