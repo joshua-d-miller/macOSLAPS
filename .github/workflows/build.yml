@@ -74,8 +74,7 @@ jobs:
           echo "Building $short ($build)"
           echo "short=$short" >> "$GITHUB_OUTPUT"
           echo "build=$build" >> "$GITHUB_OUTPUT"
-          # The project's "Increment Build" phase adds 1, so seed it one lower.
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((build - 1))" macOSLAPS/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $build" macOSLAPS/Info.plist
 
       - name: Build universal binary
         run: |
