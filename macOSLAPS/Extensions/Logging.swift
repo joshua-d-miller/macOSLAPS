@@ -38,6 +38,7 @@ public class laps_log {
     public static var useStandardError = false
     
     public static func print<T>(_ object: T, _ level: logLevel = .debug, filename: String = #file, line: Int = #line, funcname: String = #function) {
+        if level == .error { RunState.lastError = "\(object)" }
         if level.rawValue >= laps_log.minimumLogLevel.rawValue {
             let process = ProcessInfo.processInfo
             let line = "\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)"

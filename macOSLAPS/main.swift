@@ -114,6 +114,8 @@ func initializeWithoutRotating() -> Never {
         }
     }
     let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
+    RunState.record("initialized")
+    RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
     laps_log.print("Initialized \(Constants.local_admin) with its current password. No rotation was performed; the first rotation is due \(expires).", .info)
     if !(GetPreference(preference_key: "FirstPass") as? String ?? "").isEmpty {
         laps_log.print("FirstPass is set in the configuration, which any user of this Mac can read, and it is still \(Constants.local_admin)'s password until the first rotation. Remove FirstPass from the profile, or rotate soon with macOSLAPS -resetPassword.", .warn)
@@ -168,7 +170,7 @@ func macOSLAPS() {
                         exit(1)
                     }
                     // Verify Password
-                    guard (try? local_admin_record.verifyPassword(current_password!)) != nil
+                    guard RunState.storedPasswordWorks(current_password!, created: keychain_item_check, record: local_admin_record)
                     else {
                         laps_log.print("Password verification failed. Please use sysadminctl to reset. Exiting...")
                         exit(1)
@@ -273,6 +275,7 @@ func macOSLAPS() {
     }
     verify_root()
     RunLock.acquire()
+    RunState.begin()
     if Constants.initialize {
         initializeWithoutRotating()
     }
@@ -302,6 +305,7 @@ func macOSLAPS() {
         else {
             let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
             laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(actual_exp_date)", .info)
+            RunState.record("not-due")
             exit(0)
         }
     case "Local":
@@ -325,6 +329,7 @@ func macOSLAPS() {
         }
         else {
             laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: exp_date!))", .info)
+            RunState.record("not-due")
             exit(0)
         }
     default:

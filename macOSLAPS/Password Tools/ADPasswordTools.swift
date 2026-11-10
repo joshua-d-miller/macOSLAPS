@@ -155,6 +155,8 @@ public class ADTools: NSObject {
 
         laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
         CriticalSection.end()
+        RunState.record("rotated")
+        RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
         InventoryHook.run(reason: "password change")
     }

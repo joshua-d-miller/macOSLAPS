@@ -173,6 +173,8 @@ class LocalTools: NSObject {
         }
         laps_log.print("Password change has been completed locally.", .info)
         CriticalSection.end()
+        RunState.record("rotated")
+        RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
         removeAdminKeychainIfEnabled(record: record)
         InventoryHook.run(reason: "password change")
     }

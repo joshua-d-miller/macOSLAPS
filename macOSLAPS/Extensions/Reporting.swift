@@ -11,6 +11,7 @@
 
 import Foundation
 import OpenDirectory
+import Security
 
 struct StatusReport: Codable {
     var v = 1
@@ -34,7 +35,12 @@ struct StatusReport: Codable {
     var expires: String?
     var escrow: String
     var escrowCertificates: [String]
+    var escrowCertificatesExpire: String?
     var inventoryHook: String
+    var lastRun: String?
+    var lastResult: String?
+    var lastMessage: String?
+    var lastSuccess: String?
     var settingsDomain: String
     var settingsSource: String
     var osVersion: String
@@ -78,7 +84,7 @@ enum Status {
         let (password, created) = KeychainService.loadPassword(service: "macOSLAPS")
         var verifies: Bool? = nil
         if let pw = password, let rec = record {
-            verifies = (try? rec.verifyPassword(pw)) != nil
+            verifies = RunState.storedPasswordWorks(pw, created: created, record: rec)
         }
         let configuredFirstPass = GetPreference(preference_key: "FirstPass") as? String ?? ""
         var isFirstPass: Bool? = nil
@@ -87,9 +93,9 @@ enum Status {
                 // The stored password is the live one, so a comparison answers it without
                 // another (possibly failing) authentication against the account.
                 isFirstPass = (password == configuredFirstPass)
-            } else if let rec = record {
-                isFirstPass = (try? rec.verifyPassword(configuredFirstPass)) != nil
             }
+            // Otherwise unknown: checking FirstPass against the account on every inventory
+            // could add failed logins toward a lockout policy.
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = password == nil ? nil : LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
@@ -117,7 +123,12 @@ enum Status {
             expires: expires,
             escrow: certConfig.unusable ? "error" : (certConfig.configured ? "cms" : "plaintext"),
             escrowCertificates: certs.map { String(Escrow.fingerprint($0).prefix(16)) },
+            escrowCertificatesExpire: earliestExpiry(certs).map { RunState.iso.string(from: $0) },
             inventoryHook: hook.isEmpty ? "none" : hook,
+            lastRun: RunState.lastRun().run,
+            lastResult: RunState.lastRun().result,
+            lastMessage: RunState.lastRun().message,
+            lastSuccess: RunState.lastRun().success,
             settingsDomain: prefs.domain,
             settingsSource: prefs.source.rawValue,
             osVersion: "\(osv.majorVersion).\(osv.minorVersion).\(osv.patchVersion)")
@@ -176,6 +187,17 @@ enum Status {
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
+        if let expires = report.escrowCertificatesExpire.flatMap(RunState.iso.date(from:)) {
+            let days = Int(expires.timeIntervalSinceNow / 86400)
+            if days < 0 { line(false, "An escrow certificate has expired", "Replace it in EscrowCertificates.") }
+            else if days < 30 { warnLine("An escrow certificate expires in \(days) day(s) (\(report.escrowCertificatesExpire!)).") }
+        }
+        if let result = report.lastResult {
+            line(result != "failed", "Last run \(report.lastRun ?? "?"): \(result)" + (report.lastMessage.map { " — \($0)" } ?? ""),
+                 "Check /Library/Logs/macOSLAPS.log. Last successful run: \(report.lastSuccess ?? "never").")
+        } else {
+            print("ℹ️  No rotation run recorded yet on this build.")
+        }
         exit(0)
     }
 }
@@ -233,4 +255,114 @@ enum InventoryHook {
             laps_log.print("InventoryHook \(mode) (after \(reason)) exited with status \(process.terminationStatus).", .warn)
         }
     }
+}
+
+/// Non-secret state kept between runs in /var/db/macoslaps/state.plist (root only):
+/// the last rotation run's time, result and error, and a cached result of checking the
+/// stored password against the account. No password is ever written here.
+enum RunState {
+    static let directory = "/var/db/macoslaps"
+    static let path = directory + "/state.plist"
+    /// Re-check a stored password against the account at most this often.
+    static let verifyInterval : TimeInterval = 24 * 60 * 60
+
+    static let iso : ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        f.timeZone = TimeZone.current
+        return f
+    }()
+
+    private static func load() -> [String: Any] {
+        guard let data = FileManager.default.contents(atPath: path),
+              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return [:] }
+        return dict
+    }
+    private static func save(_ dict: [String: Any]) {
+        let fm = FileManager.default
+        try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) else { return }
+        fm.createFile(atPath: path, contents: data, attributes: [.posixPermissions: 0o600])
+    }
+    private static func update(_ change: (inout [String: Any]) -> Void) {
+        guard getuid() == 0 else { return }
+        var dict = load()
+        change(&dict)
+        save(dict)
+    }
+
+    // MARK: Last run
+
+    /// Set once a rotation run starts; errors logged after that are remembered.
+    static var tracking = false
+    static var lastError : String?
+    private static var recorded = false
+
+    static func begin() {
+        tracking = true
+        atexit {
+            // Exits without an explicit result (error paths call exit(1)) are failures.
+            if RunState.tracking && !RunState.recordedResult {
+                RunState.record("failed", message: RunState.lastError ?? "exited without completing")
+            }
+        }
+    }
+    static var recordedResult : Bool { recorded }
+
+    /// result: rotated, not-due, initialized, failed.
+    static func record(_ result: String, message: String? = nil) {
+        recorded = true
+        update { d in
+            d["lastRun"] = iso.string(from: Date())
+            d["lastResult"] = result
+            if let message = message { d["lastMessage"] = message } else { d.removeValue(forKey: "lastMessage") }
+            if result != "failed" { d["lastSuccess"] = iso.string(from: Date()) }
+        }
+    }
+
+    static func lastRun() -> (run: String?, result: String?, message: String?, success: String?) {
+        let d = load()
+        return (d["lastRun"] as? String, d["lastResult"] as? String, d["lastMessage"] as? String, d["lastSuccess"] as? String)
+    }
+
+    // MARK: Cached password check
+
+    /// Whether `password` (the stored one, created at `created`) works for the account.
+    /// A failed check is remembered for verifyInterval per stored password, so inventory
+    /// scripts running -status/-escrow/-getPassword don't add a failed login every time
+    /// when the keychain and the account disagree.
+    static func storedPasswordWorks(_ password: String, created: String?, record: ODRecord, force: Bool = false) -> Bool {
+        let key = created ?? "unknown"
+        let d = load()
+        // Only a failure is reused: checking a password that works never counts toward a
+        // lockout, so a success is re-checked every time (and catches manual changes).
+        if !force, d["verifiedItem"] as? String == key,
+           let at = (d["verifiedAt"] as? String).flatMap(iso.date(from:)),
+           Date().timeIntervalSince(at) < verifyInterval,
+           d["verifiedResult"] as? Bool == false {
+            return false
+        }
+        let works = (try? record.verifyPassword(password)) != nil
+        noteVerified(works, created: created)
+        return works
+    }
+
+    /// Records a password check done elsewhere (e.g. right after a rotation).
+    static func noteVerified(_ works: Bool, created: String?) {
+        update { d in
+            d["verifiedItem"] = created ?? "unknown"
+            d["verifiedAt"] = iso.string(from: Date())
+            d["verifiedResult"] = works
+        }
+    }
+}
+
+/// Earliest expiry among certificates (nil if none or unreadable).
+func earliestExpiry(_ certs: [SecCertificate]) -> Date? {
+    certs.compactMap { cert -> Date? in
+        guard let values = SecCertificateCopyValues(cert, [kSecOIDX509V1ValidityNotAfter] as CFArray, nil) as? [String: Any],
+              let entry = values[kSecOIDX509V1ValidityNotAfter as String] as? [String: Any],
+              let number = entry[kSecPropertyKeyValue as String] as? NSNumber else { return nil }
+        return Date(timeIntervalSinceReferenceDate: number.doubleValue)
+    }.min()
 }

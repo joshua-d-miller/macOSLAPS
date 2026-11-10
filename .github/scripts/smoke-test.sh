@@ -221,6 +221,29 @@ killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = $LEN  \[/Library/Preferences, legacy domain\]" && pass "back to legacy-only settings" || fail "settings not restored to legacy only"
 echo "::endgroup::"
 
+echo "::group::-status records the last run; failed password checks are not repeated"
+"$LAPS" -resetPassword >/dev/null 2>&1
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["lastResult"]=="rotated" and "T" in d["lastRun"] and d["lastSuccess"], d' \
+    && pass "-status reports the last rotation" || fail "-status last run after rotation: $("$LAPS" -status)"
+"$LAPS" >/dev/null 2>&1
+"$LAPS" -status | grep -q '"lastResult":"not-due"' && pass "-status reports a not-due run" || fail "-status after a not-due run"
+# Keychain and account disagree: the first check fails, later ones reuse that result
+# instead of adding a failed login each time.
+GOOD=$(get_pw)
+dscl . -passwd "/Users/$ACCT" "$GOOD" 'Changed-Behind-Its-Back-1'
+"$LAPS" -status | grep -q '"passwordVerifies":false' && pass "-status detects keychain/account mismatch" || fail "-status missed the mismatch"
+BEFORE=$(stat -f %m /var/db/macoslaps/state.plist)
+sleep 1
+for i in 1 2 3; do "$LAPS" -status >/dev/null; "$LAPS" -escrow >/dev/null 2>&1; done
+AFTER=$(stat -f %m /var/db/macoslaps/state.plist)
+[ "$BEFORE" = "$AFTER" ] && pass "failed check reused (no new authentication attempts)" || fail "failed check was repeated"
+dscl . -passwd "/Users/$ACCT" 'Changed-Behind-Its-Back-1' "$GOOD"
+"$LAPS" -resetPassword >/dev/null 2>&1   # a rotation verifies and clears the cached failure
+"$LAPS" -status | grep -q '"passwordVerifies":true' && pass "a rotation clears the cached failure" || fail "-status after recovery: $("$LAPS" -status)"
+[ "$(stat -f '%Lp %Su' /var/db/macoslaps/state.plist)" = "600 root" ] && pass "state file is root-only" || fail "state file permissions: $(stat -f '%Lp %Su' /var/db/macoslaps/state.plist)"
+grep -qF -- "$(get_pw)" /var/db/macoslaps/state.plist && fail "state file contains the password" || pass "state file holds no password"
+echo "::endgroup::"
+
 echo "::group::-status"
 ST=$("$LAPS" -status)
 echo "$ST"
@@ -262,6 +285,9 @@ else
     python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$DEC" "$CUR" \
       && pass "CMS escrow decrypts with the admin key to the current password" || fail "CMS decrypt failed: $DEC"
     "$LAPS" -status | grep -q '"escrow":"cms"' && pass "-status reports CMS escrow" || fail "-status escrow mode"
+    "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["escrowCertificatesExpire"].startswith("20"), d' \
+      && pass "-status reports the escrow certificate expiry" || fail "-status escrowCertificatesExpire missing"
+    "$LAPS" -status -v | grep -q "escrow certificate expires in" && pass "-status -v warns about a certificate expiring soon" || fail "-status -v expiry warning missing"
     # macOS's own tool, as documented in integrations/README.md.
     "$OPENSSL" pkcs12 -export -legacy -out "$T/id.p12" -inkey "$T/k.pem" -in "$T/c.pem" -passout pass:ci 2>/dev/null
     security create-keychain -p ci "$T/cms.keychain" && security unlock-keychain -p ci "$T/cms.keychain"

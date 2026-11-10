@@ -185,7 +185,7 @@ enum Escrow {
             exit(0)
         }
         let record = LocalTools.connect()
-        let verified = (try? record.verifyPassword(current)) != nil
+        let verified = RunState.storedPasswordWorks(current, created: created, record: record)
         if !verified {
             laps_log.print("The stored password does not currently work for \(Constants.local_admin). Escrowing it anyway and reporting verified=false.", .warn)
         }
