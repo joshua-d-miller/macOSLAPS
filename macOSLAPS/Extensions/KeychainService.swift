@@ -83,23 +83,28 @@ class KeychainService {
     class func loadPassword(service: String) -> (String?, String?) {
         // Instantiate a new default keychain query
         // Tell the query to return a result
-        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
-        
+        guard let keychainRef = KeychainService.systemKeychain() else {
+            laps_log.print("Unable to open the System keychain.", .error)
+            exit(1)
+        }
         let query : [String : Any] = [
             kSecClass as String            : kSecClassGenericPassword,
             kSecAttrService as String      : service,
             kSecReturnData as String       : kCFBooleanTrue!,
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
-            kSecUseKeychain as String      : keychainRef!]
+            kSecUseKeychain as String      : keychainRef]
         
         var item: AnyObject? = nil
         let status: OSStatus = withoutUserInteraction { SecItemCopyMatching(query as CFDictionary, &item) }
         if status == noErr {
-            let existingItem = item as? [String: Any]
-            let passwordData = existingItem![String(kSecValueData)] as? Data
-            let password = String(data: passwordData!, encoding: String.Encoding.utf8)
-            guard let comment = existingItem?[String(kSecAttrComment)] as? String,
+            guard let existingItem = item as? [String: Any],
+                  let passwordData = existingItem[String(kSecValueData)] as? Data,
+                  let password = String(data: passwordData, encoding: String.Encoding.utf8) else {
+                laps_log.print("The \(service) keychain item exists but its password could not be read. Refusing to continue so the stored password is not lost.", .error)
+                exit(1)
+            }
+            guard let comment = existingItem[String(kSecAttrComment)] as? String,
                   comment.hasPrefix("Created: ") else {
                 laps_log.print("There is currently no expiration date comment", .warn)
                 return(password, nil)

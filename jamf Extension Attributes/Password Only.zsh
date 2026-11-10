@@ -10,7 +10,7 @@
 ------------------------------------------------------------
 | Created: Richard Purves - https://github.com/franton
 | Last Update By: Joshua D. Miller - josh.miller@outlook.com
-| Last Update Date: January 29, 2023
+| Last Update Date: November 10, 2026
 ------------------------------------------------------------
 '
 ### -------------------- ###
@@ -25,6 +25,28 @@ LOCAL_ADMIN=$(/usr/bin/defaults read \
     "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" LocalAdminAccount 2>/dev/null || \
     /usr/bin/defaults read \
     "/Library/Managed Preferences/edu.psu.macoslaps.plist" LocalAdminAccount)
+## Service name file written by macOSLAPS 4.x (-getPassword exports to the System keychain) ##
+SERVICE_FILE="/var/root/.GeneratedLAPSServiceName"
+## Read the password / expiration exported by -getPassword ##
+## macOSLAPS 4.x: temporary System keychain item. macOSLAPS 3.x: files. ##
+read_exported () {
+    if [ -f "$SERVICE_FILE" ]
+    then
+        local service=$(/bin/cat "$SERVICE_FILE")
+        if [ "$1" = "password" ]
+        then
+            /usr/bin/security find-generic-password -w -s "$service" /Library/Keychains/System.keychain 2>/dev/null
+        else
+            /usr/bin/security find-generic-password -s "$service" /Library/Keychains/System.keychain 2>/dev/null | \
+                /usr/bin/grep -Eo "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | /usr/bin/head -1
+        fi
+    elif [ "$1" = "password" ]
+    then
+        /bin/cat "/var/root/Library/Application Support/macOSLAPS-password" 2>/dev/null
+    else
+        /bin/cat "/var/root/Library/Application Support/macOSLAPS-expiration" 2>/dev/null
+    fi
+}
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ----------------------- ###
 ### | Verify Requirements | ###
@@ -56,7 +78,7 @@ if [[ "$VERIFIED" == "Yes" ]]
 then
     ## Ask macOSLAPS to write out the current password and echo it for the Jamf EA
     $LAPS -getPassword > /dev/null
-    CURRENT_PASSWORD=$(/bin/cat "$PW_FILE" 2&> /dev/null)
+    CURRENT_PASSWORD=$(read_exported password)
     ## Test $current_password to ensure there is a value
     if [ -z "$CURRENT_PASSWORD" ]
     then

@@ -11,6 +11,6 @@
 	<key>CFBundleVersion</key>
 	<string>845</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>10.13</string>
+	<string>12.0</string>
 </dict>
 </plist>

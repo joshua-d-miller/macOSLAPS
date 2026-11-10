@@ -122,15 +122,29 @@ final class PreferenceStore {
         source = chosen.1
         store = chosen.2
 
+        // Notices are collected, not printed here: this initializer can run during any
+        // command, and printing would corrupt machine-read output such as -version.
         if newManaged && legacyManaged {
-            laps_log.print("Configuration profiles exist for both \(preferenceDomain) and \(legacyPreferenceDomain). Using \(preferenceDomain); the legacy profile is ignored and can be removed.", .warn)
+            notices.append("Configuration profiles exist for both \(preferenceDomain) and \(legacyPreferenceDomain). Using \(preferenceDomain); the legacy profile is ignored and can be removed.")
         }
         if source == .managedLegacy || source == .unmanagedLegacy {
-            laps_log.print("Settings are being read from the legacy domain \(legacyPreferenceDomain). This still works, but please move your configuration to \(preferenceDomain) (same keys, new PayloadType). Legacy support will be removed in a future major release.", .warn)
+            notices.append("Settings are being read from the legacy domain \(legacyPreferenceDomain). This still works, but please move your configuration to \(preferenceDomain) (same keys, new PayloadType). Legacy support will be removed in a future major release.")
         }
         if source == .defaults {
-            laps_log.print("No macOSLAPS settings found in \(preferenceDomain) or \(legacyPreferenceDomain). Using built-in defaults.", .warn)
+            notices.append("No macOSLAPS settings found in \(preferenceDomain) or \(legacyPreferenceDomain). Using built-in defaults.")
         }
+    }
+
+    /// Configuration notices (legacy domain, duplicate profiles, no settings).
+    private(set) var notices : [String] = []
+    private var noticesEmitted = false
+
+    /// Logs the notices once. Called when a rotation happens and by -showConfig / -status -v,
+    /// so routine runs every 90 minutes don't repeat them.
+    func emitNotices() {
+        guard !noticesEmitted else { return }
+        noticesEmitted = true
+        for notice in notices { laps_log.print(notice, .warn) }
     }
 
     /// Raw value for a key from the chosen domain, falling back to a known misspelling.
@@ -246,6 +260,7 @@ func GetPreference(preference_key key: String) -> Any? {
 /// Prints the effective configuration for -showConfig. FirstPass is never printed.
 func printEffectiveConfiguration() {
     let prefs = PreferenceStore.shared
+    prefs.emitNotices()
     print("macOSLAPS effective configuration")
     print("  Domain: \(prefs.domain)")
     print("  Source: \(prefs.source.rawValue)")

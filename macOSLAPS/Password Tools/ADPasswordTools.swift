@@ -4,7 +4,7 @@
 ///
 ///  Created by Joshua D. Miller on 6/13/17.
 ///  
-///  Last Update on February 21, 2024
+///  Last Update on November 10, 2026
 
 import Foundation
 import OpenDirectory
@@ -79,11 +79,15 @@ public class ADTools: NSObject {
                 od_config.preferredDestinationHostName = Constants.preferred_domain_controller
             }
             let node = try ODNode.init(session: session, name: ad_path)
-            let query = try! ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict!["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
-            computer_record = try! query.resultsAllowingPartial(false) as! [ODRecord]
+            let query = try ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict!["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
+            computer_record = (try query.resultsAllowingPartial(false) as? [ODRecord]) ?? []
         }
         catch {
-            laps_log.print("Active Directory Node not available. Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
+            laps_log.print("Active Directory Node not available (\(describe(error))). Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
+            exit(1)
+        }
+        guard !computer_record.isEmpty else {
+            laps_log.print("This Mac's computer record (\(adDict?["TrustAccount"] ?? "unknown")) was not found in Active Directory.", .error)
             exit(1)
         }
         return(computer_record)
@@ -135,9 +139,16 @@ public class ADTools: NSObject {
         laps_log.print("Password change has been completed locally. Performing changes to Active Directory", .info)
 
         // Write to Active Directory. On failure, put the account and keychain back.
-        if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!) != 0 {
+        let write_status = ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!)
+        if write_status != 0 {
             if LocalTools.revert(record: local_admin_record, from: password, to: previous_password), let previous = previous_password {
                 _ = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: previous)
+                // Status 2 with ADSchema both: the legacy attributes already hold the new password
+                // but the Windows LAPS ones failed. Put the previous password back, already
+                // expired, so the directory matches the Mac and the next run retries.
+                if write_status == 2 && writesLegacy {
+                    _ = ADTools.set_password(computer_record: computer_record, password: previous, new_ad_exp_date: "126227988000000000")
+                }
                 laps_log.print("Since the Password or Expiration Time was unable to be written back to Active Directory, changes have been reverted and the application will now exit", .error)
             } else {
                 laps_log.print("Active Directory could not be updated and the local change could not be reverted. The keychain holds the current password; run macOSLAPS -resetPassword once Active Directory is reachable.", .error)

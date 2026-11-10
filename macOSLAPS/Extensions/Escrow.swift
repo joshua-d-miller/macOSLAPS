@@ -24,6 +24,7 @@ import Foundation
 import Security
 import CryptoKit
 import CommonCrypto
+import SystemConfiguration
 
 enum Escrow {
     struct Payload: Codable {
@@ -159,7 +160,7 @@ enum Escrow {
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
         let payload = Payload(v: 1, account: Constants.local_admin, password: current, set: createdDate,
-                              expires: expires, verified: verified, host: ProcessInfo.processInfo.hostName)
+                              expires: expires, verified: verified, host: computerName())
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         guard let json = try? encoder.encode(payload) else {
@@ -180,6 +181,11 @@ enum Escrow {
             exit(1)
         }
     }
+}
+
+/// The Mac's computer name. (ProcessInfo.hostName does a DNS lookup and can stall for seconds.)
+func computerName() -> String {
+    return (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? Host.current().localizedName ?? "unknown"
 }
 
 /// JSON-escaped string literal.

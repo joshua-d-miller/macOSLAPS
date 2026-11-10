@@ -11,7 +11,7 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh.miller@outlook.com
 ///  
-///  Last Updated February 27, 2024
+///  Last Updated November 10, 2026
 ///  -------------------------
 
 import Foundation
@@ -38,9 +38,10 @@ struct Constants {
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
     static var initialize : Bool = false
+    static var inside_hook : Bool = false
 }
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-stagemigration", "-showconfig", "-status", "-v", "-escrow", "-initialize"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize"]
 func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
@@ -51,40 +52,26 @@ func verify_root() {
         return
     }
 }
-/// Hands the stored password to the next macOSLAPS release, which is signed with a
-/// different code-signing identifier and therefore cannot read the "macOSLAPS" item
-/// directly. Works for both the AD and Local methods. The staged item trusts this
-/// binary and /usr/bin/security; its name is written to migrationStageFile. The new
-/// version reads it, verifies it, stores it under its own item and deletes the stage.
-let migrationStageFile = "/var/root/.macOSLAPS-migration"
-func stageMigration() -> Never {
-    let (stored_password, created) = KeychainService.loadPassword(service: "macOSLAPS")
-    guard let password = stored_password else {
-        laps_log.print("No stored macOSLAPS password to stage. The next version will start fresh using FirstPass or a standard reset.", .info)
-        exit(0)
+/// Only one macOSLAPS run may rotate at a time. The LaunchDaemon, an MDM script and an
+/// installer's kickstart can all start a run within the same second; without this, two
+/// rotations could interleave and leave the keychain and the account disagreeing.
+/// The lock is released when the process exits.
+enum RunLock {
+    private static var descriptor : Int32 = -1
+    static func acquire(wait: TimeInterval = 120) {
+        descriptor = open("/var/run/macOSLAPS.lock", O_CREAT | O_RDWR, 0o600)
+        guard descriptor >= 0 else { return }   // no lock file: behave as before
+        if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return }
+        laps_log.print("Another macOSLAPS run is in progress. Waiting for it to finish...", .info)
+        let deadline = Date().addingTimeInterval(wait)
+        while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+            if Date() > deadline {
+                laps_log.print("Another macOSLAPS run is still in progress after \(Int(wait)) seconds. Nothing was changed by this run.", .error)
+                exit(1)
+            }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
     }
-    let local_admin_record = LocalTools.connect()
-    guard (try? local_admin_record.verifyPassword(password)) != nil else {
-        laps_log.print("The stored password does not match \(Constants.local_admin). Not staging it. Reset the account with sysadminctl and use -firstPass after upgrading.", .error)
-        exit(1)
-    }
-    let created_date = (created == nil || created == "Not Found") ? Constants.dateFormatter.string(from: Date()) : created!
-    let stage_service = "macOSLAPS-migration-\(UUID().uuidString)"
-    let status = KeychainService.exportPassword(service: stage_service, account: "root \(stage_service)", data: password, expiration: created_date)
-    guard status == noErr else {
-        laps_log.print("Unable to create the migration keychain item (OSStatus \(status)).", .error)
-        exit(1)
-    }
-    do {
-        try stage_service.write(toFile: migrationStageFile, atomically: true, encoding: .utf8)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: migrationStageFile)
-    } catch {
-        _ = KeychainService.deleteExport(service: stage_service)
-        laps_log.print("Unable to write \(migrationStageFile): \(error.localizedDescription)", .error)
-        exit(1)
-    }
-    laps_log.print("Stored password verified and staged for the next macOSLAPS version.", .info)
-    exit(0)
 }
 /// -initialize (#88): adopt the current password without rotating it.
 func initializeWithoutRotating() -> Never {
@@ -112,26 +99,35 @@ func initializeWithoutRotating() -> Never {
     }
     let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
     laps_log.print("Initialized \(Constants.local_admin) with its current password. No rotation was performed; the first rotation is due \(expires).", .info)
+    if !(GetPreference(preference_key: "FirstPass") as? String ?? "").isEmpty {
+        laps_log.print("FirstPass is set in the configuration, which any user of this Mac can read, and it is still \(Constants.local_admin)'s password until the first rotation. Remove FirstPass from the profile, or rotate soon with macOSLAPS -resetPassword.", .warn)
+    }
     InventoryHook.run(reason: "initialize")
     exit(0)
 }
 func macOSLAPS() {
-    // Commands whose stdout is captured by an MDM must not have log lines mixed in.
-    if Constants.arguments.contains("-status") || Constants.arguments.contains("-escrow") {
+    // -version and -help must print exactly their own output and touch nothing else:
+    // MDM scripts parse `macOSLAPS -version`.
+    if Constants.arguments.contains("-version") {
+        print(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")
+        exit(0)
+    }
+    // Commands whose stdout is read by scripts or people must not have log lines mixed in.
+    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help"].contains($0) }).isEmpty {
         laps_log.useStandardError = true
     }
-    // Delete Keychain Entry
-    let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8)
-    if exp_keychain_id != nil && Constants.method == "Local" {
-        _ = KeychainService.deleteExport(service: exp_keychain_id!)
+    // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
+    // nested runs may read (-escrow, -getPassword, -status) but must not rotate or re-run the hook.
+    Constants.inside_hook = ProcessInfo.processInfo.environment[InventoryHook.environmentMarker] == "1"
+    // Delete the temporary -getPassword export from a previous run
+    if NSUserName() == "root",
+       let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8),
+       Constants.method == "Local" {
+        _ = KeychainService.deleteExport(service: exp_keychain_id.trimmingCharacters(in: .whitespacesAndNewlines))
     }
     // Iterate through supported Arguments
     for argument in Constants.arguments {
         switch argument {
-        case "-version":
-            let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as! String
-            print(appVersion)
-            exit(0)
         case "-getpassword":
             verify_root()
             if Constants.method == "Local" {
@@ -178,9 +174,6 @@ func macOSLAPS() {
             }
         case "-resetpassword":
             Constants.pw_reset = true
-        case "-stagemigration":
-            verify_root()
-            stageMigration()
         case "-showconfig":
             printEffectiveConfiguration()
             exit(0)
@@ -211,10 +204,6 @@ func macOSLAPS() {
                                     Profile key or the password you specify after this flag.
                                     The password of the admin MUST be this password or the
                                     change WILL FAIL.
-                  
-                  -stagemigration   Used by the next macOSLAPS installer. Verifies the
-                                    stored password and copies it to a temporary
-                                    keychain item so the new version can take it over.
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -259,8 +248,13 @@ func macOSLAPS() {
             continue
         }
     }
+    if Constants.inside_hook {
+        laps_log.print("Running inside the inventory hook: no rotation is performed in this run.", .info)
+        exit(0)
+    }
+    verify_root()
+    RunLock.acquire()
     if Constants.initialize {
-        verify_root()
         initializeWithoutRotating()
     }
     switch Constants.method {
@@ -282,6 +276,7 @@ func macOSLAPS() {
             // Check if the domain controller that we are connected to is writable
             ADTools.verify_dc_writability(computer_record: ad_computer_record)
             // Performs Password Change for local admin account
+            PreferenceStore.shared.emitNotices()
             laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
             ADTools.password_change(computer_record: ad_computer_record)
         }
@@ -303,6 +298,7 @@ func macOSLAPS() {
             exp_date = LocalTools.get_expiration_date()
         }
         if exp_date! < Date() {
+            PreferenceStore.shared.emitNotices()
             LocalTools.password_change()
             let new_exp_date = LocalTools.get_expiration_date()
             laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)

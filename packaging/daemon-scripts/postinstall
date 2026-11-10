@@ -1,0 +1,16 @@
+#!/bin/sh
+# macOSLAPS LaunchDaemon postinstall: load the LaunchDaemon and start a run right
+# after installation. (Original by Richard Purves, github.com/franton.)
+LAPS_DAEMON="/Library/LaunchDaemons/edu.psu.macoslaps-check.plist"
+
+# Only when installing to the running system.
+[ "$3" = "/" ] || [ -z "$3" ] || exit 0
+
+/bin/chmod 644 "$LAPS_DAEMON"
+/usr/sbin/chown root:wheel "$LAPS_DAEMON"
+/bin/launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null
+/bin/launchctl bootstrap system "$LAPS_DAEMON"
+# Start a run now so a new installation rotates without waiting for the interval.
+/bin/launchctl kickstart -k system/edu.psu.macoslaps-check
+[ -f /etc/paths.d/laps ] && /bin/chmod 644 /etc/paths.d/laps
+exit 0

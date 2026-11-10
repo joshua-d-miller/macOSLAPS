@@ -27,6 +27,9 @@ struct StatusReport: Codable {
     var bootstrapTokenEscrowed: Bool?
     var passwordStored: Bool
     var passwordVerifies: Bool?
+    /// True when the account's password is still the FirstPass from the configuration,
+    /// i.e. a known, shared password that local users can read from the profile.
+    var passwordIsFirstPass: Bool?
     var lastRotation: String?
     var expires: String?
     var escrow: String
@@ -73,6 +76,17 @@ enum Status {
         if let pw = password, let rec = record {
             verifies = (try? rec.verifyPassword(pw)) != nil
         }
+        let configuredFirstPass = GetPreference(preference_key: "FirstPass") as? String ?? ""
+        var isFirstPass: Bool? = nil
+        if !configuredFirstPass.isEmpty {
+            if verifies == true {
+                // The stored password is the live one, so a comparison answers it without
+                // another (possibly failing) authentication against the account.
+                isFirstPass = (password == configuredFirstPass)
+            } else if let rec = record {
+                isFirstPass = (try? rec.verifyPassword(configuredFirstPass)) != nil
+            }
+        }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = password == nil ? nil : LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
         let certs = Escrow.certificates()
@@ -93,6 +107,7 @@ enum Status {
             bootstrapTokenEscrowed: bootstrap,
             passwordStored: password != nil,
             passwordVerifies: verifies,
+            passwordIsFirstPass: isFirstPass,
             lastRotation: createdDate,
             expires: expires,
             escrow: certs.isEmpty ? "plaintext" : "cms",
@@ -116,6 +131,7 @@ enum Status {
             print("\(mark) \(text)" + ((ok == false && fix != nil) ? "\n     → \(fix!)" : ""))
         }
         func warnLine(_ text: String) { print("⚠️  \(text)") }
+        PreferenceStore.shared.emitNotices()
         print("macOSLAPS \(report.version) status on macOS \(report.osVersion)\n")
         print("Settings: \(report.settingsDomain) (\(report.settingsSource))")
         print("Method: \(report.method)\(report.adSchema.map { " (ADSchema \($0))" } ?? "")\n")
@@ -140,6 +156,10 @@ enum Status {
                  "The account and keychain disagree. Reset the account and run macOSLAPS -firstPass <password>.")
             print("ℹ️  Last rotation: \(report.lastRotation ?? "unknown")   Expires: \(report.expires ?? "unknown")")
         }
+        if report.passwordIsFirstPass == true {
+            line(false, "\(report.account)'s password has been rotated away from FirstPass",
+                 "The account still uses the FirstPass from the configuration, which local users can read. Run macOSLAPS -resetPassword and remove FirstPass from the profile.")
+        }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
         exit(0)
@@ -147,8 +167,13 @@ enum Status {
 }
 
 enum InventoryHook {
+    /// Set in the hook's environment so macOSLAPS runs started by it (for example an
+    /// extension attribute run by `jamf recon`) never rotate or start the hook again.
+    static let environmentMarker = "MACOSLAPS_INVENTORY_HOOK"
+
     /// Runs the configured hook (if any) and waits up to `timeout` seconds. Never fatal.
     static func run(reason: String, timeout: TimeInterval = 300) {
+        if Constants.inside_hook { return }
         let mode = (GetPreference(preference_key: "InventoryHook") as? String ?? "")
             .trimmingCharacters(in: .whitespaces).lowercased()
         var command: [String]
@@ -170,6 +195,9 @@ enum InventoryHook {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = Array(command.dropFirst())
+        var environment = ProcessInfo.processInfo.environment
+        environment[environmentMarker] = "1"
+        process.environment = environment
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         do {

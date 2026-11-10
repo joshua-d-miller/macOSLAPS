@@ -32,8 +32,28 @@ uname -m
 codesign -dv --verbose=2 "$LAPS" 2>&1 | grep -E "Identifier|Authority|Signature|flags" || true
 echo "::endgroup::"
 
+echo "::group::Installed layout matches earlier releases"
+launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && pass "LaunchDaemon loaded by the installer" || fail "LaunchDaemon not loaded after install"
+pkgutil --pkg-info edu.psu.macOSLAPS >/dev/null 2>&1 && pass "receipt edu.psu.macOSLAPS" || fail "receipt edu.psu.macOSLAPS missing"
+pkgutil --pkg-info edu.psu.macOSLAPS-check >/dev/null 2>&1 && pass "receipt edu.psu.macOSLAPS-check" || fail "receipt edu.psu.macOSLAPS-check missing"
+[ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps" || fail "/etc/paths.d/laps missing or wrong"
+[ "$(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)"
+[ "$(stat -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -f '%Su:%Sg %Lp' "$LAPS")"
+echo "::endgroup::"
+
 # Stop the daemon the pkg loaded so it can't race the test.
 launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null || true
+
+# `macOSLAPS -version` is parsed by MDM scripts: exactly one line, the version, nothing else,
+# in every state (as a user, as root, with a legacy-domain config and an export pending).
+version_is_clean() {
+    local label="$1" out
+    out=$("$LAPS" -version 2>/dev/null)
+    local re='^[0-9]+\.[0-9]+\.[0-9]+$'
+    [[ "$out" =~ $re ]] && pass "-version prints only the version ($label)" || fail "-version output is not just a version ($label): $(printf '%q' "$out")"
+}
+version_is_clean "no configuration"
+sudo -u nobody "$LAPS" -version >/dev/null 2>&1 && pass "-version works without root" || fail "-version fails without root"
 
 echo "::group::Create test admin and config"
 sysadminctl -addUser "$ACCT" -fullName "LAPS Test" -password "$FIRST" -admin 2>&1
@@ -75,6 +95,8 @@ check_pw "${PW1:-}" "rotation 1"
 dscl . -authonly "$ACCT" "$FIRST" >/dev/null 2>&1 && fail "FirstPass still works after rotation" || pass "FirstPass no longer works"
 echo "::endgroup::"
 
+version_is_clean "legacy domain, export pending"
+
 echo "::group::Export item is removed on next run"
 SVC=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
 "$LAPS"
@@ -97,21 +119,6 @@ for i in $(seq 1 "$ROUNDS"); do
     check_pw "$PW" "round $i" > /tmp/laps-round.log
     grep -v '^PASS' /tmp/laps-round.log || true
 done
-echo "::endgroup::"
-
-echo "::group::-stageMigration hands the current password to the next version"
-CURRENT=$(get_pw)
-"$LAPS" -stageMigration && pass "-stageMigration exited 0" || fail "-stageMigration failed"
-if [ -f /var/root/.macOSLAPS-migration ]; then
-    STAGE=$(tr -d '\n' < /var/root/.macOSLAPS-migration)
-    STAGED=$(security find-generic-password -w -s "$STAGE" "$SYSKC" 2>/dev/null)
-    [ "$STAGED" = "$CURRENT" ] && pass "staged password readable via /usr/bin/security and current" \
-        || fail "staged password missing or does not match current password"
-    security delete-generic-password -s "$STAGE" "$SYSKC" >/dev/null 2>&1
-    rm -f /var/root/.macOSLAPS-migration
-else
-    fail "-stageMigration did not write /var/root/.macOSLAPS-migration"
-fi
 echo "::endgroup::"
 
 echo "::group::Simulated secureToken: old password must be known"
@@ -150,6 +157,14 @@ python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["accountExists"
 grep -q "The stored password works" /tmp/laps-status.txt && pass "-status -v checklist" || fail "-status -v missing checks"
 echo "::endgroup::"
 
+echo "::group::Two runs at once do not interleave"
+"$LAPS" -resetPassword >/tmp/laps-a.log 2>&1 & A=$!
+"$LAPS" -resetPassword >/tmp/laps-b.log 2>&1 & B=$!
+wait $A; RA=$?; wait $B; RB=$?
+[ "$RA" -eq 0 ] && [ "$RB" -eq 0 ] && pass "both concurrent runs exited 0" || { fail "concurrent runs exited $RA / $RB"; cat /tmp/laps-a.log /tmp/laps-b.log; }
+PWL=$(get_pw) && dscl . -authonly "$ACCT" "$PWL" >/dev/null 2>&1 && pass "stored password authenticates after concurrent runs" || fail "keychain and account disagree after concurrent runs"
+echo "::endgroup::"
+
 echo "::group::-escrow (plaintext)"
 CUR=$(get_pw)
 ESC=$("$LAPS" -escrow)
@@ -174,6 +189,27 @@ else
     python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$DEC" "$CUR" \
       && pass "CMS escrow decrypts with the admin key to the current password" || fail "CMS decrypt failed: $DEC"
     "$LAPS" -status | grep -q '"escrow":"cms"' && pass "-status reports CMS escrow" || fail "-status escrow mode"
+    # macOS's own tool, as documented in integrations/README.md.
+    "$OPENSSL" pkcs12 -export -legacy -out "$T/id.p12" -inkey "$T/k.pem" -in "$T/c.pem" -passout pass:ci 2>/dev/null
+    security create-keychain -p ci "$T/cms.keychain" && security unlock-keychain -p ci "$T/cms.keychain"
+    security import "$T/id.p12" -k "$T/cms.keychain" -P ci -A >/dev/null 2>&1
+    sed '1d;$d' "$T/escrow.pem" | base64 -D > "$T/escrow.der"
+    SDEC=$(security cms -D -k "$T/cms.keychain" -i "$T/escrow.der" 2>&1)
+    if python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$SDEC" "$CUR" 2>/dev/null; then
+        pass "CMS escrow decrypts with /usr/bin/security cms"
+    else
+        fail "security cms -D did not decrypt the escrow: ${SDEC:0:200}"
+    fi
+    security delete-keychain "$T/cms.keychain" 2>/dev/null
+    # Hand the blob and a Windows-importable identity to the Windows job (Unprotect-CmsMessage).
+    if [ -n "${CMS_ARTIFACT_DIR:-}" ]; then
+        mkdir -p "$CMS_ARTIFACT_DIR"
+        cp "$T/escrow.pem" "$CMS_ARTIFACT_DIR/escrow.txt"
+        "$OPENSSL" pkcs12 -export -out "$CMS_ARTIFACT_DIR/identity.pfx" -inkey "$T/k.pem" -in "$T/c.pem" -passout pass:ci \
+            -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 2>/dev/null
+        printf '%s' "$CUR" > "$CMS_ARTIFACT_DIR/expected.txt"
+        chmod -R a+rX "$CMS_ARTIFACT_DIR"
+    fi
     defaults delete "$DOMAIN" EscrowCertificates
     rm -rf "$T"
 fi
@@ -188,6 +224,12 @@ if "$LAPS" -firstPass 'Not-The-Password' -initialize >/dev/null 2>&1; then fail 
 dscl . -authonly "$ACCT" "$INIT" >/dev/null 2>&1 && pass "account not rotated by -initialize" || fail "account was rotated"
 "$LAPS" >/dev/null 2>&1
 [ "$(get_pw)" = "$INIT" ] && pass "scheduled run does not rotate before expiry" || fail "scheduled run rotated early"
+# FirstPass in the configuration is readable by local users; -status must flag it while it is live.
+defaults write "$DOMAIN" FirstPass -string "$INIT"
+"$LAPS" -status | grep -q '"passwordIsFirstPass":true' && pass "-status flags a live FirstPass" || fail "-status does not flag a live FirstPass"
+"$LAPS" -resetPassword >/dev/null 2>&1
+"$LAPS" -status | grep -q '"passwordIsFirstPass":false' && pass "-status clears the flag after rotation" || fail "-status FirstPass flag after rotation"
+defaults write "$DOMAIN" FirstPass -string "$FIRST"
 echo "::endgroup::"
 
 echo "::group::InventoryHook custom"
@@ -195,6 +237,20 @@ rm -f /tmp/laps-hook-ran
 defaults write "$DOMAIN" InventoryHook -string custom
 defaults write "$DOMAIN" InventoryHookCommand -array /usr/bin/touch /tmp/laps-hook-ran
 "$LAPS" -resetPassword >/dev/null 2>&1 && [ -f /tmp/laps-hook-ran ] && pass "custom hook ran after rotation" || fail "custom hook did not run"
+# A hook that calls macOSLAPS -resetPassword again (as a recon-triggered script might) must not loop.
+cat > /tmp/laps-hook.sh <<HOOK
+#!/bin/sh
+echo run >> /tmp/laps-hook-count
+"$LAPS" -resetPassword >> /tmp/laps-hook-nested.log 2>&1
+"$LAPS" -escrow > /tmp/laps-hook-escrow.json 2>/dev/null
+HOOK
+chmod 755 /tmp/laps-hook.sh; rm -f /tmp/laps-hook-count /tmp/laps-hook-escrow.json
+defaults write "$DOMAIN" InventoryHookCommand -array /tmp/laps-hook.sh
+"$LAPS" -resetPassword >/dev/null 2>&1
+[ "$(wc -l < /tmp/laps-hook-count | tr -d ' ')" = "1" ] && pass "hook ran once; nested run did not rotate or re-run it" || fail "hook ran $(wc -l < /tmp/laps-hook-count) times"
+HP=$(get_pw)
+python3 -c 'import json,sys; d=json.load(open("/tmp/laps-hook-escrow.json")); assert d["password"]==sys.argv[1]' "$HP" \
+  && pass "-escrow inside the hook returns the new password" || fail "-escrow inside the hook"
 defaults delete "$DOMAIN" InventoryHook; defaults delete "$DOMAIN" InventoryHookCommand
 echo "::endgroup::"
 

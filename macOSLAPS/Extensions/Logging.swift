@@ -70,7 +70,7 @@ func writeToFile(content: String, fileName: String) {
         do {
             try contentToAppend.write(toFile: filePath, atomically: true, encoding: String.Encoding.utf8)
         } catch {
-            print("Error creating \(filePath)")
+            // Not root (e.g. -version or -showConfig run by a user): the log file is optional.
         }
     }
 }

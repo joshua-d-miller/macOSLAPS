@@ -1,7 +1,8 @@
 name: Build & Test
 
 # Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
-# smoke-tests the pkg on macOS 15 (arm64 + Intel) / 26, and publishes a prerelease on v* tags.
+# smoke-tests the pkgs on macOS 15 (arm64 + Intel) / 26, upgrades over the previous release,
+# opens the CMS escrow on Windows, and attaches everything to a published release.
 #
 # Signing is optional. With no secrets set, the build is ad-hoc signed and the pkg
 # is unsigned (fine for community testing via `sudo installer -pkg`). Add these
@@ -127,28 +128,22 @@ jobs:
           echo "INST_ID=$INST_ID" >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
 
-      - name: Build pkg
+      - name: Build pkgs
         id: package
         env:
           BIN: ${{ steps.binary.outputs.bin }}
           VERSION: ${{ steps.binary.outputs.version }}
           SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
-          root="$RUNNER_TEMP/pkgroot"
-          mkdir -p "$root/usr/local/laps" "$root/Library/LaunchDaemons" dist
-          cp "$BIN" "$root/usr/local/laps/macOSLAPS"
-          cp LaunchDaemon/edu.psu.macoslaps-check.plist "$root/Library/LaunchDaemons/"
-          chmod 755 "$root/usr/local/laps/macOSLAPS" packaging/scripts/postinstall
-          chmod 644 "$root/Library/LaunchDaemons/edu.psu.macoslaps-check.plist"
-          pkgbuild --root "$root" --identifier edu.psu.macoslaps --version "$VERSION" \
-            --scripts packaging/scripts --install-location / "$RUNNER_TEMP/component.pkg"
+          # Three packages with the same receipts and layout as earlier releases:
+          # full, binary only, LaunchDaemon only. See packaging/build-pkgs.sh.
           if [ "$SIGNED" = "true" ]; then
-            pkg="macOSLAPS-$VERSION.pkg"
-            productsign --timestamp --sign "$INST_ID" --keychain "$KC" "$RUNNER_TEMP/component.pkg" "dist/$pkg"
+            pkg=$(bash packaging/build-pkgs.sh "$BIN" "$VERSION" dist "$INST_ID" "$KC" | tail -1)
           else
-            pkg="macOSLAPS-$VERSION-UNSIGNED-TEST.pkg"
-            cp "$RUNNER_TEMP/component.pkg" "dist/$pkg"
+            pkg=$(bash packaging/build-pkgs.sh "$BIN" "$VERSION" dist | tail -1)
           fi
+          ls -l dist
+          for p in dist/*.pkg; do pkgutil --check-signature "$p" | head -3 || true; done
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
 
       - name: Check signing certificate expiry
@@ -165,7 +160,7 @@ jobs:
             fi
           done
 
-      - name: Notarize pkg
+      - name: Notarize pkgs
         if: steps.sign.outputs.signed == 'true'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
@@ -174,7 +169,6 @@ jobs:
           AC_APPLE_ID: ${{ secrets.AC_APPLE_ID }}
           AC_APP_PASSWORD: ${{ secrets.AC_APP_PASSWORD }}
           AC_TEAM_ID: ${{ secrets.AC_TEAM_ID }}
-          PKG: dist/${{ steps.package.outputs.pkg }}
         run: |
           # Preferred: App Store Connect API key. Fallback: Apple ID + app-specific password.
           if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ]; then
@@ -187,17 +181,21 @@ jobs:
             echo "::error::Signing secrets are set but no notarization credentials (ASC_* or AC_*)."
             exit 1
           fi
-          out=$(xcrun notarytool submit "$PKG" "${auth[@]}" --wait --output-format json)
-          echo "$out"
-          status=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
-          if [ "$status" != "Accepted" ]; then
-            id=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
-            [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
-            echo "::error::Notarization status: $status"
-            exit 1
-          fi
-          xcrun stapler staple "$PKG"
-          xcrun stapler validate "$PKG"
+          for PKG in dist/*.pkg; do
+            echo "::group::Notarize $PKG"
+            out=$(xcrun notarytool submit "$PKG" "${auth[@]}" --wait --output-format json)
+            echo "$out"
+            status=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
+            if [ "$status" != "Accepted" ]; then
+              id=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
+              [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
+              echo "::error::Notarization status for $PKG: $status"
+              exit 1
+            fi
+            xcrun stapler staple "$PKG"
+            xcrun stapler validate "$PKG"
+            echo "::endgroup::"
+          done
           rm -f "$RUNNER_TEMP/AuthKey.p8"
 
       - name: Checksums
@@ -231,10 +229,55 @@ jobs:
       - name: Install pkg
         run: sudo installer -pkg "artifact/dist/${{ needs.build.outputs.pkg }}" -target /
       - name: Run smoke test
-        run: sudo bash .github/scripts/smoke-test.sh
+        run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" bash .github/scripts/smoke-test.sh
+      - uses: actions/upload-artifact@v5
+        if: matrix.os == 'macos-26'
+        with:
+          name: cms-escrow-sample
+          path: ${{ runner.temp }}/cms
+          retention-days: 1
+
+  # Install the last published release, rotate with it, then install this build over it.
+  upgrade-test:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Download the previous release (4.0.0 Build 845)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/previous.pkg" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/4.0.0%28845%29/macOSLAPS-4.0.0.845.pkg"
+          pkgutil --check-signature "$RUNNER_TEMP/previous.pkg" | head -4
+      - name: Upgrade test
+        run: sudo bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
+
+  # The CMS escrow must open with the tool Windows admins already have.
+  windows-decrypt:
+    needs: smoke-test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: cms-escrow-sample
+          path: cms
+      - name: Unprotect-CmsMessage (PowerShell 7)
+        shell: pwsh
+        run: ./.github/scripts/windows-decrypt.ps1
+      - name: Unprotect-CmsMessage (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./.github/scripts/windows-decrypt.ps1
 
   release:
-    needs: [generator-tests, build, smoke-test]
+    needs: [generator-tests, build, smoke-test, upgrade-test, windows-decrypt]
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:

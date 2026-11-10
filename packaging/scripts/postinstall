@@ -1,7 +1,0 @@
-#!/bin/sh
-# macOSLAPS postinstall: (re)load the LaunchDaemon when installing to the boot volume.
-[ "$3" = "/" ] || exit 0
-PLIST=/Library/LaunchDaemons/edu.psu.macoslaps-check.plist
-/bin/launchctl bootout system "$PLIST" 2>/dev/null
-/bin/launchctl bootstrap system "$PLIST"
-exit 0
