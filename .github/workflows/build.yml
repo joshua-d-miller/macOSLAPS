@@ -57,7 +57,7 @@ jobs:
         run: |
           # Release tags carry the build number: 4.0.0(846). Other builds use 845 + run number.
           short=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" macOSLAPS/Info.plist)
-          if [[ "$GITHUB_REF_TYPE" == "tag" && "$GITHUB_REF_NAME" =~ ^([0-9.]+)\(([0-9]+)\)$ ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/* && "$GITHUB_REF_NAME" =~ ^([0-9.]+)\(([0-9]+)\)$ ]]; then
             [ "${BASH_REMATCH[1]}" = "$short" ] || { echo "::error::Tag version ${BASH_REMATCH[1]} != Info.plist $short"; exit 1; }
             build=${BASH_REMATCH[2]}
           else
