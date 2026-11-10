@@ -226,6 +226,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
@@ -236,10 +237,16 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           SIGNED: ${{ needs.build.outputs.signed }}
         run: |
-          note="Automated build $VERSION from ${GITHUB_SHA::7}."
+          notes=".github/release-notes/${GITHUB_REF_NAME}.md"
+          if [ -f "$notes" ]; then
+            cp "$notes" notes.md
+          else
+            echo "Automated build $VERSION from ${GITHUB_SHA::7}." > notes.md
+          fi
+          printf '\n---\nBuild %s from commit %s.\n' "$VERSION" "${GITHUB_SHA::7}" >> notes.md
           if [ "$SIGNED" != "true" ]; then
-            note="$note UNSIGNED TEST BUILD. Install with: sudo installer -pkg <file> -target /  (double-clicking will be blocked by Gatekeeper). Not for production deployment."
+            printf '\n**UNSIGNED TEST BUILD.** Install with `sudo installer -pkg <file> -target /`. Not for production.\n' >> notes.md
           fi
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease \
-            --title "macOSLAPS $VERSION" --notes "$note" \
+            --title "macOSLAPS ${GITHUB_REF_NAME#v} (build ${VERSION##*.})" --notes-file notes.md \
             artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt

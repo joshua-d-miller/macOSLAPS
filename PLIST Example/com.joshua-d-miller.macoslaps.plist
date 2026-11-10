@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  macOSLAPS 4.0 example settings. Deliver as a configuration profile with
+  PayloadType com.joshua-d-miller.macoslaps (edu.psu.macoslaps still works in 4.x).
+  Every key is optional; unset keys use the defaults shown.
+  Run "sudo /usr/local/laps/macOSLAPS -showConfig" to see what a Mac actually uses.
+-->
+<plist version="1.0">
+<dict>
+	<!-- Account and method -->
+	<key>LocalAdminAccount</key>
+	<string>admin</string>
+	<key>Method</key>
+	<string>Local</string>            <!-- Local or AD -->
+	<key>DaysTillExpiration</key>
+	<integer>60</integer>
+	<key>FirstPass</key>
+	<string></string>                 <!-- current password of a secureToken account, for the first rotation -->
+
+	<!-- Active Directory (Method AD) -->
+	<key>ADSchema</key>
+	<string>legacy</string>           <!-- legacy, windowsLAPS or both -->
+	<key>PreferredDC</key>
+	<string></string>
+
+	<!-- Password -->
+	<key>PasswordStyle</key>
+	<string>random</string>           <!-- random or readable (letters/digits, no look-alikes, grouped by 4) -->
+	<key>PasswordLength</key>
+	<integer>16</integer>             <!-- generated characters; separators are extra -->
+	<key>PasswordGrouping</key>
+	<integer>0</integer>
+	<key>PasswordSeparator</key>
+	<string>-</string>
+	<key>RemovePassChars</key>
+	<string>'"`</string>
+	<key>ExclusionSets</key>
+	<array/>                          <!-- symbols, letters, numbers -->
+	<key>PasswordRequirements</key>
+	<dict>
+		<key>Lowercase</key>
+		<integer>1</integer>
+		<key>Uppercase</key>
+		<integer>1</integer>
+		<key>Number</key>
+		<integer>1</integer>
+		<key>Symbol</key>
+		<integer>1</integer>
+	</dict>
+	<key>RemoveKeychain</key>
+	<true/>
+
+	<!-- Escrow (macOSLAPS -escrow). Add RSA certificates to encrypt for your admins. -->
+	<key>EscrowCertificates</key>
+	<array>
+		<!-- <string>-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----</string> -->
+	</array>
+
+	<!-- Refresh MDM inventory after a rotation -->
+	<key>InventoryHook</key>
+	<string></string>                 <!-- jamf or custom -->
+	<key>InventoryHookCommand</key>
+	<array/>                          <!-- e.g. /usr/local/bin/some-agent, refresh -->
+</dict>
+</plist>
