@@ -45,6 +45,10 @@ var defaultpreferences : [ String : Any ] = [
     "PreferredDC"            :       "",
     "FirstPass"              :       "",
     "Method"                 :       "AD",
+    "ADSchema"               :       "legacy",
+    "PasswordStyle"          :       "random",
+    "InventoryHook"          :       "",
+    "InventoryHookCommand"   :       [String](),
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,

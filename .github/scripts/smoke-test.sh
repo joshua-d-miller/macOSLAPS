@@ -141,6 +141,73 @@ dscl . -authonly "$ACCT" "$PWB" >/dev/null 2>&1 && fail "previous password still
 unset MACOSLAPS_TEST_ASSUME_SECURETOKEN
 echo "::endgroup::"
 
+echo "::group::-status"
+ST=$("$LAPS" -status)
+echo "$ST"
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["accountExists"] and d["accountIsAdmin"] and d["passwordStored"] and d["passwordVerifies"], d' "$ST" \
+  && pass "-status JSON reports a working stored password" || fail "-status JSON unexpected: $ST"
+"$LAPS" -status -v | tee /tmp/laps-status.txt
+grep -q "The stored password works" /tmp/laps-status.txt && pass "-status -v checklist" || fail "-status -v missing checks"
+echo "::endgroup::"
+
+echo "::group::-escrow (plaintext)"
+CUR=$(get_pw)
+ESC=$("$LAPS" -escrow)
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2] and d["verified"] and d["account"]==sys.argv[3], d' "$ESC" "$CUR" "$ACCT" \
+  && pass "-escrow plaintext JSON has the current, verified password" || fail "-escrow plaintext unexpected"
+echo "::endgroup::"
+
+echo "::group::-escrow (CMS)"
+OPENSSL=$(ls /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl 2>/dev/null | head -1)
+if [ -z "$OPENSSL" ]; then
+    echo "::notice::OpenSSL 3 not found on this runner; CMS round-trip skipped."
+else
+    T=$(mktemp -d)
+    "$OPENSSL" req -x509 -newkey rsa:2048 -nodes -keyout "$T/k.pem" -out "$T/c.pem" -days 2 -subj "/CN=macoslaps-ci" \
+        -addext "keyUsage=keyEncipherment,dataEncipherment" -addext "extendedKeyUsage=1.3.6.1.4.1.311.80.1" 2>/dev/null
+    defaults write "$DOMAIN" EscrowCertificates -array "$(cat "$T/c.pem")"
+    "$LAPS" -escrow > "$T/escrow.pem"
+    head -1 "$T/escrow.pem" | grep -q "BEGIN CMS" && pass "-escrow prints a CMS block" || fail "-escrow did not print CMS"
+    "$OPENSSL" cms -cmsout -print -inform PEM -in "$T/escrow.pem" | grep -A2 -i "contentEncryptionAlgorithm" | sed -n '1,3p'
+    DEC=$("$OPENSSL" cms -decrypt -inform PEM -in "$T/escrow.pem" -recip "$T/c.pem" -inkey "$T/k.pem" 2>&1)
+    python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$DEC" "$CUR" \
+      && pass "CMS escrow decrypts with the admin key to the current password" || fail "CMS decrypt failed: $DEC"
+    "$LAPS" -status | grep -q '"escrow":"cms"' && pass "-status reports CMS escrow" || fail "-status escrow mode"
+    defaults delete "$DOMAIN" EscrowCertificates
+    rm -rf "$T"
+fi
+echo "::endgroup::"
+
+echo "::group::-initialize (#88): adopt current password without rotating"
+INIT='Init-Pass-2468'
+dscl . -passwd "/Users/$ACCT" "$INIT"
+if "$LAPS" -firstPass 'Not-The-Password' -initialize >/dev/null 2>&1; then fail "-initialize accepted a wrong password"; else pass "-initialize rejects a wrong password"; fi
+"$LAPS" -firstPass "$INIT" -initialize && pass "-initialize succeeded" || fail "-initialize failed"
+[ "$(get_pw)" = "$INIT" ] && pass "stored password is the initialized one" || fail "stored password not the initialized one"
+dscl . -authonly "$ACCT" "$INIT" >/dev/null 2>&1 && pass "account not rotated by -initialize" || fail "account was rotated"
+"$LAPS" >/dev/null 2>&1
+[ "$(get_pw)" = "$INIT" ] && pass "scheduled run does not rotate before expiry" || fail "scheduled run rotated early"
+echo "::endgroup::"
+
+echo "::group::InventoryHook custom"
+rm -f /tmp/laps-hook-ran
+defaults write "$DOMAIN" InventoryHook -string custom
+defaults write "$DOMAIN" InventoryHookCommand -array /usr/bin/touch /tmp/laps-hook-ran
+"$LAPS" -resetPassword >/dev/null 2>&1 && [ -f /tmp/laps-hook-ran ] && pass "custom hook ran after rotation" || fail "custom hook did not run"
+defaults delete "$DOMAIN" InventoryHook; defaults delete "$DOMAIN" InventoryHookCommand
+echo "::endgroup::"
+
+echo "::group::PasswordStyle readable"
+defaults write "$DOMAIN" PasswordStyle -string readable
+"$LAPS" -resetPassword >/dev/null 2>&1 || fail "readable rotation failed"
+RP=$(get_pw)
+echo "sample: ${RP:0:4}-****"
+re='^[A-HJ-NP-Za-km-np-z2-9]{4}(-[A-HJ-NP-Za-km-np-z2-9]{4}){3}$'
+[[ "$RP" =~ $re ]] && pass "readable password is 4x4 groups without look-alikes or symbols" || fail "readable password format: length ${#RP}"
+dscl . -authonly "$ACCT" "$RP" >/dev/null 2>&1 && pass "readable password authenticates" || fail "readable password does not authenticate"
+defaults delete "$DOMAIN" PasswordStyle
+echo "::endgroup::"
+
 if [ "$HAS_TOKEN" -eq 1 ]; then
     echo "::group::secureToken: -firstPass on the command line (after -resetPassword)"
     KNOWN='Known-Pass-5678'

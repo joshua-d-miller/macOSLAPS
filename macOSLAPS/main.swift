@@ -37,9 +37,10 @@ struct Constants {
     // Constant values if triggering a password reset / specifying a First Password
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
+    static var initialize : Bool = false
 }
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-stagemigration", "-showconfig"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-stagemigration", "-showconfig", "-status", "-v", "-escrow", "-initialize"]
 func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
@@ -83,6 +84,35 @@ func stageMigration() -> Never {
         exit(1)
     }
     laps_log.print("Stored password verified and staged for the next macOSLAPS version.", .info)
+    exit(0)
+}
+/// -initialize (#88): adopt the current password without rotating it.
+func initializeWithoutRotating() -> Never {
+    guard !Constants.first_password.isEmpty else {
+        laps_log.print("-initialize needs the current password: use -firstPass <password> or set the FirstPass key.", .error)
+        exit(1)
+    }
+    let record = LocalTools.connect()
+    guard (try? record.verifyPassword(Constants.first_password)) != nil else {
+        laps_log.print("The FirstPass value is not the current password for \(Constants.local_admin). Nothing was stored.", .error)
+        exit(1)
+    }
+    let status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: Constants.first_password)
+    guard status == noErr else {
+        laps_log.print("Unable to store the password in the keychain (OSStatus \(status)).", .error)
+        exit(1)
+    }
+    if Constants.method == "AD" {
+        let computer = ADTools.connect()
+        let expiration = TimeConversion.windows()!
+        guard ADTools.set_password(computer_record: computer, password: Constants.first_password, new_ad_exp_date: expiration) == 0 else {
+            laps_log.print("Stored locally, but Active Directory could not be updated. The next run will rotate as usual.", .warn)
+            exit(1)
+        }
+    }
+    let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
+    laps_log.print("Initialized \(Constants.local_admin) with its current password. No rotation was performed; the first rotation is due \(expires).", .info)
+    InventoryHook.run(reason: "initialize")
     exit(0)
 }
 func macOSLAPS() {
@@ -150,6 +180,14 @@ func macOSLAPS() {
         case "-showconfig":
             printEffectiveConfiguration()
             exit(0)
+        case "-status":
+            verify_root()
+            Status.run(verbose: Constants.arguments.contains("-v"))
+        case "-escrow":
+            verify_root()
+            Escrow.run()
+        case "-initialize":
+            Constants.initialize = true
             
         case "-help":
             print("""
@@ -174,6 +212,19 @@ func macOSLAPS() {
                                     stored password and copies it to a temporary
                                     keychain item so the new version can take it over.
                   
+                  -status           One line of JSON describing the account, secureToken,
+                                    FileVault, stored password and escrow settings, for an
+                                    MDM inventory attribute. Add -v for a readable checklist.
+
+                  -escrow           Prints the current password for an MDM inventory
+                                    attribute: JSON, or a CMS (PKCS #7) block encrypted to
+                                    the EscrowCertificates when configured.
+
+                  -initialize       With -firstPass <password> (or the FirstPass key):
+                                    verify that password and store it WITHOUT rotating.
+                                    The first rotation then happens after
+                                    DaysTillExpiration (#88).
+
                   -showconfig       Prints the settings macOSLAPS will use, which
                                     preference domain they came from, and whether
                                     each key is managed, set, or a default.
@@ -203,6 +254,10 @@ func macOSLAPS() {
         default:
             continue
         }
+    }
+    if Constants.initialize {
+        verify_root()
+        initializeWithoutRotating()
     }
     switch Constants.method {
     case "AD":

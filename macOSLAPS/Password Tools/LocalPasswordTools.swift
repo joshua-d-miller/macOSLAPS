@@ -144,5 +144,6 @@ class LocalTools: NSObject {
         }
         laps_log.print("Password change has been completed locally.", .info)
         removeAdminKeychainIfEnabled(record: record)
+        InventoryHook.run(reason: "password change")
     }
 }

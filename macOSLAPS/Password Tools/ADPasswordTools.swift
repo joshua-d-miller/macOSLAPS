@@ -15,6 +15,42 @@ import SystemConfiguration
 
 public class ADTools: NSObject {
 
+    // ADSchema: which LAPS attributes to write.
+    //   legacy      ms-Mcs-AdmPwd + ms-Mcs-AdmPwdExpirationTime (default, same as 3.x)
+    //   windowsLAPS msLAPS-Password (JSON {"n","t","p"}) + msLAPS-PasswordExpirationTime
+    //   both        all four, for domains moving from legacy to Windows LAPS
+    // Windows LAPS *encrypted* passwords (msLAPS-EncryptedPassword) are not supported:
+    // they require the MS-GKDI group key protocol, which has no macOS implementation.
+    static let legacyPassword = "dsAttrTypeNative:ms-Mcs-AdmPwd"
+    static let legacyExpiration = "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime"
+    static let windowsPassword = "dsAttrTypeNative:msLAPS-Password"
+    static let windowsExpiration = "dsAttrTypeNative:msLAPS-PasswordExpirationTime"
+
+    static var schema: String {
+        let raw = (GetPreference(preference_key: "ADSchema") as? String ?? "legacy")
+            .trimmingCharacters(in: .whitespaces).lowercased()
+        switch raw {
+        case "windowslaps", "windows", "mslaps": return "windowsLAPS"
+        case "both": return "both"
+        case "legacy", "": return "legacy"
+        default:
+            laps_log.print("Unknown ADSchema \"\(raw)\". Using legacy. Valid values: legacy, windowsLAPS, both.", .warn)
+            return "legacy"
+        }
+    }
+    static var writesLegacy: Bool { schema != "windowsLAPS" }
+    static var writesWindowsLAPS: Bool { schema != "legacy" }
+    /// The expiration attribute used to decide when to rotate.
+    static var expirationAttribute: String { writesLegacy ? legacyExpiration : windowsExpiration }
+
+    /// The Windows LAPS JSON value: {"n": account, "t": update time as hex FILETIME, "p": password}.
+    static func windowsLAPSValue(account: String, password: String, updated: Date = Date()) -> String {
+        let filetime = UInt64((updated.timeIntervalSince1970 + 11644473600) * 10_000_000)
+        let object : [String: String] = ["n": account, "t": String(filetime, radix: 16), "p": password]
+        let data = try! JSONSerialization.data(withJSONObject: object, options: [.sortedKeys, .withoutEscapingSlashes])
+        return String(data: data, encoding: .utf8)!
+    }
+
     // Connect
     class func connect() -> Array<ODRecord> {
         // Use Open Directory to Connect to Active Directory
@@ -53,28 +89,27 @@ public class ADTools: NSObject {
         return(computer_record)
     }
     class func check_pw_expiration(computer_record: Array<ODRecord>) -> String? {
-        var expirationtime: Any
-            expirationtime = "126227988000000000" // Setting a default expiration date of 01/01/2001
+        var expirationtime: Any = "126227988000000000" // Default of 01/01/2001 forces a change
         do {
-            expirationtime = try computer_record[0].values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")[0]
+            expirationtime = try computer_record[0].values(forAttribute: expirationAttribute)[0]
         } catch {
-            laps_log.print("There has never been a random password generated for this device. Setting a default expiration date of 01/01/2001 in Active Directory to force a password change...", .warn)
+            laps_log.print("There has never been a random password generated for this device (no \(expirationAttribute)). Forcing a password change...", .warn)
         }
         return(expirationtime) as? String
     }
     class func verify_dc_writability(computer_record: Array<ODRecord>) {
-        // Test that we can write to the domain controller we are currently connected to
-        // before actually attemtping to write the new password
+        // Test that we can write to the domain controller we are connected to before
+        // changing the local password, by rewriting the current expiration time.
         do {
-            let expirationtime = try? computer_record[0].values(forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
-            if expirationtime == nil {
-                try computer_record[0].setValue("Th1sIsN0tth3P@ssword", forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
-            }
-            else {
-                try computer_record[0].setValue(expirationtime, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
+            for attribute in (writesLegacy ? [legacyExpiration] : []) + (writesWindowsLAPS ? [windowsExpiration] : []) {
+                if let current = try? computer_record[0].values(forAttribute: attribute), !current.isEmpty {
+                    try computer_record[0].setValue(current, forAttribute: attribute)
+                } else {
+                    try computer_record[0].setValue("126227988000000000", forAttribute: attribute)
+                }
             }
         } catch {
-            laps_log.print("Unable to test setting the current expiration time in Active Directory to the same value. Either the record is not writable or the domain controller is not writable.", .error)
+            laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) (\(describe(error))). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
             exit(1)
         }
     }
@@ -112,20 +147,27 @@ public class ADTools: NSObject {
 
         laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
+        InventoryHook.run(reason: "password change")
     }
     class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
-        do {
-            try computer_record[0].setValue(password, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwd")
-        } catch {
-            laps_log.print("There was an error setting the password for this device (\(describe(error)))", .error)
-            return(1)
+        let record = computer_record[0]
+        if writesLegacy {
+            do {
+                try record.setValue(password, forAttribute: legacyPassword)
+                try record.setValue(new_ad_exp_date, forAttribute: legacyExpiration)
+            } catch {
+                laps_log.print("There was an error writing the legacy LAPS attributes (\(describe(error)))", .error)
+                return(1)
+            }
         }
-        
-        do {
-            try computer_record[0].setValue(new_ad_exp_date, forAttribute: "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime")
-        } catch {
-            laps_log.print("There was an error setting the new password expiration for this device (\(describe(error)))", .warn)
-            return(2)
+        if writesWindowsLAPS {
+            do {
+                try record.setValue(windowsLAPSValue(account: Constants.local_admin, password: password), forAttribute: windowsPassword)
+                try record.setValue(new_ad_exp_date, forAttribute: windowsExpiration)
+            } catch {
+                laps_log.print("There was an error writing the Windows LAPS attributes (\(describe(error)))", .error)
+                return(2)
+            }
         }
         return(0)
     }

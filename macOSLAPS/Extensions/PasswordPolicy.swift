@@ -43,6 +43,11 @@ struct PasswordPolicy {
     var requirements: [String : Int] = [:]
     var grouping: Int = 0
     var separator: String = "-"
+    /// "random" (printable ASCII) or "readable" (letters and digits without look-alikes).
+    var style: String = "random"
+
+    /// Characters that are easy to confuse when read aloud or typed: 0 O o 1 l I.
+    static let lookAlikes : Set<Character> = ["0", "O", "o", "1", "l", "I"]
 
     static let knownExclusionSets: Set<String> = ["symbols", "letters", "numbers"]
 
@@ -66,6 +71,10 @@ struct PasswordPolicy {
         }
         var excluded = excludedCharacters
         if usesGrouping { excluded.formUnion(separator) }
+        if style.lowercased() == "readable" {
+            excludedClasses.insert(.Symbol)
+            excluded.formUnion(PasswordPolicy.lookAlikes)
+        }
         return (33...126).map { Character(UnicodeScalar(UInt8($0))) }.filter { c in
             !excluded.contains(c) && !excludedClasses.contains { $0.contains(c) }
         }

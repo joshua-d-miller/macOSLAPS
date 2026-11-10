@@ -90,6 +90,17 @@ for _ in 0..<2000 {
     expect(pw.unicodeScalars.allSatisfy { (33...126).contains($0.value) }, "non-printable or non-ASCII in \(pw.debugDescription)")
 }
 
+// MARK: Readable style
+let readable = PasswordPolicy(length: 16, grouping: 4, separator: "-", style: "readable")
+for _ in 0..<2000 {
+    guard let pw = generateOrFail(readable, "readable") else { break }
+    let body = pw.replacingOccurrences(of: "-", with: "")
+    expect(body.count == 16 && body.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber) }, "readable: \(pw)")
+    expect(!body.contains(where: { PasswordPolicy.lookAlikes.contains($0) }), "readable has a look-alike: \(pw)")
+}
+expectThrows(PasswordPolicy(length: 12, requirements: ["Symbol": 1], style: "readable"),
+             .requirementUnsatisfiable("Symbol"), "readable with a symbol requirement")
+
 // MARK: Impossible policies throw
 
 expectThrows(PasswordPolicy(length: 0), .invalidLength(0), "zero length")
