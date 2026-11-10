@@ -192,9 +192,14 @@ else
     # macOS's own tool, as documented in integrations/README.md.
     "$OPENSSL" pkcs12 -export -legacy -out "$T/id.p12" -inkey "$T/k.pem" -in "$T/c.pem" -passout pass:ci 2>/dev/null
     security create-keychain -p ci "$T/cms.keychain" && security unlock-keychain -p ci "$T/cms.keychain"
-    security import "$T/id.p12" -k "$T/cms.keychain" -P ci -A >/dev/null 2>&1
+    security import "$T/id.p12" -k "$T/cms.keychain" -P ci -A -f pkcs12 || fail "could not import the test identity"
+    security find-identity -v "$T/cms.keychain" | head -3
+    # security cms looks up the recipient identity in the keychain search list.
+    OLD_LIST=$(security list-keychains -d user | tr -d '"')
+    security list-keychains -d user -s "$T/cms.keychain" $OLD_LIST
     sed '1d;$d' "$T/escrow.pem" | base64 -D > "$T/escrow.der"
     SDEC=$(security cms -D -k "$T/cms.keychain" -i "$T/escrow.der" 2>&1)
+    security list-keychains -d user -s $OLD_LIST
     if python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$SDEC" "$CUR" 2>/dev/null; then
         pass "CMS escrow decrypts with /usr/bin/security cms"
     else

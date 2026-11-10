@@ -91,7 +91,7 @@ then
         /bin/echo "<result>| Password: $CURRENT_PASSWORD | Expiration: $EXPIRATION_DATE |</result>"
         ## Run macOSLAPS a second time to remove the password file
         ## and expiration date file from the system
-        $LAPS
+        $LAPS > /dev/null 2>&1
     fi
 ## Otherwise ##
 else

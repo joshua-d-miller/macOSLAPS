@@ -89,7 +89,7 @@ then
         /bin/echo "<result>| Expiration: $CURRENT_EXPIRATION |</result>"
         ## Run macOSLAPS a second time to remove the Expiration file
         ## and expiration date file from the system
-        $LAPS
+        $LAPS > /dev/null 2>&1
     fi
 ## Otherwise ##
 else
