@@ -66,18 +66,32 @@ class KeychainService {
             return update_status
         }
 
-        // No item yet: create it, then add the creation date comment.
-        let query : [String : Any] = [
+        // No item yet: create it with the creation date comment in one call, so a
+        // failure can never leave a password stored without its date.
+        var query : [String : Any] = [
             kSecClass as String        : kSecClassGenericPassword as String,
             kSecAttrService as String  : service,
             kSecAttrAccount as String  : account,
             kSecValueData as String    : passwordData,
             kSecUseKeychain as String  : keychain]
+        query.merge(comment_attribute) { _, new in new }
         let add_status = SecItemAdd(query as CFDictionary, nil)
-        guard add_status == noErr else {
+        if add_status == noErr || add_status == errSecDuplicateItem {
             return add_status
         }
-        return SecItemUpdate(match as CFDictionary, comment_attribute as CFDictionary)
+
+        // Fallback for keychains that reject the comment on add (older code needed this):
+        // add, then set the comment, and remove the item again if that second step fails.
+        query.removeValue(forKey: kSecAttrComment as String)
+        let plain_status = SecItemAdd(query as CFDictionary, nil)
+        guard plain_status == noErr else {
+            return plain_status
+        }
+        let comment_status = SecItemUpdate(match as CFDictionary, comment_attribute as CFDictionary)
+        if comment_status != noErr {
+            SecItemDelete(match as CFDictionary)
+        }
+        return comment_status
     }
     
     class func loadPassword(service: String) -> (String?, String?) {

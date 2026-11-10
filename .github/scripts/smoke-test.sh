@@ -189,6 +189,8 @@ if "$LAPS" -resetPassword >/dev/null 2>&1; then
 else
     fail "no token + out-of-date keychain did not recover"
 fi
+security find-generic-password -s macOSLAPS "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
+    && pass "a newly created keychain item has its creation date" || fail "new keychain item is missing its Created: comment"
 [ -n "$SAVED_FIRSTPASS" ] && defaults write "$DOMAIN" FirstPass -string "$SAVED_FIRSTPASS"
 "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["secureToken"] is False, d' \
     && pass "-status reports secureToken false on the runner" || fail "-status secureToken value"
