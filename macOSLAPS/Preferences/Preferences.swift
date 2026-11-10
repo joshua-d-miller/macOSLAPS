@@ -49,6 +49,7 @@ var defaultpreferences : [ String : Any ] = [
     "PasswordStyle"          :       "random",
     "InventoryHook"          :       "",
     "InventoryHookCommand"   :       [String](),
+    "EscrowCertificates"     :       [Any](),
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,
@@ -269,6 +270,12 @@ func printEffectiveConfiguration() {
         var shown = value.map { "\($0)" } ?? "nil"
         if secretPreferenceKeys.contains(key) {
             shown = ((value as? String) ?? "").isEmpty ? "(not set)" : "(set, redacted)"
+        }
+        if key == "EscrowCertificates" {
+            let config = Escrow.certificateConfig()
+            shown = config.configured
+                ? "\(config.certificates.count) usable certificate(s)" + (config.problems.isEmpty ? "" : "; " + config.problems.joined(separator: "; "))
+                : "(not set: plaintext escrow)"
         }
         print("  \(key) = \(shown)  [\(prefs.origin(ofKey: key))]")
     }

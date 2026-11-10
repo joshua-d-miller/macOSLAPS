@@ -89,7 +89,8 @@ enum Status {
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = password == nil ? nil : LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
-        let certs = Escrow.certificates()
+        let certConfig = Escrow.certificateConfig()
+        let certs = certConfig.certificates
         let hook = (GetPreference(preference_key: "InventoryHook") as? String ?? "").lowercased()
         let osv = ProcessInfo.processInfo.operatingSystemVersion
 
@@ -110,7 +111,7 @@ enum Status {
             passwordIsFirstPass: isFirstPass,
             lastRotation: createdDate,
             expires: expires,
-            escrow: certs.isEmpty ? "plaintext" : "cms",
+            escrow: certConfig.unusable ? "error" : (certConfig.configured ? "cms" : "plaintext"),
             escrowCertificates: certs.map { String(Escrow.fingerprint($0).prefix(16)) },
             inventoryHook: hook.isEmpty ? "none" : hook,
             settingsDomain: prefs.domain,
@@ -159,6 +160,10 @@ enum Status {
         if report.passwordIsFirstPass == true {
             line(false, "\(report.account)'s password has been rotated away from FirstPass",
                  "The account still uses the FirstPass from the configuration, which local users can read. Run macOSLAPS -resetPassword and remove FirstPass from the profile.")
+        }
+        if report.escrow == "error" {
+            line(false, "Escrow encryption is configured but unusable",
+                 "Fix EscrowCertificates (RSA certificates, PEM or base64 DER). -escrow will not print the password until it is fixed.")
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")

@@ -216,6 +216,31 @@ else
         chmod -R a+rX "$CMS_ARTIFACT_DIR"
     fi
     defaults delete "$DOMAIN" EscrowCertificates
+
+    # Fail closed: encryption configured but unusable must never print the password.
+    escrow_withheld() {   # escrow_withheld <label>
+        local out rc
+        out=$("$LAPS" -escrow 2>/dev/null); rc=$?
+        if [ "$rc" -ne 0 ] && ! printf '%s' "$out" | grep -qF -- "$CUR" \
+           && python3 -c 'import json,sys; assert json.loads(sys.argv[1])["status"]=="error"' "$out" 2>/dev/null; then
+            pass "-escrow withholds the password: $1"
+        else
+            fail "-escrow with $1 (exit $rc) did not fail closed"
+        fi
+    }
+    defaults write "$DOMAIN" EscrowCertificates -array "not a certificate"
+    escrow_withheld "an invalid certificate"
+    "$LAPS" -status | grep -q '"escrow":"error"' && pass "-status reports escrow error" || fail "-status escrow error"
+    "$OPENSSL" req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout "$T/ec.key" -out "$T/ec.pem" -days 2 -subj "/CN=ec" 2>/dev/null
+    defaults write "$DOMAIN" EscrowCertificates -array "$(cat "$T/ec.pem")"
+    escrow_withheld "only a non-RSA certificate"
+    # A valid certificate next to a bad one: encrypt to the valid one.
+    defaults write "$DOMAIN" EscrowCertificates -array "not a certificate" "$(cat "$T/c.pem")"
+    "$LAPS" -escrow 2>/dev/null | head -1 | grep -q "BEGIN CMS" && pass "-escrow encrypts to the usable certificate and skips the bad one" || fail "-escrow with one bad and one good certificate"
+    # An empty array (as in the example profile) means plaintext escrow.
+    defaults write "$DOMAIN" EscrowCertificates -array
+    "$LAPS" -escrow 2>/dev/null | python3 -c 'import json,sys; assert json.load(sys.stdin)["password"]' && pass "empty EscrowCertificates means plaintext escrow" || fail "empty EscrowCertificates"
+    defaults delete "$DOMAIN" EscrowCertificates
     rm -rf "$T"
 fi
 echo "::endgroup::"

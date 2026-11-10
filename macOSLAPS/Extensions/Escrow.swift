@@ -37,11 +37,28 @@ enum Escrow {
         let host: String
     }
 
-    /// Certificates configured in `EscrowCertificates`, or an empty array.
-    static func certificates() -> [SecCertificate] {
-        guard let raw = PreferenceStore.shared.rawValue(forKey: "EscrowCertificates") else { return [] }
-        let entries : [Any] = (raw as? [Any]) ?? [raw]
+    /// What `EscrowCertificates` holds.
+    ///   - `configured`: the key has at least one entry, so encryption was asked for.
+    ///     An absent key or an empty array means plaintext escrow.
+    ///   - `certificates`: the entries that parsed as RSA certificates.
+    ///   - `problems`: one line per entry that was skipped.
+    struct CertificateConfig {
+        let configured: Bool
+        let certificates: [SecCertificate]
+        let problems: [String]
+        /// Encryption was asked for but nothing usable is configured: never fall back to plaintext.
+        var unusable: Bool { configured && certificates.isEmpty }
+    }
+
+    static func certificateConfig() -> CertificateConfig {
+        guard let raw = PreferenceStore.shared.rawValue(forKey: "EscrowCertificates") else {
+            return CertificateConfig(configured: false, certificates: [], problems: [])
+        }
+        var entries : [Any] = (raw as? [Any]) ?? [raw]
+        // Blank strings (an empty <string/> in a profile) don't count as configured.
+        entries = entries.filter { !(($0 as? String)?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? false) }
         var certs : [SecCertificate] = []
+        var problems : [String] = []
         for (index, entry) in entries.enumerated() {
             var der : Data?
             if let data = entry as? Data {
@@ -54,12 +71,27 @@ enum Escrow {
                 der = Data(base64Encoded: body)
             }
             guard let bytes = der, let cert = SecCertificateCreateWithData(nil, bytes as CFData) else {
-                laps_log.print("EscrowCertificates entry \(index + 1) is not a valid certificate and was skipped.", .warn)
+                problems.append("entry \(index + 1) is not a valid certificate (PEM, base64 DER or <data>)")
+                continue
+            }
+            guard let key = SecCertificateCopyKey(cert),
+                  let attributes = SecKeyCopyAttributes(key) as? [String: Any],
+                  (attributes[kSecAttrKeyType as String] as? String) == (kSecAttrKeyTypeRSA as String) else {
+                problems.append("entry \(index + 1) is not an RSA certificate")
                 continue
             }
             certs.append(cert)
         }
-        return certs
+        return CertificateConfig(configured: !entries.isEmpty, certificates: certs, problems: problems)
+    }
+
+    /// Usable certificates in `EscrowCertificates` (logs a warning for each skipped entry).
+    static func certificates() -> [SecCertificate] {
+        let config = certificateConfig()
+        for problem in config.problems {
+            laps_log.print("EscrowCertificates \(problem); it was skipped.", .warn)
+        }
+        return config.certificates
     }
 
     /// SHA-256 fingerprint of a certificate (hex, uppercase), for -status and logs.
@@ -167,17 +199,29 @@ enum Escrow {
             laps_log.print("Unable to encode the escrow payload.", .error)
             exit(1)
         }
-        let certs = certificates()
-        if certs.isEmpty {
+        let config = certificateConfig()
+        for problem in config.problems {
+            laps_log.print("EscrowCertificates \(problem); it was skipped.", .warn)
+        }
+        if config.unusable {
+            // Encryption was configured, so never print the password in plain text. Print a
+            // non-secret error instead of nothing, so the MDM attribute shows the problem
+            // rather than an empty value (which some MDMs store over the last good escrow).
+            laps_log.print("EscrowCertificates is set but has no usable RSA certificate. The password was NOT printed.", .error)
+            printEscrowError("EscrowCertificates is set but has no usable RSA certificate")
+            exit(1)
+        }
+        if !config.configured {
             print(String(data: json, encoding: .utf8)!)
             exit(0)
         }
         do {
-            let der = try envelope(json, recipients: certs)
+            let der = try envelope(json, recipients: config.certificates)
             print(pem(der, label: "CMS"))
             exit(0)
         } catch {
-            laps_log.print("Unable to encrypt the escrow payload: \(error). Nothing was printed.", .error)
+            laps_log.print("Unable to encrypt the escrow payload: \(error). The password was NOT printed.", .error)
+            printEscrowError("encryption failed: \(error)")
             exit(1)
         }
     }
@@ -186,6 +230,11 @@ enum Escrow {
 /// The Mac's computer name. (ProcessInfo.hostName does a DNS lookup and can stall for seconds.)
 func computerName() -> String {
     return (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? Host.current().localizedName ?? "unknown"
+}
+
+/// One line of non-secret JSON describing why escrow output was withheld.
+func printEscrowError(_ message: String) {
+    print("{\"v\":1,\"status\":\"error\",\"error\":\(jsonString(message))}")
 }
 
 /// JSON-escaped string literal.
