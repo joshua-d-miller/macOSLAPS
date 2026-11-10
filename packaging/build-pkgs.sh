@@ -44,20 +44,41 @@ pkgbuild --root "$root" --identifier edu.psu.macOSLAPS-check --version "$VERSION
 
 # --- distributions ---
 distribution() {   # distribution <title> <pkg-ref id>...
+    # One choice per component with the same IDs as every release built with
+    # Packages (3.x-4.0.0 845): installer_choice_1 = binary, installer_choice_2 =
+    # LaunchDaemon. Deployments that skip the LaunchDaemon with
+    # "installer -applyChoiceChangesXML" depend on these IDs.
     local title=$1; shift
     echo '<?xml version="1.0" encoding="utf-8"?>'
     echo '<installer-gui-script minSpecVersion="1">'
     echo "    <title>$title</title>"
-    echo '    <options customize="never" require-scripts="false" rootVolumeOnly="true" hostArchitectures="arm64,x86_64"/>'
+    echo '    <options require-scripts="false" rootVolumeOnly="true" hostArchitectures="arm64,x86_64"/>'
     echo "    <volume-check><allowed-os-versions><os-version min=\"$MIN_MACOS\"/></allowed-os-versions></volume-check>"
-    echo '    <choices-outline><line choice="default"/></choices-outline>'
-    echo "    <choice id=\"default\" title=\"$title\">"
-    for id in "$@"; do echo "        <pkg-ref id=\"$id\"/>"; done
-    echo '    </choice>'
+    echo '    <choices-outline>'
+    for id in "$@"; do echo "        <line choice=\"$(choice_id "$id")\"/>"; done
+    echo '    </choices-outline>'
+    for id in "$@"; do
+        echo "    <choice id=\"$(choice_id "$id")\" title=\"$(choice_title "$id")\" description=\"\">"
+        echo "        <pkg-ref id=\"$id\"/>"
+        echo '    </choice>'
+    done
     for id in "$@"; do
         echo "    <pkg-ref id=\"$id\" version=\"$VERSION\" onConclusion=\"none\">${id#edu.psu.}.pkg</pkg-ref>"
     done
     echo '</installer-gui-script>'
+}
+
+choice_id() {      # stable choice IDs, matching earlier releases
+    case $1 in
+        edu.psu.macOSLAPS)       echo installer_choice_1 ;;
+        edu.psu.macOSLAPS-check) echo installer_choice_2 ;;
+    esac
+}
+choice_title() {
+    case $1 in
+        edu.psu.macOSLAPS)       echo "macOSLAPS" ;;
+        edu.psu.macOSLAPS-check) echo "LaunchDaemon" ;;
+    esac
 }
 
 product() {        # product <output name> <title> <pkg-ref id>...

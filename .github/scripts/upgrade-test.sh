@@ -119,6 +119,27 @@ launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && pass "LaunchDa
 stop_daemon
 RECEIPTS=$(pkgutil --pkgs | grep -i laps | sort | tr '\n' ' ')
 [ "$RECEIPTS" = "edu.psu.macOSLAPS edu.psu.macOSLAPS-check " ] && pass "receipts unchanged" || fail "receipts: $RECEIPTS"
+
+# Installer choices: same IDs as 845, and turning off installer_choice_2 skips the LaunchDaemon.
+installer -showChoicesXML -pkg "$NEW_FULL" -target / > /tmp/laps-choices.xml 2>/dev/null
+for c in installer_choice_1 installer_choice_2; do
+    grep -q "<string>$c</string>" /tmp/laps-choices.xml && pass "full pkg has choice $c" || fail "full pkg is missing choice $c"
+done
+stop_daemon; rm -f /Library/LaunchDaemons/edu.psu.macoslaps-check.plist; pkgutil --forget edu.psu.macOSLAPS-check >/dev/null 2>&1
+cat > /tmp/laps-skip-daemon.xml <<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><array><dict>
+  <key>attributeSetting</key><integer>0</integer>
+  <key>choiceAttribute</key><string>selected</string>
+  <key>choiceIdentifier</key><string>installer_choice_2</string>
+</dict></array></plist>
+XML
+installer -pkg "$NEW_FULL" -applyChoiceChangesXML /tmp/laps-skip-daemon.xml -target / >/dev/null \
+    && pass "full pkg installs with installer_choice_2 turned off" || fail "install with choice changes failed"
+[ ! -f /Library/LaunchDaemons/edu.psu.macoslaps-check.plist ] && ! pkgutil --pkgs | grep -qx edu.psu.macOSLAPS-check \
+    && pass "LaunchDaemon skipped when installer_choice_2 is off" || fail "LaunchDaemon was installed despite installer_choice_2 off"
+[ -x "$LAPS" ] && pass "binary installed with the daemon skipped" || fail "binary missing after choice install"
 if [ "$SIGNED" = "true" ]; then
     for p in "$NEW_FULL" "$NEW_BIN" "$NEW_LD"; do
         spctl --assess --type install -vv "$p" 2>&1 | grep -q "accepted" && pass "Gatekeeper accepts $(basename "$p")" || fail "Gatekeeper rejects $(basename "$p"): $(spctl --assess --type install -vv "$p" 2>&1 | tr '\n' ' ')"
