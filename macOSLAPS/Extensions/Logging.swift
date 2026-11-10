@@ -33,11 +33,19 @@ public class laps_log {
     }
     
     public static var minimumLogLevel: logLevel = .info
+    /// When true, log lines go to stderr so stdout carries only machine-readable output
+    /// (-status, -escrow). The log file is written either way.
+    public static var useStandardError = false
     
     public static func print<T>(_ object: T, _ level: logLevel = .debug, filename: String = #file, line: Int = #line, funcname: String = #function) {
         if level.rawValue >= laps_log.minimumLogLevel.rawValue {
             let process = ProcessInfo.processInfo
-            Swift.print("\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)")
+            let line = "\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)"
+            if useStandardError {
+                FileHandle.standardError.write((line + "\n").data(using: .utf8)!)
+            } else {
+                Swift.print(line)
+            }
             let text = "\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)"
             writeToFile(content: text, fileName: "macOSLAPS.log")
         }

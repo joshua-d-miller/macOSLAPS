@@ -116,6 +116,10 @@ func initializeWithoutRotating() -> Never {
     exit(0)
 }
 func macOSLAPS() {
+    // Commands whose stdout is captured by an MDM must not have log lines mixed in.
+    if Constants.arguments.contains("-status") || Constants.arguments.contains("-escrow") {
+        laps_log.useStandardError = true
+    }
     // Delete Keychain Entry
     let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8)
     if exp_keychain_id != nil && Constants.method == "Local" {
