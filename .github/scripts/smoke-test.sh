@@ -168,7 +168,8 @@ else
     defaults write "$DOMAIN" EscrowCertificates -array "$(cat "$T/c.pem")"
     "$LAPS" -escrow > "$T/escrow.pem"
     head -1 "$T/escrow.pem" | grep -q "BEGIN CMS" && pass "-escrow prints a CMS block" || fail "-escrow did not print CMS"
-    "$OPENSSL" cms -cmsout -print -inform PEM -in "$T/escrow.pem" | grep -A2 -i "contentEncryptionAlgorithm" | sed -n '1,3p'
+    "$OPENSSL" cms -cmsout -print -inform PEM -in "$T/escrow.pem" > "$T/print.txt"
+    grep -A1 -i "contentEncryptionAlgorithm" "$T/print.txt" | grep -q "aes-256-cbc" && pass "CMS content encrypted with AES-256-CBC" || { fail "CMS is not AES-256-CBC"; grep -A1 -i contentEncryptionAlgorithm "$T/print.txt"; }
     DEC=$("$OPENSSL" cms -decrypt -inform PEM -in "$T/escrow.pem" -recip "$T/c.pem" -inkey "$T/k.pem" 2>&1)
     python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2], d' "$DEC" "$CUR" \
       && pass "CMS escrow decrypts with the admin key to the current password" || fail "CMS decrypt failed: $DEC"

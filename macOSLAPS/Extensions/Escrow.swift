@@ -23,6 +23,7 @@
 import Foundation
 import Security
 import CryptoKit
+import CommonCrypto
 
 enum Escrow {
     struct Payload: Codable {
@@ -66,21 +67,65 @@ enum Escrow {
         return sha256Hex(der)
     }
 
-    /// CMS EnvelopedData of `content` for all `recipients`, DER encoded.
+    /// CMS EnvelopedData (RFC 5652) of `content` for all `recipients`, DER encoded.
+    ///
+    /// Built directly instead of with CMSEncoder, which only offers 3DES. Uses
+    /// AES-256-CBC for the content and RSA (PKCS #1 v1.5) key transport, one
+    /// KeyTransRecipientInfo per certificate identified by issuer and serial number.
+    /// That combination is what Protect-CmsMessage and openssl produce by default, so
+    /// Unprotect-CmsMessage, openssl cms and security cms all read it.
     static func envelope(_ content: Data, recipients: [SecCertificate]) throws -> Data {
-        var encoder : CMSEncoder?
-        var status = CMSEncoderCreate(&encoder)
-        guard status == errSecSuccess, let enc = encoder else { throw EscrowError.cms("create", status) }
-        status = CMSEncoderAddRecipients(enc, recipients as CFArray)
-        guard status == errSecSuccess else { throw EscrowError.cms("add recipients", status) }
-        status = content.withUnsafeBytes { buffer in
-            CMSEncoderUpdateContent(enc, buffer.baseAddress!, content.count)
+        var key = Data(count: 32), iv = Data(count: 16)
+        guard key.withUnsafeMutableBytes({ SecRandomCopyBytes(kSecRandomDefault, 32, $0.baseAddress!) }) == errSecSuccess,
+              iv.withUnsafeMutableBytes({ SecRandomCopyBytes(kSecRandomDefault, 16, $0.baseAddress!) }) == errSecSuccess else {
+            throw EscrowError.crypto("random key generation failed")
         }
-        guard status == errSecSuccess else { throw EscrowError.cms("update content", status) }
-        var encoded : CFData?
-        status = CMSEncoderCopyEncodedContent(enc, &encoded)
-        guard status == errSecSuccess, let out = encoded else { throw EscrowError.cms("encode", status) }
-        return out as Data
+        defer { key.resetBytes(in: 0..<key.count) }
+        let ciphertext = try aes256CBC(content, key: key, iv: iv)
+
+        var recipientInfos : [Data] = []
+        for cert in recipients {
+            guard let publicKey = SecCertificateCopyKey(cert),
+                  let attributes = SecKeyCopyAttributes(publicKey) as? [String: Any],
+                  (attributes[kSecAttrKeyType as String] as? String) == (kSecAttrKeyTypeRSA as String) else {
+                throw EscrowError.crypto("EscrowCertificates must contain RSA certificates")
+            }
+            var error : Unmanaged<CFError>?
+            guard let wrapped = SecKeyCreateEncryptedData(publicKey, .rsaEncryptionPKCS1, key as CFData, &error) as Data? else {
+                throw EscrowError.crypto("RSA key wrap failed: \(error?.takeRetainedValue().localizedDescription ?? "unknown")")
+            }
+            let (issuer, serial) = try DER.issuerAndSerial(of: SecCertificateCopyData(cert) as Data)
+            recipientInfos.append(DER.sequence([
+                DER.integer(0),
+                DER.sequence([issuer, serial]),
+                DER.sequence([DER.oid("1.2.840.113549.1.1.1"), DER.null]),
+                DER.octetString(wrapped)]))
+        }
+        let encryptedContentInfo = DER.sequence([
+            DER.oid("1.2.840.113549.1.7.1"),
+            DER.sequence([DER.oid("2.16.840.1.101.3.4.1.42"), DER.octetString(iv)]),
+            DER.tagged(0x80, ciphertext)])
+        let envelopedData = DER.sequence([DER.integer(0), DER.set(recipientInfos), encryptedContentInfo])
+        return DER.sequence([DER.oid("1.2.840.113549.1.7.3"), DER.tagged(0xA0, envelopedData)])
+    }
+
+    private static func aes256CBC(_ plaintext: Data, key: Data, iv: Data) throws -> Data {
+        var out = Data(count: plaintext.count + kCCBlockSizeAES128)
+        var written = 0
+        let outCount = out.count
+        let status = out.withUnsafeMutableBytes { o in
+            plaintext.withUnsafeBytes { p in
+                key.withUnsafeBytes { k in
+                    iv.withUnsafeBytes { v in
+                        CCCrypt(CCOperation(kCCEncrypt), CCAlgorithm(kCCAlgorithmAES), CCOptions(kCCOptionPKCS7Padding),
+                                k.baseAddress, key.count, v.baseAddress,
+                                p.baseAddress, plaintext.count, o.baseAddress, outCount, &written)
+                    }
+                }
+            }
+        }
+        guard status == kCCSuccess else { throw EscrowError.crypto("AES encryption failed (\(status))") }
+        return out.prefix(written)
     }
 
     static func pem(_ der: Data, label: String) -> String {
@@ -89,12 +134,12 @@ enum Escrow {
     }
 
     enum EscrowError: Error, CustomStringConvertible {
-        case cms(String, OSStatus)
+        case crypto(String)
+        case der(String)
         var description: String {
             switch self {
-            case .cms(let step, let status):
-                let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error"
-                return "CMS \(step) failed (OSStatus \(status): \(message))"
+            case .crypto(let message): return message
+            case .der(let message): return "Certificate parse error: \(message)"
             }
         }
     }
@@ -147,4 +192,81 @@ func jsonString(_ value: String) -> String {
 /// SHA-256 as uppercase hex.
 func sha256Hex(_ data: Data) -> String {
     return SHA256.hash(data: data).map { String(format: "%02X", $0) }.joined()
+}
+
+/// Minimal DER encoder/decoder for the CMS structure above.
+enum DER {
+    static func length(_ n: Int) -> Data {
+        if n < 0x80 { return Data([UInt8(n)]) }
+        var bytes : [UInt8] = []
+        var v = n
+        while v > 0 { bytes.insert(UInt8(v & 0xFF), at: 0); v >>= 8 }
+        return Data([0x80 | UInt8(bytes.count)] + bytes)
+    }
+    static func tlv(_ tag: UInt8, _ value: Data) -> Data { Data([tag]) + length(value.count) + value }
+    static func tagged(_ tag: UInt8, _ value: Data) -> Data { tlv(tag, value) }
+    static func sequence(_ items: [Data]) -> Data { tlv(0x30, items.reduce(Data(), +)) }
+    /// SET OF, sorted by encoding as DER requires.
+    static func set(_ items: [Data]) -> Data {
+        tlv(0x31, items.sorted { $0.lexicographicallyPrecedes($1) }.reduce(Data(), +))
+    }
+    static func octetString(_ value: Data) -> Data { tlv(0x04, value) }
+    static let null = Data([0x05, 0x00])
+    static func integer(_ value: Int) -> Data {
+        var bytes : [UInt8] = []
+        var v = value
+        repeat { bytes.insert(UInt8(v & 0xFF), at: 0); v >>= 8 } while v > 0
+        if bytes[0] & 0x80 != 0 { bytes.insert(0, at: 0) }
+        return tlv(0x02, Data(bytes))
+    }
+    static func oid(_ dotted: String) -> Data {
+        let parts = dotted.split(separator: ".").map { UInt64($0)! }
+        var body : [UInt8] = [UInt8(parts[0] * 40 + parts[1])]
+        for var arc in parts.dropFirst(2) {
+            var chunk : [UInt8] = [UInt8(arc & 0x7F)]
+            arc >>= 7
+            while arc > 0 { chunk.insert(UInt8(arc & 0x7F) | 0x80, at: 0); arc >>= 7 }
+            body += chunk
+        }
+        return tlv(0x06, Data(body))
+    }
+
+    /// Reads one TLV at `offset`; returns (tag, full element, value range).
+    static func read(_ data: Data, at offset: Int) throws -> (tag: UInt8, element: Range<Int>, value: Range<Int>) {
+        let bytes = [UInt8](data)
+        guard offset + 2 <= bytes.count else { throw Escrow.EscrowError.der("truncated") }
+        let tag = bytes[offset]
+        var len = Int(bytes[offset + 1]), header = 2
+        if len & 0x80 != 0 {
+            let n = len & 0x7F
+            guard n > 0, n <= 4, offset + 2 + n <= bytes.count else { throw Escrow.EscrowError.der("bad length") }
+            len = 0
+            for i in 0..<n { len = (len << 8) | Int(bytes[offset + 2 + i]) }
+            header += n
+        }
+        let start = offset + header
+        guard start + len <= bytes.count else { throw Escrow.EscrowError.der("length past end") }
+        return (tag, offset..<(start + len), start..<(start + len))
+    }
+
+    /// The exact DER of the certificate's issuer Name and serialNumber INTEGER.
+    static func issuerAndSerial(of cert: Data) throws -> (Data, Data) {
+        let d = Data(cert)  // re-base indices at 0
+        let certificate = try read(d, at: 0)
+        let tbs = try read(d, at: certificate.value.lowerBound)
+        var cursor = tbs.value.lowerBound
+        var element = try read(d, at: cursor)
+        if element.tag == 0xA0 {               // [0] version
+            cursor = element.element.upperBound
+            element = try read(d, at: cursor)
+        }
+        guard element.tag == 0x02 else { throw Escrow.EscrowError.der("serial number not found") }
+        let serial = d.subdata(in: element.element)
+        cursor = element.element.upperBound
+        let signature = try read(d, at: cursor)    // AlgorithmIdentifier
+        cursor = signature.element.upperBound
+        let issuer = try read(d, at: cursor)
+        guard issuer.tag == 0x30 else { throw Escrow.EscrowError.der("issuer not found") }
+        return (d.subdata(in: issuer.element), serial)
+    }
 }

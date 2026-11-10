@@ -54,7 +54,11 @@ enum Status {
 
         var isAdmin: Bool? = nil, hidden: Bool? = nil, token: Bool? = nil
         if exists {
-            isAdmin = shell("/usr/sbin/dsmemberutil", ["checkmembership", "-U", account, "-G", "admin"]).contains("is a member")
+            if let node = try? ODNode(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)),
+               let admins = try? node.record(withRecordType: kODRecordTypeGroups, name: "admin", attributes: nil),
+               let user = record {
+                isAdmin = (try? admins.isMemberRecord(user)) != nil
+            }
             hidden = ((try? record?.values(forAttribute: "dsAttrTypeNative:IsHidden"))?.first as? String).map { $0 == "1" || $0.uppercased() == "YES" } ?? false
             token = shell("/usr/sbin/sysadminctl", ["-secureTokenStatus", account]).contains("ENABLED")
         }
