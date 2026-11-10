@@ -17,6 +17,17 @@ import Foundation
 import OpenDirectory
 import Security
 
+/// Keeps SIGTERM / SIGINT / SIGHUP from stopping macOSLAPS between changing the
+/// account's password and storing the new one. Being stopped there would leave an
+/// account (possibly with a secureToken) on a password nobody has. A request to stop
+/// is ignored for those few seconds; the run then finishes normally. launchd's
+/// ExitTimeOut (set in the LaunchDaemon) bounds how long a stop can be delayed.
+enum CriticalSection {
+    private static let signals = [SIGTERM, SIGINT, SIGHUP]
+    static func begin() { for s in signals { signal(s, SIG_IGN) } }
+    static func end() { for s in signals { signal(s, SIG_DFL) } }
+}
+
 class LocalTools: NSObject {
     class func connect() -> ODRecord {
         // Pull Local Administrator Record
@@ -146,7 +157,12 @@ class LocalTools: NSObject {
     class func password_change() {
         let record = connect()
         let password = PasswordGen(length: Constants.password_length)
+        CriticalSection.begin()
         let previous_password = changeAndVerify(record: record, to: password)
+        // Test-only: widen the window so CI can send a signal inside it.
+        if let pause = ProcessInfo.processInfo.environment["MACOSLAPS_TEST_PAUSE_AFTER_CHANGE"].flatMap(Double.init) {
+            Thread.sleep(forTimeInterval: min(pause, 30))
+        }
 
         let save_status : OSStatus = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
         guard save_status == noErr else {
@@ -156,6 +172,7 @@ class LocalTools: NSObject {
             exit(1)
         }
         laps_log.print("Password change has been completed locally.", .info)
+        CriticalSection.end()
         removeAdminKeychainIfEnabled(record: record)
         InventoryHook.run(reason: "password change")
     }

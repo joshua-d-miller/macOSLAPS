@@ -127,6 +127,7 @@ public class ADTools: NSObject {
         let formatted_new_exp_date = Constants.dateFormatter.string(from: print_exp_date!)
         // Change and verify the local password (shared with the Local method)
         let local_admin_record = LocalTools.connect()
+        CriticalSection.begin()
         let previous_password = LocalTools.changeAndVerify(record: local_admin_record, to: password)
 
         // Write our new password to the System Keychain
@@ -157,6 +158,7 @@ public class ADTools: NSObject {
         }
 
         laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
+        CriticalSection.end()
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
         InventoryHook.run(reason: "password change")
     }

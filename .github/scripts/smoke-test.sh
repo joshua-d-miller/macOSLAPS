@@ -148,6 +148,17 @@ dscl . -authonly "$ACCT" "$PWB" >/dev/null 2>&1 && fail "previous password still
 unset MACOSLAPS_TEST_ASSUME_SECURETOKEN
 echo "::endgroup::"
 
+echo "::group::A stop signal between changing and storing the password is ignored"
+MACOSLAPS_TEST_PAUSE_AFTER_CHANGE=5 "$LAPS" -resetPassword >/dev/null 2>&1 &
+RUN_PID=$!
+sleep 2
+kill -TERM "$RUN_PID" 2>/dev/null; kill -HUP "$RUN_PID" 2>/dev/null; kill -INT "$RUN_PID" 2>/dev/null
+wait "$RUN_PID"; RC=$?
+[ "$RC" -eq 0 ] && pass "rotation finished despite SIGTERM/SIGHUP/SIGINT (exit 0)" || fail "rotation was stopped mid-way (exit $RC)"
+SIG_PW=$(get_pw 2>/dev/null)
+dscl . -authonly "$ACCT" "$SIG_PW" >/dev/null 2>&1 && pass "account and keychain agree after the signals" || fail "account and keychain disagree after a stop signal"
+echo "::endgroup::"
+
 echo "::group::secureToken detection fails closed"
 SAVED_FIRSTPASS=$(defaults read "$DOMAIN" FirstPass 2>/dev/null || true)
 defaults delete "$DOMAIN" FirstPass 2>/dev/null || true
