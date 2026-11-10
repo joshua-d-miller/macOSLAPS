@@ -86,7 +86,7 @@ then
         ## jamf Pro
         /bin/echo "<result>No Expiration Date Present</result>"
     else
-        /bin/echo "<result>| Expiration: $CURRENT_EXPIRATION |</result>"
+        /usr/bin/printf '%s\n' "<result>| Expiration: $CURRENT_EXPIRATION |</result>"
         ## Run macOSLAPS a second time to remove the Expiration file
         ## and expiration date file from the system
         $LAPS > /dev/null 2>&1

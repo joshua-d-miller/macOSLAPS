@@ -88,7 +88,7 @@ then
         ## old password in place that might still be needed
         exit 0
     else
-        /bin/echo "<result>| Password: $CURRENT_PASSWORD | Expiration: $EXPIRATION_DATE |</result>"
+        /usr/bin/printf '%s\n' "<result>| Password: $CURRENT_PASSWORD | Expiration: $EXPIRATION_DATE |</result>"
         ## Run macOSLAPS a second time to remove the password file
         ## and expiration date file from the system
         $LAPS > /dev/null 2>&1
