@@ -79,24 +79,27 @@ else
 fi
 echo "::endgroup::"
 
+redact() { python3 -c 'import sys; print(sys.argv[1].replace(sys.argv[2], "<password>"))' "$1" "$NEW_PW"; }
 echo "::group::Scripts admins already deploy keep working"
 OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-and-expiration.sh" 2>&1)
-echo "$OUT" | sed "s/$NEW_PW/<password>/"
+redact "$OUT"
 echo "$OUT" | grep -qF "Successfully retrieved following password: $NEW_PW (expires 20" && pass "MDM password-and-expiration script" || fail "MDM password-and-expiration script output"
 OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-simple.sh" 2>&1)
-echo "$OUT" | grep -qF "$NEW_PW (expires 20" && pass "MDM password-simple script" || fail "MDM password-simple script output: $(echo "$OUT" | sed "s/$NEW_PW/<password>/")"
+echo "$OUT" | grep -qF "$NEW_PW (expires 20" && pass "MDM password-simple script" || fail "MDM password-simple script output: $(redact "$OUT")"
 # The Jamf extension attributes read LocalAdminAccount from a managed profile.
 mkdir -p "/Library/Managed Preferences"
 cp "$DOMAIN.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist"
 OUT=$(zsh "$REPO/jamf Extension Attributes/Password:Expiration Combined.zsh" 2>&1)
 echo "$OUT" | grep -qE "^<result>\| Password: .+ \| Expiration: 20[0-9-]+ [0-9:]+ \|</result>$" && echo "$OUT" | grep -qF "Password: $NEW_PW |" \
-    && pass "Jamf combined extension attribute" || fail "Jamf combined EA output: $(echo "$OUT" | sed "s/$NEW_PW/<password>/")"
+    && pass "Jamf combined extension attribute" || fail "Jamf combined EA output: $(redact "$OUT")"
 OUT=$(zsh "$REPO/jamf Extension Attributes/Password Only.zsh" 2>&1)
 [ "$OUT" = "<result>| Password: $NEW_PW |</result>" ] && pass "Jamf password extension attribute" || fail "Jamf password EA output"
 OUT=$(zsh "$REPO/jamf Extension Attributes/Expiration Only.zsh" 2>&1)
 echo "$OUT" | grep -qE "^<result>\| Expiration: 20[0-9-]+ [0-9:]+ \|</result>$" && pass "Jamf expiration extension attribute" || fail "Jamf expiration EA output: $OUT"
 OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Escrow-EA.zsh" 2>&1)
-echo "$OUT" | grep -qF "\"password\":\"$NEW_PW\"" && pass "integrations/jamf escrow attribute" || fail "integrations/jamf escrow EA output"
+# Compare the parsed JSON: the password may contain characters JSON escapes (" and \).
+python3 -c 'import json,re,sys; m=re.search(r"<result>(.*)</result>", sys.argv[1], re.S); assert m and json.loads(m.group(1))["password"]==sys.argv[2]' "$OUT" "$NEW_PW" \
+    && pass "integrations/jamf escrow attribute" || fail "integrations/jamf escrow EA output"
 rm -f "/Library/Managed Preferences/edu.psu.macoslaps.plist"
 dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "none of the scripts rotated the password" || fail "a script rotated the password unexpectedly"
 echo "::endgroup::"
