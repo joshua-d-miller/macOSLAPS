@@ -196,6 +196,31 @@ security find-generic-password -s macOSLAPS "$SYSKC" 2>/dev/null | grep -q '"icm
     && pass "-status reports secureToken false on the runner" || fail "-status secureToken value"
 echo "::endgroup::"
 
+echo "::group::Preference domains: new domain wins per key, legacy fills the rest"
+NEWDOM=/Library/Preferences/com.joshua-d-miller.macoslaps
+defaults write "$NEWDOM" PasswordLength -int 20
+CFG=$("$LAPS" -showConfig 2>/dev/null)
+echo "$CFG" | grep -E "PasswordLength|LocalAdminAccount|Method"
+echo "$CFG" | grep -q "PasswordLength = 20  \[/Library/Preferences, new domain\]" && pass "PasswordLength comes from the new domain" || fail "PasswordLength not taken from the new domain"
+echo "$CFG" | grep -q "LocalAdminAccount = $ACCT  \[/Library/Preferences, legacy domain\]" && pass "LocalAdminAccount still comes from the legacy domain" || fail "LocalAdminAccount not filled in from the legacy domain"
+echo "$CFG" | grep -q "Method = Local  \[/Library/Preferences, legacy domain\]" && pass "Method still comes from the legacy domain" || fail "Method not filled in from the legacy domain"
+"$LAPS" -resetPassword >/dev/null 2>&1 && P20=$(get_pw) && [ "${#P20}" -eq 20 ] && dscl . -authonly "$ACCT" "$P20" >/dev/null 2>&1 \
+    && pass "rotation with split settings uses the right account and the new length" || fail "rotation with split settings (length ${#P20})"
+# A managed profile in the new domain beats both local files.
+mkdir -p "/Library/Managed Preferences"
+defaults write "/Library/Managed Preferences/com.joshua-d-miller.macoslaps" PasswordLength -int 24
+killall cfprefsd 2>/dev/null; sleep 1
+if "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = 24  \[profile, new domain\]"; then
+    pass "a managed new-domain value beats local settings"
+else
+    echo "::notice::Managed preferences written by hand weren't treated as managed on this runner: $("$LAPS" -showConfig 2>/dev/null | grep PasswordLength)"
+fi
+rm -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist"
+defaults delete "$NEWDOM" >/dev/null 2>&1; rm -f "$NEWDOM.plist"
+killall cfprefsd 2>/dev/null; sleep 1
+"$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = $LEN  \[/Library/Preferences, legacy domain\]" && pass "back to legacy-only settings" || fail "settings not restored to legacy only"
+echo "::endgroup::"
+
 echo "::group::-status"
 ST=$("$LAPS" -status)
 echo "$ST"

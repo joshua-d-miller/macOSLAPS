@@ -82,61 +82,77 @@ enum PreferenceSource: String {
     case defaults        = "built-in defaults"
 }
 
+/// Settings are resolved one key at a time, in this order:
+///   1. new domain, configuration profile (managed)
+///   2. legacy edu.psu.macoslaps domain, configuration profile
+///   3. new domain, /Library/Preferences
+///   4. legacy domain, /Library/Preferences
+///   5. built-in default
+/// So anything set in the new domain wins, and the legacy domain only fills in keys the
+/// new one doesn't set. Admins can move one key at a time; -showConfig shows where each
+/// key came from.
 final class PreferenceStore {
     static let shared = PreferenceStore()
 
-    let domain : String
+    private struct Layer {
+        let store : UserDefaults
+        let domain : String
+        let managed : Bool
+        let source : PreferenceSource
+    }
+    private let layers : [Layer]
+    /// The most authoritative layer that supplies at least one setting.
     let source : PreferenceSource
-    private let store : UserDefaults?
+    /// The domain admins should look at: the new one if it supplies anything, else legacy.
+    let domain : String
     private var warned = Set<String>()
 
     private init() {
+        var list : [Layer] = []
         let newStore = UserDefaults(suiteName: preferenceDomain)
         let legacyStore = UserDefaults(suiteName: legacyPreferenceDomain)
+        if let n = newStore    { list.append(Layer(store: n, domain: preferenceDomain, managed: true, source: .managedNew)) }
+        if let l = legacyStore { list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: true, source: .managedLegacy)) }
+        if let n = newStore    { list.append(Layer(store: n, domain: preferenceDomain, managed: false, source: .unmanagedNew)) }
+        if let l = legacyStore { list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: false, source: .unmanagedLegacy)) }
+        layers = list
+
         let knownKeys = Array(defaultpreferences.keys) + Array(preferenceKeyAliases.keys)
-
-        func isManaged(_ d: UserDefaults?) -> Bool {
-            guard let d = d else { return false }
-            return knownKeys.contains { d.objectIsForced(forKey: $0) }
+        func supplies(_ layer: Layer) -> Bool {
+            knownKeys.contains { layer.store.object(forKey: $0) != nil && layer.store.objectIsForced(forKey: $0) == layer.managed }
         }
-        func hasAnyValue(_ d: UserDefaults?) -> Bool {
-            guard let d = d else { return false }
-            return knownKeys.contains { d.object(forKey: $0) != nil }
-        }
-
-        let newManaged = isManaged(newStore)
-        let legacyManaged = isManaged(legacyStore)
-
-        let chosen : (String, PreferenceSource, UserDefaults?)
-        if newManaged {
-            chosen = (preferenceDomain, .managedNew, newStore)
-        } else if legacyManaged {
-            chosen = (legacyPreferenceDomain, .managedLegacy, legacyStore)
-        } else if hasAnyValue(newStore) {
-            chosen = (preferenceDomain, .unmanagedNew, newStore)
-        } else if hasAnyValue(legacyStore) {
-            chosen = (legacyPreferenceDomain, .unmanagedLegacy, legacyStore)
-        } else {
-            chosen = (preferenceDomain, .defaults, nil)
-        }
-        domain = chosen.0
-        source = chosen.1
-        store = chosen.2
+        let active = list.filter(supplies)
+        source = active.first?.source ?? .defaults
+        domain = active.contains { $0.domain == preferenceDomain } || active.isEmpty ? preferenceDomain : legacyPreferenceDomain
 
         // Notices are collected, not printed here: this initializer can run during any
         // command, and printing would corrupt machine-read output such as -version.
-        if newManaged && legacyManaged {
-            notices.append("Configuration profiles exist for both \(preferenceDomain) and \(legacyPreferenceDomain). Using \(preferenceDomain); the legacy profile is ignored and can be removed.")
-        }
-        if source == .managedLegacy || source == .unmanagedLegacy {
+        let legacyKeys = defaultpreferences.keys.sorted().filter { lookup($0)?.layer.domain == legacyPreferenceDomain }
+        let newUsed = active.contains { $0.domain == preferenceDomain }
+        if !legacyKeys.isEmpty && newUsed {
+            notices.append("Settings come from both \(preferenceDomain) and \(legacyPreferenceDomain). Keys set in \(preferenceDomain) take precedence; these still come from the legacy domain: \(legacyKeys.joined(separator: ", ")).")
+        } else if !legacyKeys.isEmpty {
             notices.append("Settings are being read from the legacy domain \(legacyPreferenceDomain). This still works, but please move your configuration to \(preferenceDomain) (same keys, new PayloadType). Legacy support will be removed in a future major release.")
         }
-        if source == .defaults {
+        if active.isEmpty {
             notices.append("No macOSLAPS settings found in \(preferenceDomain) or \(legacyPreferenceDomain). Using built-in defaults.")
         }
     }
 
-    /// Configuration notices (legacy domain, duplicate profiles, no settings).
+    /// First layer that has a value for `key` (or a known misspelling of it).
+    private func lookup(_ key: String) -> (value: Any, layer: Layer, alias: String?)? {
+        let aliases = preferenceKeyAliases.filter { $0.value == key }.map { $0.key }
+        for layer in layers {
+            for name in [key] + aliases {
+                if let value = layer.store.object(forKey: name), layer.store.objectIsForced(forKey: name) == layer.managed {
+                    return (value, layer, name == key ? nil : name)
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Configuration notices (legacy domain, mixed domains, no settings).
     private(set) var notices : [String] = []
     private var noticesEmitted = false
 
@@ -148,23 +164,20 @@ final class PreferenceStore {
         for notice in notices { laps_log.print(notice, .warn) }
     }
 
-    /// Raw value for a key from the chosen domain, falling back to a known misspelling.
+    /// Raw value for a key, resolved across the layers above.
     func rawValue(forKey key: String) -> Any? {
-        guard let store = store else { return nil }
-        if let value = store.object(forKey: key) { return value }
-        for (alias, target) in preferenceKeyAliases where target == key {
-            if let value = store.object(forKey: alias) {
-                warnOnce(alias, "Preference key \(alias) is misspelled; using it as \(key). Please rename it to \(key).")
-                return value
-            }
+        guard let found = lookup(key) else { return nil }
+        if let alias = found.alias {
+            warnOnce(alias, "Preference key \(alias) is misspelled; using it as \(key). Please rename it to \(key).")
         }
-        return nil
+        return found.value
     }
 
     /// Where a single key's value comes from, for -showConfig.
     func origin(ofKey key: String) -> String {
-        guard let store = store, rawValue(forKey: key) != nil else { return "default" }
-        return store.objectIsForced(forKey: key) ? "managed" : "set"
+        guard let found = lookup(key) else { return "default" }
+        let place = found.layer.domain == preferenceDomain ? "new domain" : "legacy domain"
+        return (found.layer.managed ? "profile, " : "/Library/Preferences, ") + place
     }
 
     func warnOnce(_ id: String, _ message: String) {
