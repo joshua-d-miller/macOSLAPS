@@ -35,6 +35,7 @@ env:
 jobs:
   generator-tests:
     runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - name: Compile and run password generator tests
@@ -44,6 +45,7 @@ jobs:
 
   build:
     runs-on: macos-26
+    timeout-minutes: 30
     outputs:
       pkg: ${{ steps.package.outputs.pkg }}
       version: ${{ steps.binary.outputs.version }}
@@ -55,6 +57,7 @@ jobs:
         run: xcodebuild -version && swift --version
 
       - name: Set build number
+        id: version
         run: |
           # Release tags carry the build number: 4.0.0(846). Other builds use 845 + run number.
           short=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" macOSLAPS/Info.plist)
@@ -65,6 +68,8 @@ jobs:
             build=$((845 + GITHUB_RUN_NUMBER))
           fi
           echo "Building $short ($build)"
+          echo "short=$short" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
           # The project's "Increment Build" phase adds 1, so seed it one lower.
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $((build - 1))" macOSLAPS/Info.plist
 
@@ -84,10 +89,19 @@ jobs:
           bin=build/Build/Products/Release/macOSLAPS
           test -x "$bin" || { echo "::error::binary not found"; ls -la build/Build/Products/Release; exit 1; }
           lipo -info "$bin"
-          launchctl plist __TEXT,__info_plist "$bin" > embedded.txt
-          short=$(awk -F'"' '/CFBundleShortVersionString/{print $4}' embedded.txt)
-          build=$(awk -F'"' '/"CFBundleVersion"/{print $4}' embedded.txt)
-          echo "Embedded version: $short ($build)"
+          short="${{ steps.version.outputs.short }}"; build="${{ steps.version.outputs.build }}"
+          # Cross-check against the Info.plist embedded in the binary (__TEXT,__info_plist).
+          read -r emb_short emb_build < <(python3 - "$bin" <<'PY'
+          import plistlib, sys
+          data = open(sys.argv[1], "rb").read()
+          start = data.find(b"<?xml"); end = data.find(b"</plist>", start)
+          info = plistlib.loads(data[start:end + len(b"</plist>")])
+          print(info.get("CFBundleShortVersionString", ""), info.get("CFBundleVersion", ""))
+          PY
+          )
+          echo "Expected $short ($build), embedded $emb_short ($emb_build)"
+          [ "$emb_short" = "$short" ] && [ "$emb_build" = "$build" ] || { echo "::error::Embedded version $emb_short ($emb_build) does not match $short ($build)"; exit 1; }
+          [[ "$short.$build" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version '$short.$build' is not x.y.z.n"; exit 1; }
           echo "bin=$bin" >> "$GITHUB_OUTPUT"
           echo "version=$short.$build" >> "$GITHUB_OUTPUT"
 
@@ -111,8 +125,8 @@ jobs:
           security unlock-keychain -p "$KCPW" "$KC"
           echo "$DEVID_APP_P12"       | base64 --decode > "$RUNNER_TEMP/app.p12"
           echo "$DEVID_INSTALLER_P12" | base64 --decode > "$RUNNER_TEMP/inst.p12"
-          security import "$RUNNER_TEMP/app.p12"  -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
-          security import "$RUNNER_TEMP/inst.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security import "$RUNNER_TEMP/app.p12"  -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/productbuild -T /usr/bin/pkgbuild
+          security import "$RUNNER_TEMP/inst.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign -T /usr/bin/productbuild -T /usr/bin/pkgbuild
           rm -f "$RUNNER_TEMP"/*.p12
           # The .p12 files may hold only the leaf certificates (e.g. exported on Windows),
           # so add Apple's Developer ID G2 intermediate to complete the chain.
@@ -144,6 +158,11 @@ jobs:
           fi
           ls -l dist
           for p in dist/*.pkg; do pkgutil --check-signature "$p" | head -3 || true; done
+          suffix=""; [ "$SIGNED" = "true" ] || suffix="-UNSIGNED-TEST"
+          for name in "macOSLAPS-$VERSION$suffix.pkg" "macOSLAPS-Binary-$VERSION$suffix.pkg" "macOSLAPS-LD-$VERSION$suffix.pkg"; do
+            [ -f "dist/$name" ] || { echo "::error::missing dist/$name"; exit 1; }
+          done
+          [ "$pkg" = "macOSLAPS-$VERSION$suffix.pkg" ] || { echo "::error::unexpected full pkg name '$pkg'"; exit 1; }
           echo "pkg=$pkg" >> "$GITHUB_OUTPUT"
 
       - name: Check signing certificate expiry
@@ -220,6 +239,7 @@ jobs:
       matrix:
         os: [macos-15, macos-15-intel, macos-26]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -245,6 +265,7 @@ jobs:
       matrix:
         os: [macos-15, macos-26]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -263,6 +284,7 @@ jobs:
   windows-decrypt:
     needs: smoke-test
     runs-on: windows-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5
@@ -280,6 +302,7 @@ jobs:
     needs: [generator-tests, build, smoke-test, upgrade-test, windows-decrypt]
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
       - uses: actions/download-artifact@v5

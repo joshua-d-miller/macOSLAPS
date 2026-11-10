@@ -13,6 +13,7 @@
 set -euo pipefail
 
 BIN=$1; VERSION=$2; OUT=$3; IDENTITY=${4:-}; KEYCHAIN=${5:-}
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "build-pkgs.sh: version must look like 4.0.0.846, got '$VERSION'" >&2; exit 1; }
 MIN_MACOS=${MIN_MACOS:-12.0}
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(dirname "$HERE")
@@ -62,13 +63,16 @@ distribution() {   # distribution <title> <pkg-ref id>...
 product() {        # product <output name> <title> <pkg-ref id>...
     local name=$1; shift
     distribution "$@" > "$WORK/$name.dist"
-    local sign=()
-    if [ -n "$IDENTITY" ]; then
-        sign=(--sign "$IDENTITY" --timestamp)
-        [ -n "$KEYCHAIN" ] && sign+=(--keychain "$KEYCHAIN")
+    if [ -z "$IDENTITY" ]; then
+        productbuild --distribution "$WORK/$name.dist" --package-path "$WORK/components" "$OUT/$name" >&2
+        return
     fi
-    productbuild --distribution "$WORK/$name.dist" --package-path "$WORK/components" \
-        ${sign[@]+"${sign[@]}"} "$OUT/$name" >&2
+    # Build unsigned, then sign with productsign (the signing path every earlier
+    # release used). Signing inside productbuild can wait on a keychain prompt in CI.
+    productbuild --distribution "$WORK/$name.dist" --package-path "$WORK/components" "$WORK/$name" >&2
+    local sign=(--sign "$IDENTITY" --timestamp)
+    [ -n "$KEYCHAIN" ] && sign+=(--keychain "$KEYCHAIN")
+    productsign "${sign[@]}" "$WORK/$name" "$OUT/$name" >&2
 }
 
 suffix=""; [ -n "$IDENTITY" ] || suffix="-UNSIGNED-TEST"
