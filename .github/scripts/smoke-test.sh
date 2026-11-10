@@ -148,6 +148,41 @@ dscl . -authonly "$ACCT" "$PWB" >/dev/null 2>&1 && fail "previous password still
 unset MACOSLAPS_TEST_ASSUME_SECURETOKEN
 echo "::endgroup::"
 
+echo "::group::secureToken detection fails closed"
+SAVED_FIRSTPASS=$(defaults read "$DOMAIN" FirstPass 2>/dev/null || true)
+defaults delete "$DOMAIN" FirstPass 2>/dev/null || true
+KNOWN2='Known-Pass-9753'
+CURRENT=$(get_pw 2>/dev/null)
+dscl . -passwd "/Users/$ACCT" "$CURRENT" "$KNOWN2" 2>/dev/null || dscl . -passwd "/Users/$ACCT" "$KNOWN2"
+# 1. Token status unknown and no stored password: refuse, change nothing.
+security delete-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1
+if MACOSLAPS_TEST_SECURETOKEN=unknown "$LAPS" -resetPassword >/dev/null 2>&1; then
+    fail "unknown token status with no known password still rotated"
+else
+    pass "unknown token status with no known password refuses to reset"
+fi
+dscl . -authonly "$ACCT" "$KNOWN2" >/dev/null 2>&1 && pass "account untouched when token status is unknown" || fail "account changed with unknown token status"
+# 2. Stored password out of date and token status unknown: refuse, change nothing.
+"$LAPS" -firstPass "$KNOWN2" -initialize >/dev/null 2>&1 || fail "-initialize for the out-of-date test"
+dscl . -passwd "/Users/$ACCT" "$KNOWN2" "$FIRST"          # keychain now holds an out-of-date password
+if MACOSLAPS_TEST_SECURETOKEN=unknown "$LAPS" -resetPassword >/dev/null 2>&1; then
+    fail "unknown token status reset over an out-of-date stored password"
+else
+    pass "unknown token status with an out-of-date stored password refuses"
+fi
+dscl . -authonly "$ACCT" "$FIRST" >/dev/null 2>&1 && pass "account untouched (unknown token, out-of-date keychain)" || fail "account changed (unknown token, out-of-date keychain)"
+# 3. Confirmed no token (real sysadminctl on the runner) and an out-of-date stored password: recover with a reset.
+if "$LAPS" -resetPassword >/dev/null 2>&1; then
+    RESET_PW=$(get_pw)
+    dscl . -authonly "$ACCT" "$RESET_PW" >/dev/null 2>&1 && pass "no token + out-of-date keychain recovers with a reset" || fail "reset password does not work"
+else
+    fail "no token + out-of-date keychain did not recover"
+fi
+[ -n "$SAVED_FIRSTPASS" ] && defaults write "$DOMAIN" FirstPass -string "$SAVED_FIRSTPASS"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["secureToken"] is False, d' \
+    && pass "-status reports secureToken false on the runner" || fail "-status secureToken value"
+echo "::endgroup::"
+
 echo "::group::-status"
 ST=$("$LAPS" -status)
 echo "$ST"

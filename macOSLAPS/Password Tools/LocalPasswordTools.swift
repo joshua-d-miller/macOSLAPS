@@ -47,32 +47,45 @@ class LocalTools: NSObject {
     /// Changes the local admin's password to `newPassword` and verifies it.
     /// Returns the previous password when known (used to revert). Exits on failure.
     class func changeAndVerify(record: ODRecord, to newPassword: String) -> String? {
-        let has_secure_token = Determine_secureToken()
+        let needs_old_password = Determine_secureToken()   // false only when confirmed DISABLED
         let (stored_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
         var previous_password : String? = stored_password
-
-        if has_secure_token {
-            // A secureToken account must be changed with its current password or it loses the token.
-            let source : String
-            if Constants.use_firstpass || stored_password == nil {
-                guard !Constants.first_password.isEmpty else {
-                    laps_log.print("\(Constants.local_admin) has a secureToken and there is no stored macOSLAPS password. Set FirstPass in your configuration or run macOSLAPS -firstPass <current password>.", .error)
-                    exit(1)
-                }
-                laps_log.print("Performing first password change using the FirstPass value.", .info)
+        var source = "the password stored in the keychain"
+        if Constants.use_firstpass || stored_password == nil {
+            if !Constants.first_password.isEmpty {
                 previous_password = Constants.first_password
                 source = "the FirstPass value"
-            } else {
-                source = "the password stored in the keychain"
+            }
+        }
+
+        if let old = previous_password {
+            // Change with the current password whenever we know it. That keeps a secureToken
+            // (and works the same for accounts without one).
+            if source == "the FirstPass value" {
+                laps_log.print("Performing first password change using the FirstPass value.", .info)
             }
             do {
-                try record.changePassword(previous_password, toPassword: newPassword)
+                try record.changePassword(old, toPassword: newPassword)
             } catch {
-                laps_log.print("Unable to change the password for \(Constants.local_admin) using \(source) (\(describe(error))). Make sure \(source) is the account's current password.", .error)
-                exit(1)
+                guard !needs_old_password else {
+                    laps_log.print("Unable to change the password for \(Constants.local_admin) using \(source) (\(describe(error))). Make sure \(source) is the account's current password.", .error)
+                    exit(1)
+                }
+                // Confirmed no secureToken: the known password is out of date, so a plain reset is safe.
+                laps_log.print("\(source.prefix(1).uppercased() + source.dropFirst()) no longer works for \(Constants.local_admin) (\(describe(error))). The account has no secureToken, so resetting it instead.", .warn)
+                previous_password = nil
+                do {
+                    try record.changePassword(nil, toPassword: newPassword)
+                } catch {
+                    laps_log.print("Unable to reset the password for \(Constants.local_admin) (\(describe(error))).", .error)
+                    exit(1)
+                }
             }
+        } else if needs_old_password {
+            laps_log.print("\(Constants.local_admin) has (or may have) a secureToken and there is no stored macOSLAPS password. Set FirstPass in your configuration or run macOSLAPS -firstPass <current password>. Nothing was changed.", .error)
+            exit(1)
         } else {
-            // No secureToken: a standard reset as root does not need the old password.
+            // Confirmed no secureToken and no known password: a reset as root is safe.
             do {
                 try record.changePassword(nil, toPassword: newPassword)
             } catch {

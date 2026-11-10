@@ -63,7 +63,11 @@ enum Status {
                 isAdmin = (try? admins.isMemberRecord(user)) != nil
             }
             hidden = ((try? record?.values(forAttribute: "dsAttrTypeNative:IsHidden"))?.first as? String).map { $0 == "1" || $0.uppercased() == "YES" } ?? false
-            token = shell("/usr/sbin/sysadminctl", ["-secureTokenStatus", account]).contains("ENABLED")
+            switch secureTokenStatus(for: account) {
+            case .enabled: token = true
+            case .disabled: token = false
+            case .unknown: token = nil
+            }
         }
         let fv = shell("/usr/bin/fdesetup", ["status"]).contains("FileVault is On")
         let prk = shell("/usr/bin/profiles", ["show", "-type", "configuration"]).contains("com.apple.security.FDERecoveryKeyEscrow")
@@ -141,7 +145,9 @@ enum Status {
         if report.accountExists {
             line(report.accountIsAdmin, "\(report.account) is an administrator", "Add it to the admin group.")
             print("ℹ️  Hidden from the login window: \(report.accountHidden == true ? "yes" : "no")")
-            if report.secureToken == true {
+            if report.secureToken == nil {
+                warnLine("Could not determine whether \(report.account) has a secureToken; rotation will require the current password.")
+            } else if report.secureToken == true {
                 line(true, "\(report.account) has a secureToken (rotation needs the current password)")
             } else {
                 warnLine("\(report.account) has no secureToken: it can't unlock FileVault, but rotation is a simple reset.")
