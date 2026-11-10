@@ -16,7 +16,11 @@ name: Build & Test
 on:
   push:
     branches: [master]
-    tags: ['v*', '[0-9]*.[0-9]*.[0-9]*(*)']   # release tags look like 4.0.0(846)
+    tags: ['v*']
+  release:
+    # Publish a (pre)release on GitHub with a new tag such as 4.0.0(846); this
+    # workflow builds that commit, tests it and attaches the signed pkg and notes.
+    types: [published]
   pull_request:
   workflow_dispatch:
 
@@ -231,7 +235,7 @@ jobs:
 
   release:
     needs: [generator-tests, build, smoke-test]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -256,6 +260,14 @@ jobs:
           if [ "$SIGNED" != "true" ]; then
             printf '\n**UNSIGNED TEST BUILD.** Install with `sudo installer -pkg <file> -target /`. Not for production.\n' >> notes.md
           fi
-          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease \
-            --title "macOSLAPS ${short} Build ${build}" --notes-file notes.md \
-            artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt
+          tag="$GITHUB_REF_NAME"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "macOSLAPS ${short} Build ${build}" --notes-file notes.md
+            gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
+              artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt
+          else
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --prerelease \
+              --title "macOSLAPS ${short} Build ${build}" --notes-file notes.md \
+              artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt
+          fi
