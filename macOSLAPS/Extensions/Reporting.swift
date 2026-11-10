@@ -187,6 +187,8 @@ enum InventoryHook {
 
     /// Runs the configured hook (if any) and waits up to `timeout` seconds. Never fatal.
     static func run(reason: String, timeout: TimeInterval = 300) {
+        // The rotation is finished; don't make other runs wait for the hook.
+        RunLock.release()
         if Constants.inside_hook { return }
         let mode = (GetPreference(preference_key: "InventoryHook") as? String ?? "")
             .trimmingCharacters(in: .whitespaces).lowercased()

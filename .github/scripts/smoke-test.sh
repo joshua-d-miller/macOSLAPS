@@ -340,6 +340,20 @@ rm -f /tmp/laps-hook-ran
 defaults write "$DOMAIN" InventoryHook -string custom
 defaults write "$DOMAIN" InventoryHookCommand -array /usr/bin/touch /tmp/laps-hook-ran
 "$LAPS" -resetPassword >/dev/null 2>&1 && [ -f /tmp/laps-hook-ran ] && pass "custom hook ran after rotation" || fail "custom hook did not run"
+# A slow hook must not hold the run lock: a second run starts while the hook sleeps.
+defaults write "$DOMAIN" InventoryHookCommand -array /bin/sleep 30
+"$LAPS" -resetPassword >/dev/null 2>&1 &
+SLOW_PID=$!
+sleep 6
+T0=$(date +%s)
+defaults write "$DOMAIN" InventoryHook -string ""          # the second run itself skips the hook
+"$LAPS" -resetPassword >/dev/null 2>&1; RC=$?
+ELAPSED=$(( $(date +%s) - T0 ))
+[ "$RC" -eq 0 ] && [ "$ELAPSED" -lt 15 ] && pass "a second run isn't blocked by a slow hook (${ELAPSED}s)" || fail "second run waited ${ELAPSED}s (exit $RC) for the first run's hook"
+kill "$SLOW_PID" 2>/dev/null; pkill -f "/bin/sleep 30" 2>/dev/null; wait "$SLOW_PID" 2>/dev/null
+defaults write "$DOMAIN" InventoryHook -string custom
+defaults write "$DOMAIN" InventoryHookCommand -array /usr/bin/touch /tmp/laps-hook-ran
+dscl . -authonly "$ACCT" "$(get_pw)" >/dev/null 2>&1 && pass "account and keychain agree after overlapping runs" || fail "account and keychain disagree after overlapping runs"
 # A hook that calls macOSLAPS -resetPassword again (as a recon-triggered script might) must not loop.
 cat > /tmp/laps-hook.sh <<HOOK
 #!/bin/sh

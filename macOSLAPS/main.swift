@@ -63,11 +63,19 @@ func verify_root() {
 /// Only one macOSLAPS run may rotate at a time. The LaunchDaemon, an MDM script and an
 /// installer's kickstart can all start a run within the same second; without this, two
 /// rotations could interleave and leave the keychain and the account disagreeing.
-/// The lock is released when the process exits.
+/// The lock is released when the process exits, or earlier with release() (before the
+/// inventory hook runs, so a slow hook doesn't hold up other runs). O_CLOEXEC keeps
+/// child processes (the hook, system tools) from inheriting it.
 enum RunLock {
     private static var descriptor : Int32 = -1
+    static func release() {
+        guard descriptor >= 0 else { return }
+        flock(descriptor, LOCK_UN)
+        close(descriptor)
+        descriptor = -1
+    }
     static func acquire(wait: TimeInterval = 120) {
-        descriptor = open("/var/run/macOSLAPS.lock", O_CREAT | O_RDWR, 0o600)
+        descriptor = open("/var/run/macOSLAPS.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
         guard descriptor >= 0 else { return }   // no lock file: behave as before
         if flock(descriptor, LOCK_EX | LOCK_NB) == 0 { return }
         laps_log.print("Another macOSLAPS run is in progress. Waiting for it to finish...", .info)
