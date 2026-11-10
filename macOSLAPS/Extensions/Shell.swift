@@ -4,31 +4,79 @@
 ///
 ///  Created by Joshua D. Miller on 2/21/21.
 ///
+///  Last updated November 10, 2026
 ///
+///  Runs a system tool (sysadminctl, fdesetup, profiles, ...) and returns its output.
+///  Output is read while the tool runs, so tools that print more than the pipe
+///  buffer (64 KB) can't deadlock, and every call has a timeout so a stuck tool
+///  can never hang macOSLAPS (or the MDM inventory script that called it).
 
 import Foundation
 
-// Set up a function to run bash commands so we
-// can run fdesetup - From StackOverflow
-// https://stackoverflow.com/questions/26971240/how-do-i-run-an-terminal-command-in-a-swift-script-e-g-xcodebuild
 class Shell: NSObject {
-    class func run(launchPath: String, arguments: [String]) -> String {
+    struct Result {
+        let status: Int32
+        let output: String
+        let timedOut: Bool
+    }
+
+    /// Runs `launchPath` with `arguments`, capturing stdout and stderr together.
+    /// Returns status -1 if the tool couldn't be started or timed out.
+    class func execute(launchPath: String, arguments: [String], timeout: TimeInterval = 60) -> Result {
         let task = Process()
-        task.launchPath = launchPath
+        task.executableURL = URL(fileURLWithPath: launchPath)
         task.arguments = arguments
-        
         let pipe = Pipe()
         task.standardOutput = pipe
         task.standardError = pipe
-        task.launch()
-        task.waitUntilExit()
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: String.Encoding.utf8)!
-        if output.count > 0 {
-            //remove newline character.
-            let lastIndex = output.index(before: output.endIndex)
-            return String(output[output.startIndex ..< lastIndex])
+        task.standardInput = FileHandle.nullDevice
+
+        do {
+            try task.run()
+        } catch {
+            return Result(status: -1, output: "", timedOut: false)
         }
-        return output
+
+        // Drain the pipe on another thread while the tool runs.
+        var data = Data()
+        let reader = DispatchGroup()
+        reader.enter()
+        DispatchQueue.global(qos: .utility).async {
+            data = pipe.fileHandleForReading.readDataToEndOfFile()
+            reader.leave()
+        }
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while task.isRunning && Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        var timedOut = false
+        if task.isRunning {
+            timedOut = true
+            task.terminate()
+            Thread.sleep(forTimeInterval: 0.5)
+            if task.isRunning { kill(task.processIdentifier, SIGKILL) }
+        }
+        task.waitUntilExit()
+        // The write end closes when the tool exits; give the reader a moment to finish.
+        _ = reader.wait(timeout: .now() + 5)
+
+        var output = String(decoding: data, as: UTF8.self)
+        if output.hasSuffix("\n") { output.removeLast() }
+        return Result(status: timedOut ? -1 : task.terminationStatus, output: output, timedOut: timedOut)
     }
+
+    /// Output only (the original API). Empty string if the tool failed to start or timed out.
+    class func run(launchPath: String, arguments: [String], timeout: TimeInterval = 60) -> String {
+        let result = execute(launchPath: launchPath, arguments: arguments, timeout: timeout)
+        if result.timedOut {
+            laps_log_shell_timeout(launchPath, timeout)
+        }
+        return result.output
+    }
+}
+
+/// Logging hook kept separate so Shell.swift also compiles in the standalone tests.
+var laps_log_shell_timeout: (String, TimeInterval) -> Void = { path, timeout in
+    FileHandle.standardError.write("Warning: \(path) did not finish within \(Int(timeout)) seconds and was stopped.\n".data(using: .utf8)!)
 }

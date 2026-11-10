@@ -106,6 +106,9 @@ func initializeWithoutRotating() -> Never {
     exit(0)
 }
 func macOSLAPS() {
+    laps_log_shell_timeout = { path, timeout in
+        laps_log.print("\(path) did not finish within \(Int(timeout)) seconds and was stopped.", .warn)
+    }
     // -version and -help must print exactly their own output and touch nothing else:
     // MDM scripts parse `macOSLAPS -version`.
     if Constants.arguments.contains("-version") {

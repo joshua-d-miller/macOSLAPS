@@ -42,6 +42,10 @@ jobs:
         run: |
           swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
           ./generator-tests
+      - name: Compile and run shell helper tests
+        run: |
+          swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests
+          ./shell-tests
 
   build:
     runs-on: macos-26
