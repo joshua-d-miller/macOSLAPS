@@ -43,8 +43,10 @@ jobs:
         run: |
           swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
           ./generator-tests
-      - name: Lint the example settings and LaunchDaemon plists
-        run: plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist
+      - name: Lint the example settings, LaunchDaemon plists and install scripts
+        run: |
+          plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist
+          for f in packaging/*.sh packaging/*-scripts/*; do bash -n "$f" || exit 1; done
       - name: Compile and run shell helper tests
         run: |
           swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests
@@ -184,8 +186,9 @@ jobs:
           # from CFBundleIdentifier), and the legacy migration helper in Contents/Helpers,
           # signed edu.psu.macOSLAPS: the only identity the 3.x / 845 keychain items trust.
           APP=build/app/macOSLAPS.app
-          rm -rf build/app; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
+          rm -rf build/app; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
           cp "$BIN" "$APP/Contents/MacOS/macOSLAPS"
+          install -m 755 packaging/uninstall.sh "$APP/Contents/Resources/uninstall.sh"
           if [ "$SIGNED" = "true" ]; then
             cp build/helper/macOSLAPS-legacy "$APP/Contents/Helpers/macOSLAPS-legacy"
             sign=(--sign "$APP_ID" --timestamp)
@@ -273,9 +276,8 @@ jobs:
           VERSION: ${{ steps.binary.outputs.version }}
           SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
-          # Three packages with the same receipts as earlier releases: full, binary only,
-          # LaunchDaemon only. The app goes to /Applications with a symlink at the old
-          # path. See packaging/build-pkgs.sh.
+          # Three packages: full, app only, LaunchDaemon only. The app goes to /Applications
+          # with a symlink at the old path. See packaging/build-pkgs.sh.
           if [ "$SIGNED" = "true" ]; then
             pkg=$(bash packaging/build-pkgs.sh "$APP" "$VERSION" dist "$INST_ID" "$KC" | tail -1)
           else

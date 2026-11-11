@@ -30,6 +30,35 @@
 import Foundation
 import OpenDirectory
 
+/// Paths inside macOSLAPS.app, found from the running executable.
+enum AppBundle {
+    /// The path this process was started with (not resolved: /usr/local/laps/macOSLAPS
+    /// when started through the old symlink).
+    static var launchPath : String? {
+        var size : UInt32 = 0
+        _ = _NSGetExecutablePath(nil, &size)
+        var buffer = [CChar](repeating: 0, count: Int(size) + 1)
+        guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
+        return String(cString: buffer)
+    }
+    static let installedExecutable = "/Applications/macOSLAPS.app/Contents/MacOS/macOSLAPS"
+    static let legacyPath = "/usr/local/laps/macOSLAPS"
+
+    /// Started through /usr/local/laps (deprecated; the symlink is removed in 5.0).
+    static var startedFromLegacyPath : Bool {
+        launchPath.map { $0.hasPrefix("/usr/local/laps/") } ?? false
+    }
+
+    /// `relative` under the bundle's Contents directory, if it exists and is executable.
+    static func executable(_ relative: String) -> String? {
+        guard let launch = launchPath else { return nil }
+        let contents = URL(fileURLWithPath: launch).resolvingSymlinksInPath()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let path = contents.appendingPathComponent(relative).path
+        return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+    }
+}
+
 enum Migration {
     static let exportNameFile = "/var/root/.GeneratedLAPSServiceName"
     static let plaintextPassword = "/var/root/Library/Application Support/macOSLAPS-password"
@@ -46,17 +75,9 @@ enum Migration {
 
     // MARK: Helper
 
-    /// Contents/Helpers/macOSLAPS-legacy next to this executable (symlinks resolved, so
-    /// running /usr/local/laps/macOSLAPS finds it too).
+    /// Contents/Helpers/macOSLAPS-legacy in this app bundle.
     static func helperPath() -> String? {
-        var size : UInt32 = 0
-        _ = _NSGetExecutablePath(nil, &size)
-        var buffer = [CChar](repeating: 0, count: Int(size) + 1)
-        guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
-        let executable = URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath()
-        let helper = executable.deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Helpers/macOSLAPS-legacy")
-        return FileManager.default.isExecutableFile(atPath: helper.path) ? helper.path : nil
+        AppBundle.executable("Helpers/macOSLAPS-legacy")
     }
 
     struct HelperResult {

@@ -16,6 +16,9 @@ FIRST='Initial-Pass-1234'
 DOMAIN=/Library/Preferences/edu.psu.macoslaps
 SYSKC=/Library/Keychains/System.keychain
 SVC=com.joshua-d-miller.macoslaps
+LABEL=com.joshua-d-miller.macoslaps-check
+PLIST=/Library/LaunchDaemons/$LABEL.plist
+NEW_RECEIPTS="com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps-check "
 REPO=$(cd "$(dirname "$0")/../.." && pwd)
 FAILURES=0
 
@@ -25,11 +28,13 @@ fail() { echo "::error::FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 fatal() { echo "::error::FATAL: $*"; exit 1; }
 stop_daemon() {
     # Let a run started by the installer's kickstart finish first (it may be migrating).
-    for _ in $(seq 1 60); do
-        launchctl print system/edu.psu.macoslaps-check 2>/dev/null | grep -q "state = running" || break
-        sleep 1
+    for label in "$LABEL" edu.psu.macoslaps-check; do
+        for _ in $(seq 1 60); do
+            launchctl print "system/$label" 2>/dev/null | grep -q "state = running" || break
+            sleep 1
+        done
+        launchctl bootout "system/$label" 2>/dev/null || true
     done
-    launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null || true
 }
 status_field() { "$LAPS" -status | python3 -c 'import json,sys; v=json.load(sys.stdin).get(sys.argv[1]); print("" if v is None else str(v).lower() if isinstance(v,bool) else v)' "$1"; }
 comment_of() { security find-generic-password -s "$1" "$SYSKC" 2>/dev/null | grep '"icmt"'; }
@@ -68,10 +73,13 @@ echo "::endgroup::"
 
 echo "::group::Upgrade in place"
 installer -pkg "$NEW_FULL" -target / || fatal "new package did not install over the previous release"
-launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && pass "LaunchDaemon loaded after upgrade" || fail "LaunchDaemon not loaded after upgrade"
+launchctl print system/$LABEL >/dev/null 2>&1 && pass "new LaunchDaemon $LABEL loaded after upgrade" || fail "LaunchDaemon not loaded after upgrade"
+launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && fail "old LaunchDaemon edu.psu.macoslaps-check still loaded" || pass "old LaunchDaemon unloaded"
+[ ! -e /Library/LaunchDaemons/edu.psu.macoslaps-check.plist ] && pass "old LaunchDaemon plist removed" || fail "old LaunchDaemon plist left behind"
+[ -L /usr/local/laps/macOSLAPS ] && pass "the old binary was replaced by the symlink" || fail "/usr/local/laps/macOSLAPS is not a symlink"
 stop_daemon
 RECEIPTS=$(pkgutil --pkgs | grep -i laps | sort | tr '\n' ' ')
-[ "$RECEIPTS" = "edu.psu.macOSLAPS edu.psu.macOSLAPS-check " ] && pass "same two receipts as before, no extras" || fail "receipts after upgrade: $RECEIPTS"
+[ "$RECEIPTS" = "$NEW_RECEIPTS" ] && pass "receipts switched, old ones forgotten" || fail "receipts after upgrade: $RECEIPTS"
 [ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps present" || fail "/etc/paths.d/laps missing"
 NEW_VERSION=$("$LAPS" -version 2>/dev/null)
 re='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
@@ -172,17 +180,17 @@ echo "::endgroup::"
 echo "::group::Binary-only and LaunchDaemon-only packages"
 installer -pkg "$NEW_BIN" -target / && pass "Binary package installs" || fail "Binary package failed"
 installer -pkg "$NEW_LD" -target / && pass "LaunchDaemon package installs" || fail "LaunchDaemon package failed"
-launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && pass "LaunchDaemon loaded by the LD package" || fail "LaunchDaemon not loaded by the LD package"
+launchctl print system/$LABEL >/dev/null 2>&1 && pass "LaunchDaemon loaded by the LD package" || fail "LaunchDaemon not loaded by the LD package"
 stop_daemon
 RECEIPTS=$(pkgutil --pkgs | grep -i laps | sort | tr '\n' ' ')
-[ "$RECEIPTS" = "edu.psu.macOSLAPS edu.psu.macOSLAPS-check " ] && pass "receipts unchanged" || fail "receipts: $RECEIPTS"
+[ "$RECEIPTS" = "$NEW_RECEIPTS" ] && pass "receipts unchanged" || fail "receipts: $RECEIPTS"
 
 # Installer choices: same IDs as 845, and turning off installer_choice_2 skips the LaunchDaemon.
 installer -showChoicesXML -pkg "$NEW_FULL" -target / > /tmp/laps-choices.xml 2>/dev/null
 for c in installer_choice_1 installer_choice_2; do
     grep -q "<string>$c</string>" /tmp/laps-choices.xml && pass "full pkg has choice $c" || fail "full pkg is missing choice $c"
 done
-stop_daemon; rm -f /Library/LaunchDaemons/edu.psu.macoslaps-check.plist; pkgutil --forget edu.psu.macOSLAPS-check >/dev/null 2>&1
+stop_daemon; rm -f "$PLIST"; pkgutil --forget "$LABEL" >/dev/null 2>&1
 cat > /tmp/laps-skip-daemon.xml <<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -194,7 +202,7 @@ cat > /tmp/laps-skip-daemon.xml <<'XML'
 XML
 installer -pkg "$NEW_FULL" -applyChoiceChangesXML /tmp/laps-skip-daemon.xml -target / >/dev/null \
     && pass "full pkg installs with installer_choice_2 turned off" || fail "install with choice changes failed"
-[ ! -f /Library/LaunchDaemons/edu.psu.macoslaps-check.plist ] && ! pkgutil --pkgs | grep -qx edu.psu.macOSLAPS-check \
+[ ! -f "$PLIST" ] && ! pkgutil --pkgs | grep -qx "$LABEL" \
     && pass "LaunchDaemon skipped when installer_choice_2 is off" || fail "LaunchDaemon was installed despite installer_choice_2 off"
 [ -x "$LAPS" ] && pass "binary installed with the daemon skipped" || fail "binary missing after choice install"
 if [ "$SIGNED" = "true" ]; then

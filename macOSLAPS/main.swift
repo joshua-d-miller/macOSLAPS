@@ -41,7 +41,7 @@ struct Constants {
     static var inside_hook : Bool = false
 }
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge"]
 /// Version with build number, e.g. 4.0.0.868, so testers can tell builds apart
 /// and version comparisons (sort -V, is-at-least) order builds correctly.
 func fullVersion() -> String {
@@ -88,6 +88,22 @@ enum RunLock {
             Thread.sleep(forTimeInterval: 0.5)
         }
     }
+}
+/// -uninstall [-purge]: runs Contents/Resources/uninstall.sh from the app bundle.
+func uninstall(purge: Bool) -> Never {
+    guard let script = AppBundle.executable("Resources/uninstall.sh") else {
+        laps_log.print("uninstall.sh was not found in the macOSLAPS app bundle.", .error)
+        exit(1)
+    }
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/bin/bash")
+    task.arguments = [script] + (purge ? ["--purge"] : [])
+    do { try task.run() } catch {
+        laps_log.print("Unable to run \(script): \(error.localizedDescription)", .error)
+        exit(1)
+    }
+    task.waitUntilExit()
+    exit(task.terminationStatus)
 }
 /// -initialize (#88): adopt the current password without rotating it.
 func initializeWithoutRotating() -> Never {
@@ -217,6 +233,10 @@ func macOSLAPS() {
     // the migration sources). -firstPass and -initialize are how a Mac recovers when
     // migration is required, and -status reports it, so those runs continue.
     let args = Set(Constants.arguments)
+    if args.contains("-uninstall") {
+        verify_root()
+        uninstall(purge: args.contains("-purge"))
+    }
     if NSUserName() == "root" && args.isDisjoint(with: ["-showconfig", "-help"]) {
         let reporting = args.contains("-status")
         let recovering = args.contains("-firstpass") || args.contains("-initialize")
@@ -324,6 +344,11 @@ func macOSLAPS() {
                                     The first rotation then happens after
                                     DaysTillExpiration (#88).
 
+                  -uninstall        Removes macOSLAPS (app, LaunchDaemon, symlink,
+                                    receipts). The stored password is kept so a
+                                    reinstall continues; add -purge to delete it and
+                                    the state too (make sure your MDM has it first).
+
                   -showconfig       Prints the settings macOSLAPS will use, which
                                     preference domain they came from, and whether
                                     each key is managed, set, or a default.
@@ -359,6 +384,9 @@ func macOSLAPS() {
         exit(0)
     }
     verify_root()
+    if AppBundle.startedFromLegacyPath {
+        laps_log.print("\(AppBundle.legacyPath) is deprecated and is removed in macOSLAPS 5.0. Use \(AppBundle.installedExecutable) (the LaunchDaemon already does).", .warn)
+    }
     RunLock.acquire()
     RunState.begin()
     if Constants.initialize {

@@ -1,6 +1,5 @@
 #!/bin/bash
-# Builds the three macOSLAPS installer packages, with the same receipts as every
-# release since 3.x so upgrades replace them:
+# Builds the three macOSLAPS installer packages:
 #
 #   macOSLAPS-<version>.pkg         app + /etc/paths.d/laps + LaunchDaemon
 #   macOSLAPS-Binary-<version>.pkg  app + /etc/paths.d/laps only
@@ -9,8 +8,9 @@
 # The app installs to /Applications/macOSLAPS.app; /usr/local/laps/macOSLAPS is a
 # symlink to its executable through 4.x, so existing scripts and the LaunchDaemon keep
 # working.
-# Receipts: edu.psu.macOSLAPS (app) and edu.psu.macOSLAPS-check (LaunchDaemon).
-# (The receipts and the LaunchDaemon label switch in checklist step 23.)
+# Receipts: com.joshua-d-miller.macoslaps (app) and com.joshua-d-miller.macoslaps-check
+# (LaunchDaemon). The postinstall scripts forget the 3.x / 845 receipts
+# (edu.psu.macOSLAPS, edu.psu.macOSLAPS-check) and remove the old LaunchDaemon.
 #
 # Usage: build-pkgs.sh <macOSLAPS.app> <version> <outdir> [<Developer ID Installer identity> <keychain>]
 # Prints the file name of the full package on the last line.
@@ -47,19 +47,20 @@ for c in components:
 plistlib.dump(components, open(path, "wb"))
 print("components:", [c.get("RootRelativeBundlePath") for c in components], file=sys.stderr)
 PY
-pkgbuild --root "$root" --component-plist "$WORK/components.plist" --identifier edu.psu.macOSLAPS --version "$VERSION" \
-    --install-location / --ownership recommended "$WORK/components/macOSLAPS.pkg" >&2
+pkgbuild --root "$root" --component-plist "$WORK/components.plist" --identifier com.joshua-d-miller.macoslaps --version "$VERSION" \
+    --scripts "$HERE/app-scripts" --install-location / --ownership recommended "$WORK/components/macoslaps.pkg" >&2
 
 # --- component: LaunchDaemon ---
 root="$WORK/root-daemon"
 mkdir -p "$root/Library/LaunchDaemons"
-cp "$REPO/LaunchDaemon/edu.psu.macoslaps-check.plist" "$root/Library/LaunchDaemons/"
-chmod 644 "$root/Library/LaunchDaemons/edu.psu.macoslaps-check.plist"
-plutil -lint "$root/Library/LaunchDaemons/edu.psu.macoslaps-check.plist" >&2
-chmod 755 "$HERE/daemon-scripts/preinstall" "$HERE/daemon-scripts/postinstall"
-pkgbuild --root "$root" --identifier edu.psu.macOSLAPS-check --version "$VERSION" \
+DAEMON=com.joshua-d-miller.macoslaps-check.plist
+cp "$REPO/LaunchDaemon/$DAEMON" "$root/Library/LaunchDaemons/"
+chmod 644 "$root/Library/LaunchDaemons/$DAEMON"
+plutil -lint "$root/Library/LaunchDaemons/$DAEMON" >&2
+chmod 755 "$HERE/app-scripts/postinstall" "$HERE/daemon-scripts/preinstall" "$HERE/daemon-scripts/postinstall"
+pkgbuild --root "$root" --identifier com.joshua-d-miller.macoslaps-check --version "$VERSION" \
     --scripts "$HERE/daemon-scripts" --install-location / --ownership recommended \
-    "$WORK/components/macOSLAPS-check.pkg" >&2
+    "$WORK/components/macoslaps-check.pkg" >&2
 
 # --- distributions ---
 distribution() {   # distribution <title> <pkg-ref id>...
@@ -82,21 +83,21 @@ distribution() {   # distribution <title> <pkg-ref id>...
         echo '    </choice>'
     done
     for id in "$@"; do
-        echo "    <pkg-ref id=\"$id\" version=\"$VERSION\" onConclusion=\"none\">${id#edu.psu.}.pkg</pkg-ref>"
+        echo "    <pkg-ref id=\"$id\" version=\"$VERSION\" onConclusion=\"none\">${id#com.joshua-d-miller.}.pkg</pkg-ref>"
     done
     echo '</installer-gui-script>'
 }
 
 choice_id() {      # stable choice IDs, matching earlier releases
     case $1 in
-        edu.psu.macOSLAPS)       echo installer_choice_1 ;;
-        edu.psu.macOSLAPS-check) echo installer_choice_2 ;;
+        com.joshua-d-miller.macoslaps)       echo installer_choice_1 ;;
+        com.joshua-d-miller.macoslaps-check) echo installer_choice_2 ;;
     esac
 }
 choice_title() {
     case $1 in
-        edu.psu.macOSLAPS)       echo "macOSLAPS" ;;
-        edu.psu.macOSLAPS-check) echo "LaunchDaemon" ;;
+        com.joshua-d-miller.macoslaps)       echo "macOSLAPS" ;;
+        com.joshua-d-miller.macoslaps-check) echo "LaunchDaemon" ;;
     esac
 }
 
@@ -118,7 +119,7 @@ product() {        # product <output name> <title> <pkg-ref id>...
 suffix=""; [ -n "$IDENTITY" ] || suffix="-UNSIGNED-TEST"
 full="macOSLAPS-$VERSION$suffix.pkg"
 # The binary is installed first so the LaunchDaemon's postinstall can start it.
-product "$full"                                 "macOSLAPS"              edu.psu.macOSLAPS edu.psu.macOSLAPS-check
-product "macOSLAPS-Binary-$VERSION$suffix.pkg"  "macOSLAPS (binary only)" edu.psu.macOSLAPS
-product "macOSLAPS-LD-$VERSION$suffix.pkg"      "macOSLAPS LaunchDaemon"  edu.psu.macOSLAPS-check
+product "$full"                                 "macOSLAPS"              com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps-check
+product "macOSLAPS-Binary-$VERSION$suffix.pkg"  "macOSLAPS (app only)"   com.joshua-d-miller.macoslaps
+product "macOSLAPS-LD-$VERSION$suffix.pkg"      "macOSLAPS LaunchDaemon" com.joshua-d-miller.macoslaps-check
 echo "$full"

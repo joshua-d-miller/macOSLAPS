@@ -13,6 +13,8 @@ LAPS=/usr/local/laps/macOSLAPS
 APP=/Applications/macOSLAPS.app
 # Keychain service of the stored password (4.0 identity; 3.x/845 used "macOSLAPS").
 KCSVC=com.joshua-d-miller.macoslaps
+LABEL=com.joshua-d-miller.macoslaps-check
+PLIST=/Library/LaunchDaemons/$LABEL.plist
 ACCT=lapstest
 FIRST='Initial-Pass-1234'
 LEN=16
@@ -36,11 +38,12 @@ codesign -dv --verbose=2 "$LAPS" 2>&1 | grep -E "Identifier|Authority|Signature|
 echo "::endgroup::"
 
 echo "::group::Installed layout matches earlier releases"
-launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && pass "LaunchDaemon loaded by the installer" || fail "LaunchDaemon not loaded after install"
-pkgutil --pkg-info edu.psu.macOSLAPS >/dev/null 2>&1 && pass "receipt edu.psu.macOSLAPS" || fail "receipt edu.psu.macOSLAPS missing"
-pkgutil --pkg-info edu.psu.macOSLAPS-check >/dev/null 2>&1 && pass "receipt edu.psu.macOSLAPS-check" || fail "receipt edu.psu.macOSLAPS-check missing"
+launchctl print system/$LABEL >/dev/null 2>&1 && pass "LaunchDaemon $LABEL loaded by the installer" || fail "LaunchDaemon not loaded after install"
+RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
+[ "$RECEIPTS" = "com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps-check " ] && pass "receipts com.joshua-d-miller.macoslaps and -check" || fail "receipts: $RECEIPTS"
+/usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" | grep -qx "$APP/Contents/MacOS/macOSLAPS" && pass "LaunchDaemon runs the app directly" || fail "LaunchDaemon program: $(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$PLIST")"
 [ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps" || fail "/etc/paths.d/laps missing or wrong"
-[ "$(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)"
+[ "$(stat -f '%Su:%Sg %Lp' "$PLIST")" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' "$PLIST")"
 [ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
 [ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
 [ "$(readlink "$LAPS")" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "$LAPS is a symlink into the app" || fail "$LAPS -> $(readlink "$LAPS")"
@@ -49,7 +52,7 @@ codesign --verify --strict --deep "$APP" && pass "installed app's signature is v
 echo "::endgroup::"
 
 # Stop the daemon the pkg loaded so it can't race the test.
-launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null || true
+launchctl bootout system/$LABEL 2>/dev/null || true
 
 # `macOSLAPS -version` is parsed by MDM scripts: exactly one line, the version, nothing else,
 # in every state (as a user, as root, with a legacy-domain config and an export pending).
@@ -240,6 +243,9 @@ echo "::group::-status records the last run; failed password checks are not repe
 "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["migration"]=="none" and "migratedAt" not in d, d' \
     && pass "-status: nothing to migrate on a fresh install" || fail "-status migration on a fresh install: $("$LAPS" -status)"
 security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "a fresh install created a legacy macOSLAPS item" || pass "no legacy keychain item on a fresh install"
+OUT=$("$LAPS" 2>&1); echo "$OUT" | grep -q "is deprecated" && pass "running from /usr/local/laps logs a deprecation notice" || fail "no deprecation notice for /usr/local/laps: $OUT"
+OUT=$("$APP/Contents/MacOS/macOSLAPS" 2>&1); echo "$OUT" | grep -q "is deprecated" && fail "deprecation notice when run from the app" || pass "no deprecation notice when run from the app"
+OUT=$("$LAPS" -status 2>&1); echo "$OUT" | grep -q "is deprecated" && fail "-status output carries the deprecation notice" || pass "-status output has no deprecation notice"
 # Keychain and account disagree: the first check fails, later ones reuse that result
 # instead of adding a failed login each time.
 GOOD=$(get_pw)
@@ -508,6 +514,21 @@ if [ "$HAS_TOKEN" -eq 1 ]; then
 else
     echo "::notice::Test account has no secureToken on this runner; secureToken path needs community testing."
 fi
+
+echo "::group::-uninstall keeps the password, uninstall.sh --purge removes it"
+KEPT=$(get_pw 2>/dev/null)
+cp "$APP/Contents/Resources/uninstall.sh" /tmp/laps-uninstall.sh
+"$LAPS" -uninstall && pass "-uninstall exited 0" || fail "-uninstall failed"
+[ ! -e "$APP" ] && [ ! -e "$LAPS" ] && [ ! -L "$LAPS" ] && [ ! -e /etc/paths.d/laps ] && [ ! -e "$PLIST" ] \
+    && pass "app, symlink, paths.d and LaunchDaemon removed" || fail "files left after -uninstall: $(ls -d "$APP" "$LAPS" /etc/paths.d/laps "$PLIST" 2>/dev/null | tr '\n' ' ')"
+launchctl print system/$LABEL >/dev/null 2>&1 && fail "LaunchDaemon still loaded after -uninstall" || pass "LaunchDaemon unloaded"
+[ -z "$(pkgutil --pkgs | grep -i laps)" ] && pass "receipts forgotten" || fail "receipts left: $(pkgutil --pkgs | grep -i laps | tr '\n' ' ')"
+security find-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1 && pass "stored password kept without -purge" || fail "-uninstall deleted the stored password"
+dscl . -authonly "$ACCT" "$KEPT" >/dev/null 2>&1 && pass "account untouched by -uninstall" || fail "account changed by -uninstall"
+bash /tmp/laps-uninstall.sh --purge && pass "uninstall.sh --purge exited 0" || fail "uninstall.sh --purge failed"
+security find-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1 && fail "stored password left after --purge" || pass "stored password deleted by --purge"
+[ ! -e /var/db/macoslaps ] && pass "state removed by --purge" || fail "/var/db/macoslaps left after --purge"
+echo "::endgroup::"
 
 echo "----"
 if [ "$FAILURES" -gt 0 ]; then

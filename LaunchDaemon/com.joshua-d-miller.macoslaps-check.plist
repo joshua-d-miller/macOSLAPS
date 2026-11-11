@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>edu.psu.macoslaps-check</string>
+  <string>com.joshua-d-miller.macoslaps-check</string>
   <key>AssociatedBundleIdentifiers</key>
   <array>
     <string>com.joshua-d-miller.macoslaps</string>
-    <string>edu.psu.macOSLAPS</string>
-    <string>edu.psu.macoslaps-check</string>
   </array>
   <key>ProgramArguments</key>
   <array>
-    <string>/usr/local/laps/macOSLAPS</string>
+    <string>/Applications/macOSLAPS.app/Contents/MacOS/macOSLAPS</string>
   </array>
+  <key>RunAtLoad</key>
+  <true/>
   <key>ExitTimeOut</key>
   <integer>120</integer>
   <key>StartInterval</key>

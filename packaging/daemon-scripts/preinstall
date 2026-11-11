@@ -1,12 +1,17 @@
 #!/bin/sh
-# macOSLAPS LaunchDaemon preinstall: unload and remove the existing LaunchDaemon
-# so the new one can be installed. (Original by Richard Purves, github.com/franton.)
-LAPS_DAEMON="/Library/LaunchDaemons/edu.psu.macoslaps-check.plist"
-
-if [ -f "$LAPS_DAEMON" ]; then
-    /bin/launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null
-    /bin/rm -f "$LAPS_DAEMON"
-    # Let launchd settle before the new plist is bootstrapped.
-    sleep 3
-fi
+# macOSLAPS LaunchDaemon preinstall: unload and remove the existing LaunchDaemon(s),
+# the current one and the one from 3.x / 4.0.0 (845), so the new one can be installed.
+# (Original by Richard Purves, github.com/franton.)
+[ "$3" = "/" ] || [ -z "$3" ] || exit 0
+removed=0
+for label in com.joshua-d-miller.macoslaps-check edu.psu.macoslaps-check; do
+    plist="/Library/LaunchDaemons/$label.plist"
+    /bin/launchctl bootout "system/$label" 2>/dev/null && removed=1
+    if [ -f "$plist" ]; then
+        /bin/rm -f "$plist"
+        removed=1
+    fi
+done
+# Let launchd settle before the new plist is bootstrapped.
+[ "$removed" = 1 ] && sleep 3
 exit 0

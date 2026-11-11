@@ -1,0 +1,8 @@
+#!/bin/sh
+# macOSLAPS app postinstall: the app now has its own receipt
+# (com.joshua-d-miller.macoslaps), so forget the one from 3.x / 4.0.0 (845).
+# /usr/local/laps/macOSLAPS is now a symlink into /Applications/macOSLAPS.app.
+[ "$3" = "/" ] || [ -z "$3" ] || exit 0
+/usr/sbin/pkgutil --forget edu.psu.macOSLAPS >/dev/null 2>&1
+[ -f /etc/paths.d/laps ] && /bin/chmod 644 /etc/paths.d/laps
+exit 0
