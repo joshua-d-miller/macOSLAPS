@@ -49,6 +49,10 @@ struct StatusReport: Codable {
     var settingsDomain: String
     var settingsSource: String
     var osVersion: String
+    /// Migration from the 3.x / 845 keychain item: none, migrated, required.
+    var migration: String
+    var migratedAt: String?
+    var migratedFrom: String?
 }
 
 enum Status {
@@ -86,7 +90,7 @@ enum Status {
         let bootstrap: Bool? = bootstrapOutput.contains("escrowed to server: YES") ? true
             : (bootstrapOutput.contains("escrowed to server: NO") ? false : nil)
 
-        let (password, created) = KeychainService.loadPassword(service: "macOSLAPS")
+        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
         var verifies: Bool? = nil
         if let pw = password, let rec = record {
             verifies = RunState.storedPasswordWorks(pw, created: created, record: rec)
@@ -142,7 +146,10 @@ enum Status {
             lastSuccess: RunState.lastRun().success,
             settingsDomain: prefs.domain,
             settingsSource: prefs.source.rawValue,
-            osVersion: "\(osv.majorVersion).\(osv.minorVersion).\(osv.patchVersion)")
+            osVersion: "\(osv.majorVersion).\(osv.minorVersion).\(osv.patchVersion)",
+            migration: Migration.status,
+            migratedAt: RunState.value("migratedAt"),
+            migratedFrom: RunState.value("migratedFrom"))
     }
 
     static func run(verbose: Bool) -> Never {
@@ -181,6 +188,12 @@ enum Status {
         print("ℹ️  FileVault: \(report.fileVault == true ? "on" : "off")")
         print("ℹ️  FileVault recovery key escrow profile installed: \(report.recoveryKeyEscrowProfile == true ? "yes" : "no")")
         if let bt = report.bootstrapTokenEscrowed { print("ℹ️  Bootstrap Token escrowed to MDM: \(bt ? "yes" : "no")") }
+        if report.migration == "required" {
+            line(false, "The password stored by an earlier macOSLAPS has been migrated",
+                 RunState.value("migrationRequired") ?? "Run macOSLAPS -firstPass <current password>.")
+        } else if report.migration == "migrated" {
+            print("ℹ️  Migrated from an earlier macOSLAPS (\(report.migratedFrom ?? "?")) on \(report.migratedAt ?? "?")")
+        }
         line(report.passwordStored, "A macOSLAPS password is stored",
              "Run macOSLAPS -firstPass <current password> (secureToken) or macOSLAPS -resetPassword.")
         if report.passwordStored {

@@ -183,7 +183,7 @@ enum Escrow {
 
     /// `-escrow`: print the payload (plain JSON or CMS PEM) and exit.
     static func run() -> Never {
-        let (password, created) = KeychainService.loadPassword(service: "macOSLAPS")
+        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
         guard let current = password else {
             print("{\"v\":1,\"status\":\"no-password\",\"account\":\(jsonString(Constants.local_admin))}")
             exit(0)

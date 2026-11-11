@@ -41,7 +41,7 @@ class LocalTools: NSObject {
         }
     }
     class func get_expiration_date() -> Date? {
-        let (_, creation_date) = KeychainService.loadPassword(service: "macOSLAPS")
+        let (_, creation_date) = KeychainService.loadPassword(service: KeychainNames.current)
         // Convert the date we received to an acceptable format
         if creation_date == nil || creation_date == "Not Found" {
             return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
@@ -59,7 +59,7 @@ class LocalTools: NSObject {
     /// Returns the previous password when known (used to revert). Exits on failure.
     class func changeAndVerify(record: ODRecord, to newPassword: String) -> String? {
         let needs_old_password = Determine_secureToken()   // false only when confirmed DISABLED
-        let (stored_password, _) = KeychainService.loadPassword(service: "macOSLAPS")
+        let (stored_password, _) = KeychainService.loadPassword(service: KeychainNames.current)
         var previous_password : String? = stored_password
         var source = "the password stored in the keychain"
         if Constants.use_firstpass || stored_password == nil {
@@ -167,7 +167,7 @@ class LocalTools: NSObject {
             Thread.sleep(forTimeInterval: min(pause, 30))
         }
 
-        let save_status : OSStatus = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
+        let save_status : OSStatus = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: password)
         guard save_status == noErr else {
             let message = SecCopyErrorMessageString(save_status, nil) as String? ?? "Unknown error"
             laps_log.print("Unable to save the new password to the keychain (OSStatus \(save_status): \(message)). Reverting.", .error)
@@ -178,7 +178,7 @@ class LocalTools: NSObject {
         Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
-        RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
+        RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
         removeAdminKeychainIfEnabled(record: record)
         InventoryHook.run(reason: "password change")
     }

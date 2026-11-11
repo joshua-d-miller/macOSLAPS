@@ -144,7 +144,7 @@ jobs:
         run: |
           if [ -z "$DEVID_APP_P12" ]; then
             echo "::warning::No signing secrets set. Producing an ad-hoc signed TEST build."
-            codesign --force --sign - --options runtime --identifier edu.psu.macOSLAPS "$BIN"
+            codesign --force --sign - --options runtime --identifier com.joshua-d-miller.macoslaps "$BIN"
             echo "signed=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -165,7 +165,7 @@ jobs:
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           APP_ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
           INST_ID=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/{print $2; exit}')
-          codesign --force --timestamp --options runtime --identifier edu.psu.macOSLAPS --sign "$APP_ID" "$BIN"
+          codesign --force --timestamp --options runtime --identifier com.joshua-d-miller.macoslaps --sign "$APP_ID" "$BIN"
           codesign --verify --strict --verbose=2 "$BIN"
           echo "KC=$KC" >> "$GITHUB_ENV"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
@@ -180,11 +180,9 @@ jobs:
           SHORT: ${{ steps.version.outputs.short }}
           BUILD: ${{ steps.version.outputs.build }}
         run: |
-          # macOSLAPS.app: the CLI as the main executable, the legacy migration helper in
-          # Contents/Helpers. Not packaged yet (step 23).
-          # Until migration lands (step 22) the main executable must keep the identifier
-          # edu.psu.macOSLAPS, which the existing keychain items trust. Signing a bundle
-          # signs its main executable, so the bundle is signed with that identifier too.
+          # macOSLAPS.app: the CLI as the main executable (signed com.joshua-d-miller.macoslaps,
+          # from CFBundleIdentifier), and the legacy migration helper in Contents/Helpers,
+          # signed edu.psu.macOSLAPS: the only identity the 3.x / 845 keychain items trust.
           APP=build/app/macOSLAPS.app
           rm -rf build/app; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
           cp "$BIN" "$APP/Contents/MacOS/macOSLAPS"
@@ -215,11 +213,15 @@ jobs:
           plutil -lint "$APP/Contents/Info.plist"
           # Inside-out: the helper first, then the bundle (which signs the main executable).
           codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
-          codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP"
+          codesign --force --options runtime "${sign[@]}" "$APP"
           codesign --verify --strict --deep --verbose=2 "$APP"
           for f in "$APP" "$APP/Contents/Helpers/macOSLAPS-legacy"; do
             echo "$f: $(codesign -dv "$f" 2>&1 | grep -E '^Identifier|^TeamIdentifier' | tr '\n' ' ')"
           done
+          ident() { codesign -dv "$1" 2>&1 | sed -n 's/^Identifier=//p'; }
+          [ "$(ident "$APP")" = "com.joshua-d-miller.macoslaps" ] || { echo "::error::app signed as $(ident "$APP")"; exit 1; }
+          [ "$(ident "$APP/Contents/MacOS/macOSLAPS")" = "com.joshua-d-miller.macoslaps" ] || { echo "::error::main executable signed as $(ident "$APP/Contents/MacOS/macOSLAPS")"; exit 1; }
+          [ "$(ident "$APP/Contents/Helpers/macOSLAPS-legacy")" = "edu.psu.macOSLAPS" ] || { echo "::error::helper signed as $(ident "$APP/Contents/Helpers/macOSLAPS-legacy")"; exit 1; }
           v=$("$APP/Contents/MacOS/macOSLAPS" -version 2>/dev/null)
           [ "$v" = "$SHORT.$BUILD" ] || { echo "::error::app's macOSLAPS -version printed '$v'"; exit 1; }
           rc=0; "$APP/Contents/Helpers/macOSLAPS-legacy" || rc=$?
@@ -228,19 +230,56 @@ jobs:
           ditto -c -k --keepParent "$APP" "dist-app/macOSLAPS-app-$SHORT.$BUILD.zip"
           echo "app=$APP" >> "$GITHUB_OUTPUT"
 
+      - name: Notarize and staple macOSLAPS.app
+        if: steps.sign.outputs.signed == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          AC_APPLE_ID: ${{ secrets.AC_APPLE_ID }}
+          AC_APP_PASSWORD: ${{ secrets.AC_APP_PASSWORD }}
+          AC_TEAM_ID: ${{ secrets.AC_TEAM_ID }}
+          APP: ${{ steps.app.outputs.app }}
+          VERSION: ${{ steps.binary.outputs.version }}
+        run: |
+          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ]; then
+            key="$RUNNER_TEMP/AuthKey-app.p8"
+            printf '%s' "$ASC_KEY_P8" > "$key"
+            auth=(--key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
+          else
+            auth=(--apple-id "$AC_APPLE_ID" --password "$AC_APP_PASSWORD" --team-id "${AC_TEAM_ID:-9UYK4F9BSM}")
+          fi
+          zip="dist-app/macOSLAPS-app-$VERSION.zip"
+          out=$(xcrun notarytool submit "$zip" "${auth[@]}" --wait --output-format json)
+          echo "$out"
+          status=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
+          if [ "$status" != "Accepted" ]; then
+            id=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
+            [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
+            echo "::error::Notarization status for macOSLAPS.app: $status"
+            exit 1
+          fi
+          rm -f "$RUNNER_TEMP/AuthKey-app.p8"
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+          spctl -a -vv -t exec "$APP"
+          # Re-zip so the artifact carries the stapled ticket.
+          rm -f "$zip"; ditto -c -k --keepParent "$APP" "$zip"
+
       - name: Build pkgs
         id: package
         env:
-          BIN: ${{ steps.binary.outputs.bin }}
+          APP: ${{ steps.app.outputs.app }}
           VERSION: ${{ steps.binary.outputs.version }}
           SIGNED: ${{ steps.sign.outputs.signed }}
         run: |
-          # Three packages with the same receipts and layout as earlier releases:
-          # full, binary only, LaunchDaemon only. See packaging/build-pkgs.sh.
+          # Three packages with the same receipts as earlier releases: full, binary only,
+          # LaunchDaemon only. The app goes to /Applications with a symlink at the old
+          # path. See packaging/build-pkgs.sh.
           if [ "$SIGNED" = "true" ]; then
-            pkg=$(bash packaging/build-pkgs.sh "$BIN" "$VERSION" dist "$INST_ID" "$KC" | tail -1)
+            pkg=$(bash packaging/build-pkgs.sh "$APP" "$VERSION" dist "$INST_ID" "$KC" | tail -1)
           else
-            pkg=$(bash packaging/build-pkgs.sh "$BIN" "$VERSION" dist | tail -1)
+            pkg=$(bash packaging/build-pkgs.sh "$APP" "$VERSION" dist | tail -1)
           fi
           ls -l dist
           for p in dist/*.pkg; do pkgutil --check-signature "$p" | head -3 || true; done
@@ -302,42 +341,6 @@ jobs:
             echo "::endgroup::"
           done
           rm -f "$RUNNER_TEMP/AuthKey.p8"
-
-      - name: Notarize and staple macOSLAPS.app
-        if: steps.sign.outputs.signed == 'true'
-        env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          AC_APPLE_ID: ${{ secrets.AC_APPLE_ID }}
-          AC_APP_PASSWORD: ${{ secrets.AC_APP_PASSWORD }}
-          AC_TEAM_ID: ${{ secrets.AC_TEAM_ID }}
-          APP: ${{ steps.app.outputs.app }}
-          VERSION: ${{ steps.binary.outputs.version }}
-        run: |
-          if [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_KEY_P8" ]; then
-            key="$RUNNER_TEMP/AuthKey-app.p8"
-            printf '%s' "$ASC_KEY_P8" > "$key"
-            auth=(--key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID")
-          else
-            auth=(--apple-id "$AC_APPLE_ID" --password "$AC_APP_PASSWORD" --team-id "${AC_TEAM_ID:-9UYK4F9BSM}")
-          fi
-          zip="dist-app/macOSLAPS-app-$VERSION.zip"
-          out=$(xcrun notarytool submit "$zip" "${auth[@]}" --wait --output-format json)
-          echo "$out"
-          status=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("status",""))')
-          if [ "$status" != "Accepted" ]; then
-            id=$(echo "$out" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("id",""))')
-            [ -n "$id" ] && xcrun notarytool log "$id" "${auth[@]}" || true
-            echo "::error::Notarization status for macOSLAPS.app: $status"
-            exit 1
-          fi
-          rm -f "$RUNNER_TEMP/AuthKey-app.p8"
-          xcrun stapler staple "$APP"
-          xcrun stapler validate "$APP"
-          spctl -a -vv -t exec "$APP"
-          # Re-zip so the artifact carries the stapled ticket.
-          rm -f "$zip"; ditto -c -k --keepParent "$APP" "$zip"
 
       - name: Checksums
         run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt

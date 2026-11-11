@@ -133,7 +133,7 @@ public class ADTools: NSObject {
         let previous_password = LocalTools.changeAndVerify(record: local_admin_record, to: password)
 
         // Write our new password to the System Keychain
-        let save_status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: password)
+        let save_status = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: password)
         guard save_status == noErr else {
             laps_log.print("New password could not be saved to the keychain (OSStatus \(save_status)). Reverting changes and exiting...", .error)
             _ = LocalTools.revert(record: local_admin_record, from: password, to: previous_password)
@@ -145,7 +145,7 @@ public class ADTools: NSObject {
         // attribute this ADSchema writes back, so AD never holds a password the Mac doesn't.
         if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!) != 0 {
             if LocalTools.revert(record: local_admin_record, from: password, to: previous_password), let previous = previous_password {
-                _ = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: previous)
+                _ = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: previous)
                 ADTools.restore(computer_record: computer_record, previousPassword: previous)
                 laps_log.print("Since the Password or Expiration Time was unable to be written back to Active Directory, changes have been reverted and the application will now exit", .error)
             } else {
@@ -159,7 +159,7 @@ public class ADTools: NSObject {
         Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
-        RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
+        RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
         InventoryHook.run(reason: "password change")
     }

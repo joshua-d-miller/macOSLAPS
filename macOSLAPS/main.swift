@@ -11,7 +11,7 @@
 ///  -------------------------
 ///  Joshua D. Miller - josh.miller@outlook.com
 ///  
-///  Last Updated November 10, 2026
+///  Last Updated November 11, 2026
 ///  -------------------------
 
 import Foundation
@@ -99,7 +99,7 @@ func initializeWithoutRotating() -> Never {
     // Already managed? Then leave everything alone: re-saving would reset the creation date
     // and postpone rotation forever when an MDM runs -initialize on every check-in, and
     // checking an outdated FirstPass would add a failed login each time.
-    let (stored, created) = KeychainService.loadPassword(service: "macOSLAPS")
+    let (stored, created) = KeychainService.loadPassword(service: KeychainNames.current)
     if let current = stored, RunState.storedPasswordWorks(current, created: created, record: record) {
         let due = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
         let what = current == Constants.first_password ? "already initialized with this password" : "already managed by macOSLAPS (the password has been rotated since)"
@@ -111,7 +111,7 @@ func initializeWithoutRotating() -> Never {
         laps_log.print("The FirstPass value is not the current password for \(Constants.local_admin). Nothing was stored.", .error)
         exit(1)
     }
-    let status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: Constants.first_password)
+    let status = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: Constants.first_password)
     guard status == noErr else {
         laps_log.print("Unable to store the password in the keychain (OSStatus \(status)).", .error)
         exit(1)
@@ -126,7 +126,7 @@ func initializeWithoutRotating() -> Never {
     }
     let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
     RunState.record("initialized")
-    RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
+    RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
     laps_log.print("Initialized \(Constants.local_admin) with its current password. No rotation was performed; the first rotation is due \(expires).", .info)
     if !(GetPreference(preference_key: "FirstPass") as? String ?? "").isEmpty {
         laps_log.print("FirstPass is set in the configuration, which any user of this Mac can read, and it is still \(Constants.local_admin)'s password until the first rotation. Remove FirstPass from the profile, or rotate soon with macOSLAPS -resetPassword.", .warn)
@@ -146,7 +146,7 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
         let record = LocalTools.connect()
         if (try? record.verifyPassword(pending.password)) != nil {
             laps_log.print("Finishing a rotation that was interrupted after the account was changed.", .warn)
-            let status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: pending.password)
+            let status = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: pending.password)
             guard status == noErr else {
                 laps_log.print("Unable to store the password while finishing the interrupted rotation (OSStatus \(status)).", .error)
                 exit(1)
@@ -154,7 +154,7 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
             finishInterrupted(pending.password)
             Staging.finishApply()
             RunState.record("rotated", message: "finished an interrupted rotation")
-            RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
+            RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
             InventoryHook.run(reason: "finishing an interrupted rotation")
             exit(0)
         }
@@ -212,6 +212,17 @@ func macOSLAPS() {
     // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
     // nested runs may read (-escrow, -getPassword, -status) but must not rotate or re-run the hook.
     Constants.inside_hook = ProcessInfo.processInfo.environment[InventoryHook.environmentMarker] == "1"
+    // Move the password stored by 3.x / 845 to the new keychain item before anything
+    // reads it (and before the old -getPassword export below is deleted: it is one of
+    // the migration sources). -firstPass and -initialize are how a Mac recovers when
+    // migration is required, and -status reports it, so those runs continue.
+    let args = Set(Constants.arguments)
+    if NSUserName() == "root" && args.isDisjoint(with: ["-showconfig", "-help"]) {
+        let reporting = args.contains("-status")
+        let recovering = args.contains("-firstpass") || args.contains("-initialize")
+        let rotationRun = args.isDisjoint(with: ["-status", "-escrow", "-getpassword"]) && !Constants.inside_hook
+        Migration.run(fatal: !(reporting || recovering), rotationRun: rotationRun)
+    }
     // Delete the temporary -getPassword export from a previous run
     if NSUserName() == "root",
        let exp_keychain_id = try? String(contentsOfFile: "/var/root/.GeneratedLAPSServiceName", encoding: .utf8),
@@ -224,7 +235,7 @@ func macOSLAPS() {
         case "-getpassword":
             verify_root()
             if Constants.method == "Local" {
-                let (current_password, keychain_item_check) = KeychainService.loadPassword(service: "macOSLAPS")
+                let (current_password, keychain_item_check) = KeychainService.loadPassword(service: KeychainNames.current)
                 if current_password == nil && keychain_item_check == nil {
                     laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry.", .error)
                     exit(1)

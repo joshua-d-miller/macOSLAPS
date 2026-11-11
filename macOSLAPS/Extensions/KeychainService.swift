@@ -13,6 +13,15 @@
 
 import Cocoa
 import Security
+
+/// Keychain service names. 4.0 stores under the new identity; the legacy names are
+/// read only by the migration helper (macOSLAPS-legacy) and removed in 5.0.
+enum KeychainNames {
+    static let current = "com.joshua-d-miller.macoslaps"
+    static let pending = "com.joshua-d-miller.macoslaps.pending"
+    static let legacyCurrent = "macOSLAPS"
+    static let legacyPending = "macOSLAPS-pending"
+}
 /// Storage in the System keychain.
 ///
 /// A root launchd daemon has no modern alternative: the data protection keychain
@@ -42,14 +51,16 @@ class KeychainService {
         return body()
     }
 
-    class func savePassword(service: String, account: String, data: String) -> OSStatus {
+    /// Stores `data` under `service`, with the comment "Created: <date>". `created` keeps
+    /// an existing creation date (migration); by default it is now.
+    class func savePassword(service: String, account: String, data: String, created: String? = nil) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
         let keychainRef : SecKeychain? = KeychainService.systemKeychain()
         
         guard let keychain = keychainRef, let passwordData = dataFromString else {
             return errSecParam
         }
-        let creation_date = Constants.dateFormatter.string(from: Date())
+        let creation_date = created ?? Constants.dateFormatter.string(from: Date())
         let comment_attribute : [ String : Any ] = [
             kSecAttrComment as String : "Created: \(creation_date)"
         ]
@@ -186,16 +197,59 @@ class KeychainService {
         return SecItemUpdate(newquery as CFDictionary, comment_attribute as CFDictionary)
     }
     class func deleteExport(service: String) -> OSStatus {
-        let keychainRef : SecKeychain? = KeychainService.systemKeychain()
-    
-        // The query used to save our newly created keychain entry
+        guard let keychain = KeychainService.systemKeychain() else { return errSecParam }
         let query : [String : Any] = [
             kSecClass as String            : kSecClassGenericPassword,
             kSecAttrService as String      : service,
-            kSecReturnData as String       : kCFBooleanTrue!,
-            kSecReturnAttributes as String : kCFBooleanTrue!,
-            kSecMatchLimit as String       : kSecMatchLimitOne,
-            kSecUseKeychain as String      : keychainRef!]
-        return SecItemDelete(query as CFDictionary)
+            kSecUseKeychain as String      : keychain]
+        let status = withoutUserInteraction { SecItemDelete(query as CFDictionary) }
+        if status == noErr || status == errSecItemNotFound || getuid() != 0 {
+            return status
+        }
+        // Items created by an earlier macOSLAPS (signed edu.psu.macOSLAPS, e.g. a 3.x/845
+        // -getPassword export) don't let this identity delete them; root's security can.
+        return deleteAsRoot(service: service) ? noErr : status
+    }
+
+    /// Deletes a System keychain item with /usr/bin/security (root only). The probe in
+    /// step 20 showed this works for items whose access list doesn't trust this binary.
+    class func deleteAsRoot(service: String) -> Bool {
+        let result = Shell.execute(launchPath: "/usr/bin/security",
+                                   arguments: ["delete-generic-password", "-s", service, systemKeychainPath], timeout: 30)
+        return result.status == 0
+    }
+
+    /// Whether an item exists, and its comment, read with /usr/bin/security without the
+    /// password (attributes need no access-list entry). nil when the keychain can't be read.
+    class func itemAttributes(service: String) -> (exists: Bool, comment: String?)? {
+        let result = Shell.execute(launchPath: "/usr/bin/security",
+                                   arguments: ["find-generic-password", "-s", service, systemKeychainPath], timeout: 30)
+        if result.status == 44 { return (false, nil) }   // errSecItemNotFound
+        guard result.status == 0 else { return nil }
+        var comment : String?
+        for line in result.output.split(separator: "\n") {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            if text.hasPrefix("\"icmt\"<blob>=\""), text.hasSuffix("\"") {
+                comment = String(text.dropFirst("\"icmt\"<blob>=\"".count).dropLast())
+            }
+        }
+        return (true, comment)
+    }
+
+    /// The password of an item that trusts /usr/bin/security (the legacy -getPassword export).
+    class func passwordViaSecurity(service: String) -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        task.arguments = ["find-generic-password", "-w", "-s", service, systemKeychainPath]
+        let out = Pipe()
+        task.standardOutput = out
+        task.standardError = FileHandle.nullDevice
+        task.standardInput = FileHandle.nullDevice
+        guard (try? task.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0, var text = String(data: data, encoding: .utf8) else { return nil }
+        if text.hasSuffix("\n") { text.removeLast() }
+        return text.isEmpty ? nil : text
     }
 }

@@ -1,18 +1,22 @@
 #!/bin/bash
-# Builds the three macOSLAPS installer packages, laid out like every release since 3.x
-# so upgrades replace the same receipts and files:
+# Builds the three macOSLAPS installer packages, with the same receipts as every
+# release since 3.x so upgrades replace them:
 #
-#   macOSLAPS-<version>.pkg         binary + /etc/paths.d/laps + LaunchDaemon
-#   macOSLAPS-Binary-<version>.pkg  binary + /etc/paths.d/laps only
+#   macOSLAPS-<version>.pkg         app + /etc/paths.d/laps + LaunchDaemon
+#   macOSLAPS-Binary-<version>.pkg  app + /etc/paths.d/laps only
 #   macOSLAPS-LD-<version>.pkg      LaunchDaemon only
 #
-# Receipts: edu.psu.macOSLAPS (binary) and edu.psu.macOSLAPS-check (LaunchDaemon).
+# The app installs to /Applications/macOSLAPS.app; /usr/local/laps/macOSLAPS is a
+# symlink to its executable through 4.x, so existing scripts and the LaunchDaemon keep
+# working.
+# Receipts: edu.psu.macOSLAPS (app) and edu.psu.macOSLAPS-check (LaunchDaemon).
+# (The receipts and the LaunchDaemon label switch in checklist step 23.)
 #
-# Usage: build-pkgs.sh <binary> <version> <outdir> [<Developer ID Installer identity> <keychain>]
+# Usage: build-pkgs.sh <macOSLAPS.app> <version> <outdir> [<Developer ID Installer identity> <keychain>]
 # Prints the file name of the full package on the last line.
 set -euo pipefail
 
-BIN=$1; VERSION=$2; OUT=$3; IDENTITY=${4:-}; KEYCHAIN=${5:-}
+APP=$1; VERSION=$2; OUT=$3; IDENTITY=${4:-}; KEYCHAIN=${5:-}
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "build-pkgs.sh: version must look like 4.0.0.846, got '$VERSION'" >&2; exit 1; }
 MIN_MACOS=${MIN_MACOS:-13.0}
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -21,14 +25,29 @@ WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$OUT" "$WORK/components"
 
-# --- component: binary ---
+# --- component: app ---
+[ -x "$APP/Contents/MacOS/macOSLAPS" ] || { echo "build-pkgs.sh: $APP is not macOSLAPS.app" >&2; exit 1; }
 root="$WORK/root-binary"
-mkdir -p "$root/usr/local/laps" "$root/private/etc/paths.d"
-cp "$BIN" "$root/usr/local/laps/macOSLAPS"
+mkdir -p "$root/Applications" "$root/usr/local/laps" "$root/private/etc/paths.d"
+ditto "$APP" "$root/Applications/macOSLAPS.app"   # keeps the signature intact
+ln -s /Applications/macOSLAPS.app/Contents/MacOS/macOSLAPS "$root/usr/local/laps/macOSLAPS"
 cp "$HERE/payload/paths.d-laps" "$root/private/etc/paths.d/laps"
-chmod 755 "$root/usr/local/laps" "$root/usr/local/laps/macOSLAPS" "$root/private/etc/paths.d"
+chmod 755 "$root/usr/local/laps" "$root/private/etc/paths.d"
 chmod 644 "$root/private/etc/paths.d/laps"
-pkgbuild --root "$root" --identifier edu.psu.macOSLAPS --version "$VERSION" \
+codesign --verify --strict --deep "$root/Applications/macOSLAPS.app" >&2
+# Not relocatable: the installer must always put the app in /Applications, even when
+# another copy with the same bundle ID exists elsewhere (the symlink points there).
+pkgbuild --analyze --root "$root" "$WORK/components.plist" >&2
+python3 - "$WORK/components.plist" <<'PY'
+import plistlib, sys
+path = sys.argv[1]
+components = plistlib.load(open(path, "rb"))
+for c in components:
+    c["BundleIsRelocatable"] = False
+plistlib.dump(components, open(path, "wb"))
+print("components:", [c.get("RootRelativeBundlePath") for c in components], file=sys.stderr)
+PY
+pkgbuild --root "$root" --component-plist "$WORK/components.plist" --identifier edu.psu.macOSLAPS --version "$VERSION" \
     --install-location / --ownership recommended "$WORK/components/macOSLAPS.pkg" >&2
 
 # --- component: LaunchDaemon ---

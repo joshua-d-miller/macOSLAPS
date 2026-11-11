@@ -10,6 +10,9 @@
 set -uo pipefail
 
 LAPS=/usr/local/laps/macOSLAPS
+APP=/Applications/macOSLAPS.app
+# Keychain service of the stored password (4.0 identity; 3.x/845 used "macOSLAPS").
+SVC=com.joshua-d-miller.macoslaps
 ACCT=lapstest
 FIRST='Initial-Pass-1234'
 LEN=16
@@ -38,7 +41,11 @@ pkgutil --pkg-info edu.psu.macOSLAPS >/dev/null 2>&1 && pass "receipt edu.psu.ma
 pkgutil --pkg-info edu.psu.macOSLAPS-check >/dev/null 2>&1 && pass "receipt edu.psu.macOSLAPS-check" || fail "receipt edu.psu.macOSLAPS-check missing"
 [ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps" || fail "/etc/paths.d/laps missing or wrong"
 [ "$(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' /Library/LaunchDaemons/edu.psu.macoslaps-check.plist)"
-[ "$(stat -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -f '%Su:%Sg %Lp' "$LAPS")"
+[ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
+[ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
+[ "$(readlink "$LAPS")" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "$LAPS is a symlink into the app" || fail "$LAPS -> $(readlink "$LAPS")"
+codesign --verify --strict --deep "$APP" && pass "installed app's signature is valid" || fail "installed app's signature is broken"
+[ "$(codesign -dv "$APP" 2>&1 | sed -n 's/^Identifier=//p')" = "com.joshua-d-miller.macoslaps" ] && pass "app signed com.joshua-d-miller.macoslaps" || fail "app identifier: $(codesign -dv "$APP" 2>&1 | grep ^Identifier)"
 echo "::endgroup::"
 
 # Stop the daemon the pkg loaded so it can't race the test.
@@ -168,7 +175,7 @@ KNOWN2='Known-Pass-9753'
 CURRENT=$(get_pw 2>/dev/null)
 dscl . -passwd "/Users/$ACCT" "$CURRENT" "$KNOWN2" 2>/dev/null || dscl . -passwd "/Users/$ACCT" "$KNOWN2"
 # 1. Token status unknown and no stored password: refuse, change nothing.
-security delete-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1
+security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
 if MACOSLAPS_TEST_SECURETOKEN=unknown "$LAPS" -resetPassword >/dev/null 2>&1; then
     fail "unknown token status with no known password still rotated"
 else
@@ -191,7 +198,7 @@ if "$LAPS" -resetPassword >/dev/null 2>&1; then
 else
     fail "no token + out-of-date keychain did not recover"
 fi
-security find-generic-password -s macOSLAPS "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
+security find-generic-password -s "$SVC" "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
     && pass "a newly created keychain item has its creation date" || fail "new keychain item is missing its Created: comment"
 [ -n "$SAVED_FIRSTPASS" ] && defaults write "$DOMAIN" FirstPass -string "$SAVED_FIRSTPASS"
 "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["secureToken"] is False, d' \
@@ -229,6 +236,9 @@ echo "::group::-status records the last run; failed password checks are not repe
     && pass "-status reports the last rotation" || fail "-status last run after rotation: $("$LAPS" -status)"
 "$LAPS" >/dev/null 2>&1
 "$LAPS" -status | grep -q '"lastResult":"not-due"' && pass "-status reports a not-due run" || fail "-status after a not-due run"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["migration"]=="none" and "migratedAt" not in d, d' \
+    && pass "-status: nothing to migrate on a fresh install" || fail "-status migration on a fresh install: $("$LAPS" -status)"
+security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "a fresh install created a legacy macOSLAPS item" || pass "no legacy keychain item on a fresh install"
 # Keychain and account disagree: the first check fails, later ones reuse that result
 # instead of adding a failed login each time.
 GOOD=$(get_pw)
@@ -359,10 +369,10 @@ dscl . -authonly "$ACCT" "$INIT" >/dev/null 2>&1 && pass "account not rotated by
 "$LAPS" >/dev/null 2>&1
 [ "$(get_pw)" = "$INIT" ] && pass "scheduled run does not rotate before expiry" || fail "scheduled run rotated early"
 # Running -initialize again (an MDM doing it every check-in) must not move the date.
-CREATED1=$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')
+CREATED1=$(security find-generic-password -s "$SVC" "$SYSKC" | grep '"icmt"')
 sleep 2
 "$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "repeated -initialize succeeds" || fail "repeated -initialize failed"
-[ "$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
+[ "$(security find-generic-password -s "$SVC" "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
 # FirstPass in the configuration is readable by local users; -status must flag it while it is live.
 defaults write "$DOMAIN" FirstPass -string "$INIT"
 "$LAPS" -status | grep -q '"passwordIsFirstPass":true' && pass "-status flags a live FirstPass" || fail "-status does not flag a live FirstPass"
@@ -489,7 +499,7 @@ if [ "$HAS_TOKEN" -eq 1 ]; then
     KNOWN='Known-Pass-5678'
     CUR=$(get_pw)
     dscl . -passwd "/Users/$ACCT" "$CUR" "$KNOWN" || fail "could not set known password"
-    security delete-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1
+    security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
     defaults delete "$DOMAIN" FirstPass
     "$LAPS" -resetPassword -firstPass "$KNOWN" && pass "CLI -firstPass rotation exited 0" || fail "CLI -firstPass rotation failed"
     PW3=$(get_pw) && check_pw "$PW3" "cli firstPass"

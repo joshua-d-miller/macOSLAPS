@@ -7,7 +7,7 @@
 ///  Staged rotation: the MDM gets the next password before the account uses it.
 ///
 ///  1. When the password is due (or -resetPassword), a new password is stored as
-///     *pending* in its own keychain item ("macOSLAPS-pending"). The account is not
+///     *pending* in its own keychain item (KeychainNames.pending). The account is not
 ///     changed yet.
 ///  2. -escrow prints the current and the pending password. Each successful -escrow
 ///     with a pending password counts as one export.
@@ -28,7 +28,7 @@ import Foundation
 import OpenDirectory
 
 enum Staging {
-    static let service = "macOSLAPS-pending"
+    static let service = KeychainNames.pending
     static let autoWindow : TimeInterval = 14 * 24 * 60 * 60
 
     static var mode : String {
@@ -71,7 +71,7 @@ enum Staging {
 
     /// Stores `password` as the pending password (replacing any older pending one).
     static func stage(_ password: String) -> Bool {
-        let status = KeychainService.savePassword(service: service, account: "LAPS Pending Password", data: password)
+        let status = KeychainService.savePassword(service: service, account: Constants.local_admin, data: password)
         guard status == noErr else {
             laps_log.print("Unable to store the pending password in the keychain (OSStatus \(status)). Nothing was changed.", .error)
             return false
