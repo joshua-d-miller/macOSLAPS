@@ -116,6 +116,24 @@ jobs:
           echo "bin=$bin" >> "$GITHUB_OUTPUT"
           echo "version=$short.$build" >> "$GITHUB_OUTPUT"
 
+      - name: Build legacy migration helper
+        id: helper
+        run: |
+          # Compiled with swiftc (no Xcode target). It goes in macOSLAPS.app/Contents/Helpers
+          # and is signed edu.psu.macOSLAPS, the only identity the old keychain items trust.
+          mkdir -p build/helper
+          for arch in arm64 x86_64; do
+            swiftc -O -target "$arch-apple-macos$MIN_MACOS" macOSLAPS-legacy/main.swift -o "build/helper/legacy-$arch"
+            swiftc -O -target "$arch-apple-macos$MIN_MACOS" -D MACOSLAPS_UNSIGNED_TEST macOSLAPS-legacy/main.swift -o "build/helper/legacy-test-$arch"
+          done
+          lipo -create build/helper/legacy-arm64 build/helper/legacy-x86_64 -output build/helper/macOSLAPS-legacy
+          lipo -create build/helper/legacy-test-arm64 build/helper/legacy-test-x86_64 -output build/helper/macOSLAPS-legacy-unsigned-test
+          lipo -info build/helper/macOSLAPS-legacy
+          # Run without arguments: it must refuse and explain.
+          rc=0; build/helper/macOSLAPS-legacy || rc=$?
+          [ "$rc" -eq 64 ] || { echo "::error::helper exit $rc without arguments (expected 64)"; exit 1; }
+          echo "helper=build/helper/macOSLAPS-legacy" >> "$GITHUB_OUTPUT"
+
       - name: Sign binary
         id: sign
         env:
