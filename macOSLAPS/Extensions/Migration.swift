@@ -17,9 +17,10 @@
      travels over a pipe, never on a command line.
 
  How it fits:
-     1. Candidates: the old item (through the helper), the -getPassword
-     export, the 3.x plaintext file, and a staged password after an
-     interrupted rotation.
+     1. Candidates: the old item (through the helper), and a staged
+     password after an interrupted rotation. The -getPassword export and
+     3.x plaintext files are never read: CI showed the helper reads the
+     items of both 3.0.4 and 845.
      2. The first that works for the account is stored, keeping its
      creation date.
      3. A staged password moves to the new pending item.
@@ -33,10 +34,13 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file: migration through the legacy
-                        claude    helper, fallbacks, "migration required",
-                                  cleanup; AppBundle paths and the
-                                  /usr/local/laps deprecation check.
+ 4.0.0     2026-11-11   joshua    New file: migration through the legacy helper
+                        claude    only (the export and plaintext fallbacks were
+                                  dropped once CI showed the helper reads 3.0.4
+                                  and 845 items), "migration required", cleanup
+                                  of old items, exports and 3.x files;
+                                  AppBundle paths and the /usr/local/laps
+                                  deprecation check.
 
                                   New header and section style.
 ===============================================================================
@@ -86,7 +90,6 @@ enum AppBundle {
 // ------------- //
 // Runs once per root run before anything reads the keychain.                //
 enum Migration {
-    static let exportNameFile = "/var/root/.GeneratedLAPSServiceName"
     static let plaintextPassword = "/var/root/Library/Application Support/macOSLAPS-password"
     static let plaintextExpiration = "/var/root/Library/Application Support/macOSLAPS-expiration"
 
@@ -213,14 +216,6 @@ enum Migration {
         let fromItem = helperRead(KeychainNames.legacyCurrent)
         let created = creationDate(fromComment: fromItem?.comment) ?? creationDate(fromComment: legacyComment)
         attempt(fromItem?.password, "keychain", created)
-        if adopted == nil,
-           let name = (try? String(contentsOfFile: exportNameFile, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !name.isEmpty {
-            attempt(KeychainService.passwordViaSecurity(service: name), "getPassword export", created)
-        }
-        if adopted == nil, let text = try? String(contentsOfFile: plaintextPassword, encoding: .utf8) {
-            attempt(text.trimmingCharacters(in: .newlines), "3.x plaintext file", created)
-        }
         // An apply interrupted after the account changed: the pending one is the password.
         // Only tried then, so a normal staged password doesn't add a failed login.
         if Staging.interruptedApply {

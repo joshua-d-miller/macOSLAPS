@@ -83,6 +83,8 @@ defaults write "$DOMAIN" Method -string Local
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 defaults write "$DOMAIN" PasswordLength -int 16
 defaults write "$DOMAIN" DaysTillExpiration -int 30
+# -resetPassword must rotate right away; staging has its own tests.
+defaults write "$DOMAIN" StagedRotation -string off
 "$LAPS" -firstPass || "$LAPS" -resetPassword || fatal "3.0.4 could not rotate"
 "$LAPS" -getPassword || fatal "3.0.4 -getPassword failed"
 OLD_PW=$(cat "$PLAIN_PW" 2>/dev/null)
@@ -102,15 +104,17 @@ echo "::group::Upgrade to 4.0"
 installer -pkg "$NEW_FULL" -target / || fatal "the new package did not install over 3.0.4"
 stop_daemons
 "$LAPS" -status >/dev/null   # migrates now if the installer's run hasn't already
-[ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
-FROM=$(status_field migratedFrom)
 if [ "$SIGNED" = "true" ]; then
+    [ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
+    FROM=$(status_field migratedFrom)
     [ "$FROM" = "keychain" ] && pass "the helper read 3.0.4's keychain item" || fail "migrated from '$FROM', expected keychain (helper)"
+    [ "$(comment_of "$SVC")" = "$OLD_CREATED" ] && pass "creation date carried over" || fail "creation date: '$(comment_of "$SVC")' vs '$OLD_CREATED'"
 else
-    [ "$FROM" = "3.x plaintext file" ] && pass "unsigned build migrated from the plaintext file" || fail "unsigned build migrated from '$FROM'"
+    # Unsigned: the helper can't read the item and the plaintext file is never used.
+    [ "$(status_field migration)" = "required" ] && pass "unsigned build: migration required (plaintext file not used)" || fail "-status after upgrade: $("$LAPS" -status)"
+    "$LAPS" -firstPass "$OLD_PW" -initialize >/dev/null 2>&1 && "$LAPS" -status >/dev/null && pass "recovered with -firstPass -initialize" || fail "recovery failed"
 fi
-[ "$(escrow_pw)" = "$OLD_PW" ] && pass "migrated password unchanged" || fail "migrated password differs"
-[ "$(comment_of "$SVC")" = "$OLD_CREATED" ] && pass "creation date carried over" || fail "creation date: '$(comment_of "$SVC")' vs '$OLD_CREATED'"
+[ "$(escrow_pw)" = "$OLD_PW" ] && pass "stored password is 3.0.4's" || fail "stored password differs"
 security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "3.0.4's keychain item is still there" || pass "3.0.4's keychain item removed"
 [ ! -e "$PLAIN_PW" ] && [ ! -e "$PLAIN_EXP" ] && pass "3.0.4's plaintext files removed" || fail "plaintext files left behind"
 [ ! -e /Library/LaunchDaemons/edu.psu.macoslaps-check.plist ] && pass "3.0.4's LaunchDaemon removed" || fail "3.0.4's LaunchDaemon left behind"

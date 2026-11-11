@@ -271,21 +271,4 @@ class KeychainService {
         }
         return (true, comment)
     }
-
-    /// The password of an item that trusts /usr/bin/security (the legacy -getPassword export).
-    class func passwordViaSecurity(service: String) -> String? {
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        task.arguments = ["find-generic-password", "-w", "-s", service, systemKeychainPath]
-        let out = Pipe()
-        task.standardOutput = out
-        task.standardError = FileHandle.nullDevice
-        task.standardInput = FileHandle.nullDevice
-        guard (try? task.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        task.waitUntilExit()
-        guard task.terminationStatus == 0, var text = String(data: data, encoding: .utf8) else { return nil }
-        if text.hasSuffix("\n") { text.removeLast() }
-        return text.isEmpty ? nil : text
-    }
 }

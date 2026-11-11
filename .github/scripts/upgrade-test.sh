@@ -15,7 +15,7 @@
      com.joshua-d-miller.macoslaps) can't read the old macOSLAPS item; its
      helper (signed edu.psu.macOSLAPS) reads it and the password moves to
      the new item. That needs the Developer ID signature, so unsigned
-     builds migrate from the -getPassword export instead.
+     builds get "migration required" and recover with -firstPass.
 
  Usage:
      sudo bash .github/scripts/upgrade-test.sh <old full pkg> \
@@ -26,8 +26,8 @@
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    Migration from 845, the required/recovery
-                        claude    path, the 3.x plaintext fallback, new label
-                                  and receipts, EAs during staging.
+                        claude    path, 3.x plaintext files never used, new
+                                  label and receipts, EAs during staging.
 
                                   New header and section style.
 ===============================================================================
@@ -130,16 +130,20 @@ echo "::endgroup::"
 ### ------------------------------------------------------- ###
 echo "::group::Migration from the previous release's keychain item"
 "$LAPS" -status >/dev/null   # migrates now if the installer's run hasn't already
-[ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
-FROM=$(status_field migratedFrom)
 if [ "$SIGNED" = "true" ]; then
+    [ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
+    FROM=$(status_field migratedFrom)
     [ "$FROM" = "keychain" ] && pass "migrated through the legacy helper" || fail "migrated from '$FROM', expected keychain (helper)"
 else
-    [ "$FROM" = "getPassword export" ] && pass "unsigned build migrated from the -getPassword export" || fail "unsigned build migrated from '$FROM'"
+    # Unsigned: the helper can't read 845's item and the -getPassword export is never used.
+    [ "$(status_field migration)" = "required" ] && pass "unsigned build: migration required (export not used)" || fail "-status after upgrade: $("$LAPS" -status)"
+    "$LAPS" -firstPass "$OLD_PW" -initialize >/dev/null 2>&1 && "$LAPS" -status >/dev/null && pass "recovered with -firstPass -initialize" || fail "recovery failed"
 fi
 security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "the legacy macOSLAPS item is still there" || pass "the legacy macOSLAPS item was removed"
 security find-generic-password -s "$OLD_EXPORT" "$SYSKC" >/dev/null 2>&1 && fail "the previous release's -getPassword export is still there" || pass "the previous release's -getPassword export was removed"
-[ "$(comment_of "$SVC")" = "$OLD_CREATED" ] && pass "creation date carried over (rotation stays on schedule)" || fail "creation date: '$(comment_of "$SVC")' vs '$OLD_CREATED'"
+if [ "$SIGNED" = "true" ]; then
+    [ "$(comment_of "$SVC")" = "$OLD_CREATED" ] && pass "creation date carried over (rotation stays on schedule)" || fail "creation date: '$(comment_of "$SVC")' vs '$OLD_CREATED'"
+fi
 security find-generic-password -s "$SVC" "$SYSKC" 2>/dev/null | grep -qF "\"acct\"<blob>=\"$ACCT\"" && pass "new item's account is the admin's short name" || fail "new item's account attribute"
 NEW_READ=$(get_pw) && [ "$NEW_READ" = "$OLD_PW" ] && pass "migrated password unchanged" || fail "migrated password differs or cannot be exported"
 "$LAPS" -status | grep -q '"passwordVerifies":true' && pass "-status: stored password verifies" || fail "-status after upgrade: $("$LAPS" -status)"
@@ -173,25 +177,24 @@ security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "un
 echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
-### -------------------------------- ###
-### | Fallback: 3.x plaintext file | ###
-### -------------------------------- ###
-echo "::group::Fallback: 3.x plaintext file"
+### -------------------------------------- ###
+### | 3.x plaintext files are never used | ###
+### -------------------------------------- ###
+### Even when they hold the right password, migration doesn't read them:    ###
+### the Mac needs -firstPass, and the files are deleted once it recovers.   ###
+echo "::group::3.x plaintext files are never used"
 security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
 security add-generic-password -s macOSLAPS -a "LAPS Password" -w 'Not-The-Password-2' -j "Created: 2026-02-03 04:05:06" "$SYSKC"
 mkdir -p "/var/root/Library/Application Support"
 printf '%s\n' "$CUR" > "/var/root/Library/Application Support/macOSLAPS-password"
 echo "2026-03-05 04:05:06" > "/var/root/Library/Application Support/macOSLAPS-expiration"
 "$LAPS" -status >/dev/null
-[ "$(status_field migratedFrom)" = "3.x plaintext file" ] && pass "migrated from the 3.x plaintext file" || fail "migratedFrom: $(status_field migratedFrom)"
-[ ! -e "/var/root/Library/Application Support/macOSLAPS-password" ] && [ ! -e "/var/root/Library/Application Support/macOSLAPS-expiration" ] && pass "3.x plaintext files removed" || fail "3.x plaintext files left behind"
-comment_of "$SVC" | grep -qF '"icmt"<blob>="Created: 2026-02-03 04:05:06"' && pass "creation date taken from the legacy item's attributes" || fail "creation date: $(comment_of "$SVC")"
-security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "legacy item left after the plaintext migration" || pass "legacy item removed"
-[ "$(get_pw)" = "$CUR" ] && pass "password from the plaintext file stored" || fail "stored password after the plaintext migration"
-# The 2026-02-03 date is long past: a scheduled run now rotates.
-"$LAPS" >/dev/null 2>&1 && pass "scheduled run after the plaintext migration" || fail "scheduled run failed: $(tail -5 /Library/Logs/macOSLAPS.log)"
-NEW_PW=$(get_pw)
-[ "$NEW_PW" != "$CUR" ] && dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "overdue migrated password rotated on schedule" || fail "overdue migrated password was not rotated"
+[ "$(status_field migration)" = "required" ] && pass "plaintext file not used: migration required" || fail "migration with a plaintext file: $("$LAPS" -status)"
+"$LAPS" -firstPass "$CUR" -initialize >/dev/null 2>&1 && "$LAPS" -status >/dev/null && pass "recovered with -firstPass -initialize" || fail "recovery failed"
+[ ! -e "/var/root/Library/Application Support/macOSLAPS-password" ] && [ ! -e "/var/root/Library/Application Support/macOSLAPS-expiration" ] && pass "3.x plaintext files deleted after recovery" || fail "3.x plaintext files left behind"
+security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "legacy item left after recovery" || pass "legacy item removed"
+[ "$(get_pw)" = "$CUR" ] && pass "stored password is the recovered one" || fail "stored password after recovery"
+NEW_PW=$CUR
 echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
