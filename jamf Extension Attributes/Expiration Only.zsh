@@ -55,7 +55,10 @@ SYSTEM_KEYCHAIN=/Library/Keychains/System.keychain
 ### run removes that copy again. Sets PASSWORD, PENDING, EXPIRATION and     ###
 ### CMS.                                                                    ###
 json_value () {
-    /usr/bin/plutil -extract "$1" raw -o - - <<< "$2" 2>/dev/null
+    ## plutil prints "Could not extract value" on stdout on some macOS versions ##
+    local value
+    value=$(/usr/bin/plutil -extract "$1" raw -o - - <<< "$2" 2>/dev/null) || return 0
+    /usr/bin/printf '%s' "$value"
 }
 iso_to_local () {
     ## 2026-12-11T14:00:00-05:00 -> 2026-12-11 14:00:00 (the format earlier EAs used) ##

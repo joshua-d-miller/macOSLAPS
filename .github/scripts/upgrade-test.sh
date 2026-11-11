@@ -174,6 +174,7 @@ OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Escrow-EA.zsh" 2>&1)
 python3 -c 'import json,re,sys; m=re.search(r"<result>(.*)</result>", sys.argv[1], re.S); assert m and json.loads(m.group(1))["password"]==sys.argv[2]' "$OUT" "$NEW_PW" \
     && pass "integrations/jamf escrow attribute" || fail "integrations/jamf escrow EA output"
 rm -f "/Library/Managed Preferences/edu.psu.macoslaps.plist"
+killall cfprefsd 2>/dev/null; sleep 1   # or the removed managed copy keeps being served
 dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "none of the scripts rotated the password" || fail "a script rotated the password unexpectedly"
 # A staged password must reach Jamf too, or the Mac would switch to a password Jamf never stored.
 defaults write "$DOMAIN" StagedRotation -string on
