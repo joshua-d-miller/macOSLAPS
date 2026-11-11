@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and setup help (#laps on MacAdmins Slack)
+    url: https://macadmins.slack.com/archives/C68F4NLFL
+    about: The community in #laps is the fastest place for how-to questions.
+  - name: Report a security vulnerability privately
+    url: https://github.com/joshua-d-miller/macOSLAPS/security/advisories/new
+    about: Please don't file security issues publicly.

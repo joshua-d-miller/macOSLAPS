@@ -1,0 +1,51 @@
+name: Bug report
+description: Something isn't working as expected
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Never paste a real password, escrow blob or private key.** `-showConfig` and `-status` don't print passwords.
+        Security problems: please report privately (see SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: macOSLAPS version
+      description: Output of `/usr/local/laps/macOSLAPS -version` (e.g. 4.0.0.880)
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version and Mac
+      placeholder: e.g. macOS 26.1, Apple silicon
+    validations:
+      required: true
+  - type: dropdown
+    id: mdm
+    attributes:
+      label: MDM / directory
+      multiple: true
+      options: [Jamf Pro, Intune, Workspace ONE, Iru (Kandji), Mosyle, Addigy, Active Directory, Other, None]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: status
+    attributes:
+      label: Output of `sudo /usr/local/laps/macOSLAPS -status -v`
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Output of `sudo /usr/local/laps/macOSLAPS -showConfig`
+      description: FirstPass is never printed.
+      render: text
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant lines from /Library/Logs/macOSLAPS.log
+      render: text

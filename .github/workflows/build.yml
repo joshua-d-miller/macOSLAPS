@@ -25,8 +25,9 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Read-only by default; only the release job can write (it attaches assets to a release).
 permissions:
-  contents: write  # only used by the release job on tags
+  contents: read
 
 env:
   # Xcode 26 no longer targets 10.13. 12.0 covers every macOS Apple still patches.
@@ -48,6 +49,10 @@ jobs:
           ./shell-tests
 
   build:
+    # The Developer ID secrets can live in the "signing" environment (Settings →
+    # Environments) with protection rules; repository secrets keep working too.
+    # Pull requests from forks never receive secrets and produce unsigned test builds.
+    environment: signing
     runs-on: macos-26
     timeout-minutes: 30
     outputs:
@@ -304,6 +309,8 @@ jobs:
 
   release:
     needs: [generator-tests, build, smoke-test, upgrade-test, windows-decrypt]
+    permissions:
+      contents: write
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 30
