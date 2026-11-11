@@ -2,6 +2,7 @@
 // System keychain, so the probe can show which code-signing identities can read an item.
 //   kcprobe add <service> <password>   create the item (this binary becomes its trusted app)
 //   kcprobe read <service>             print the password, or exit 3 with the OSStatus
+//   kcprobe update <service> <password> replace the password (marks the item migrated)
 //   kcprobe delete <service>           delete the item
 import Foundation
 import Security
@@ -38,6 +39,12 @@ case "read":
         FileHandle.standardError.write("read failed: \(describe(s))\n".data(using: .utf8)!); exit(3)
     }
     print(String(decoding: d, as: UTF8.self))
+case "update":
+    let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
+                            kSecUseKeychain as String: kc]
+    let s = SecItemUpdate(q as CFDictionary, [kSecValueData as String: args[3].data(using: .utf8)!,
+                                              kSecAttrComment as String: "Migrated"] as CFDictionary)
+    if s != noErr { FileHandle.standardError.write("update failed: \(describe(s))\n".data(using: .utf8)!); exit(3) }
 case "delete":
     let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
                             kSecUseKeychain as String: kc]

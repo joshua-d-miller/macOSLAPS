@@ -33,7 +33,13 @@ expect_read ok     "$A2"     "$SVC" "same identity at another path" 'Probe-Pass-
 expect_read denied "$B"      "$SVC" "com.joshua-d-miller.macoslaps (same team)"
 expect_read denied "$MAIN"   "$SVC" "app main executable (new identity)"
 expect_read ok     "$HELPER" "$SVC" "legacy helper inside the app bundle" 'Probe-Pass-1'
-"$HELPER" delete "$SVC" && pass "legacy helper can delete the item" || fail "legacy helper could not delete the item"
+# Deleting needs the item's owner entry, which trusts no app (so it would prompt).
+# Record what works for retiring the legacy item after migration.
+"$HELPER" delete "$SVC" 2>&1 && echo "RESULT: legacy helper CAN delete" || echo "RESULT: legacy helper cannot delete (expected)"
+"$HELPER" update "$SVC" 'MIGRATED' && [ "$("$HELPER" read "$SVC")" = MIGRATED ] && pass "legacy helper can overwrite the item with a tombstone" || fail "legacy helper could not overwrite the item"
+security delete-generic-password -s "$SVC" /Library/Keychains/System.keychain >/dev/null 2>&1 \
+    && echo "RESULT: root 'security delete-generic-password' CAN delete" || echo "RESULT: root 'security delete-generic-password' cannot delete"
+security find-generic-password -s "$SVC" /Library/Keychains/System.keychain >/dev/null 2>&1 && echo "RESULT: item still present" || echo "RESULT: item gone"
 echo "::endgroup::"
 
 echo "::group::Item created by the signed 4.0.0 (845) release"
@@ -50,6 +56,8 @@ REAL=$("$HELPER" read macOSLAPS 2>&1)
 dscl . -authonly lapsprobe "$REAL" >/dev/null 2>&1 && pass "legacy helper reads 845's item and the password works" || fail "legacy helper could not read 845's item: $REAL"
 expect_read denied "$MAIN" macOSLAPS "app main executable on 845's item"
 expect_read denied "$B"    macOSLAPS "com.joshua-d-miller.macoslaps on 845's item"
+security delete-generic-password -s macOSLAPS /Library/Keychains/System.keychain >/dev/null 2>&1 \
+    && echo "RESULT: root 'security delete-generic-password' CAN delete 845's item" || echo "RESULT: root 'security delete-generic-password' cannot delete 845's item"
 echo "::endgroup::"
 
 echo "$FAILURES unexpected result(s)"
