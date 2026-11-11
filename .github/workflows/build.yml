@@ -419,6 +419,29 @@ jobs:
       - name: Upgrade test
         run: sudo bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
 
+  # Upgrade from the last 3.x release (3.0.4): migration from 3.x's keychain item.
+  upgrade-test-3x:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Download macOSLAPS 3.0.4 (781)
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/macOSLAPS-3.0.4.pkg" \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/3.0.4%28781%29/macOSLAPS-3.0.4.781.pkg"
+          pkgutil --check-signature "$RUNNER_TEMP/macOSLAPS-3.0.4.pkg" | head -4
+      - name: Upgrade test from 3.0.4
+        run: sudo bash .github/scripts/upgrade-3x-test.sh "$RUNNER_TEMP/macOSLAPS-3.0.4.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
+
   # The CMS escrow must open with the tool Windows admins already have.
   windows-decrypt:
     needs: smoke-test
@@ -438,7 +461,7 @@ jobs:
         run: ./.github/scripts/windows-decrypt.ps1
 
   release:
-    needs: [generator-tests, build, smoke-test, upgrade-test, windows-decrypt]
+    needs: [generator-tests, build, smoke-test, upgrade-test, upgrade-test-3x, windows-decrypt]
     permissions:
       contents: write
     if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
