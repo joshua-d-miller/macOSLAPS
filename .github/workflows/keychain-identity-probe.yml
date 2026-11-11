@@ -1,0 +1,74 @@
+name: Keychain identity probe
+
+# One-off experiment for the app-bundle migration: which signing identities can read
+# the System keychain item another identity created. Needs the Developer ID secrets
+# (ad-hoc signatures match by hash, not identifier, so they can't answer this).
+
+on:
+  push:
+    branches: [ci/github-actions-build]
+    paths: ['.github/probes/**', '.github/workflows/keychain-identity-probe.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    runs-on: ${{ matrix.os }}
+    environment: signing
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build and sign the probes
+        env:
+          DEVID_APP_P12: ${{ secrets.DEVID_APP_P12 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+        run: |
+          [ -n "$DEVID_APP_P12" ] || { echo "::error::Developer ID secrets are required"; exit 1; }
+          KC="$RUNNER_TEMP/probe.keychain-db"; KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$DEVID_APP_P12" | base64 --decode > "$RUNNER_TEMP/app.p12"
+          security import "$RUNNER_TEMP/app.p12" -k "$KC" -P "$P12_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/app.p12"
+          curl -fsSL https://www.apple.com/certificateauthority/DeveloperIDG2CA.cer -o "$RUNNER_TEMP/g2.cer"
+          security import "$RUNNER_TEMP/g2.cer" -k "$KC" || true
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KCPW" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
+
+          P="$RUNNER_TEMP/probes"; mkdir -p "$P/a" "$P/b" "$P/elsewhere"
+          swiftc -O .github/probes/kcprobe.swift -o "$P/kcprobe"
+          sign() { codesign --force --timestamp --options runtime --identifier "$1" --sign "$ID" "$2"; }
+          cp "$P/kcprobe" "$P/a/kcprobe"; sign edu.psu.macOSLAPS "$P/a/kcprobe"
+          cp "$P/a/kcprobe" "$P/elsewhere/kcprobe"
+          cp "$P/kcprobe" "$P/b/kcprobe"; sign com.joshua-d-miller.macoslaps "$P/b/kcprobe"
+
+          # App bundle: new identity outside, legacy helper inside (signed first, inside-out).
+          APP="$P/Probe.app"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
+          cat > "$APP/Contents/Info.plist" <<'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>CFBundleIdentifier</key><string>com.joshua-d-miller.macoslaps</string>
+            <key>CFBundleExecutable</key><string>Probe</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>0.0.1</string>
+            <key>CFBundleVersion</key><string>1</string>
+          </dict></plist>
+          PLIST
+          cp "$P/kcprobe" "$APP/Contents/Helpers/kcprobe-legacy"; sign edu.psu.macOSLAPS "$APP/Contents/Helpers/kcprobe-legacy"
+          cp "$P/kcprobe" "$APP/Contents/MacOS/Probe"
+          codesign --force --timestamp --options runtime --sign "$ID" "$APP"
+          codesign --verify --strict --deep --verbose=2 "$APP"
+          echo "P=$P" >> "$GITHUB_ENV"
+      - name: Download 4.0.0 (845)
+        run: curl -fsSL -o "$RUNNER_TEMP/845.pkg" "https://github.com/${GITHUB_REPOSITORY}/releases/download/4.0.0%28845%29/macOSLAPS-4.0.0.845.pkg"
+      - name: Probe
+        run: sudo bash .github/probes/keychain-identity-probe.sh "$P" "$RUNNER_TEMP/845.pkg"
