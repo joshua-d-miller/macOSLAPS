@@ -465,6 +465,15 @@ dscl . -authonly "$ACCT" "$P2" >/dev/null 2>&1 && [ "$(get_pw)" != "$P2" ] && pa
 # auto mode: active only when -escrow has run recently.
 defaults write "$DOMAIN" StagedRotation -string auto
 "$LAPS" -status | grep -q '"stagedRotation":"auto (active)"' && pass "auto mode is active after -escrow ran" || fail "auto mode not active after -escrow"
+# Taking over an account with -firstPass never stages, even with staging active:
+# a FirstPass given on the command line would be gone when the staged one is applied.
+TAKEOVER='Takeover-Pass-2468'
+dscl . -passwd "/Users/$ACCT" "$(get_pw)" "$TAKEOVER" >/dev/null 2>&1
+security delete-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1
+"$LAPS" -firstPass "$TAKEOVER" >/dev/null 2>&1
+TP=$(get_pw 2>/dev/null)
+[ -n "$TP" ] && [ "$TP" != "$TAKEOVER" ] && dscl . -authonly "$ACCT" "$TP" >/dev/null 2>&1 \
+    && "$LAPS" -status | grep -q '"pending":false' && pass "-firstPass rotates right away with staging active" || fail "-firstPass with staging active: $("$LAPS" -status)"
 defaults write "$DOMAIN" StagedRotation -string off
 "$LAPS" -status | grep -q '"stagedRotation":"off (inactive)"' && pass "staging off" || fail "staging off status"
 echo "::endgroup::"

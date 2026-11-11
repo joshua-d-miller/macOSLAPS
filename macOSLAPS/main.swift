@@ -198,6 +198,13 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
 
     guard due else { return }
     guard Staging.active else { apply(nil); exit(0) }
+    // Taking over an account (-firstPass) or having no stored password: there is no
+    // escrowed password to protect yet, and a FirstPass given on the command line would
+    // be gone by the time a staged password is applied. Rotate now.
+    if Constants.use_firstpass || KeychainService.loadPassword(service: KeychainNames.current).0 == nil {
+        laps_log.print("No managed password yet (or -firstPass): rotating now instead of staging.", .info)
+        apply(nil); exit(0)
+    }
 
     let next = PasswordGen(length: Constants.password_length)
     guard Staging.stage(next) else { exit(1) }

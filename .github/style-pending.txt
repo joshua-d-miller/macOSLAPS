@@ -6,9 +6,6 @@
 .github/scripts/samba/verify-dc.sh
 .github/scripts/smoke-test.sh
 .github/scripts/upgrade-test.sh
-MDM Scripts/macoslaps4-mdm-install-script.sh
-MDM Scripts/macoslaps4-mdm-password-and-expiration.sh
-MDM Scripts/macoslaps4-mdm-password-simple.sh
 Tests/GeneratorTests/main.swift
 Tests/ShellTests/main.swift
 macOSLAPS-legacy/main.swift

@@ -1,133 +1,188 @@
 #!/bin/zsh
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | MDM Scripts | macoslaps4-mdm-password-and-expiration.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Henri Kovanen (Decens Oy), Joshua D. Miller, Claude
+ Updated:   2026-11-11
+
+ Purpose:
+     Password grab for Intune (and other MDMs) that rotates the password
+     first when it expires within rotateThresholdDays, then prints:
+     Successfully retrieved following password: <password> (expires
+     yyyy-MM-dd HH:mm:ss)
+     While a new password is staged, " (pending: <password>)" is added.
+     With EscrowCertificates set, the encrypted CMS block is printed
+     instead.
+
+ Usage:
+     Run as root by the MDM. Set rotateThresholdDays below.
+
+ Credits:
+     Written by Henri Kovanen, Decens Oy (https://www.decens.fi). Versions
+     v2 and v3 are Henri's own script versions.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ v2        2024-08-06   henri     Takes into account the new keychain method
+                                  introduced in macOSLAPS 4.0.0. First version
+                                  with a changelog.
+
+ v3        2025-01-10   henri     Tidying up and harmonizing things with the
+                                  related scripts.
+
+ 4.0.0     2026-11-11   joshua    macOSLAPS 4.0: reads -escrow and -status (no
+                        claude    temporary keychain copy), finds the app in
+                                  /Applications with /usr/local/laps as the
+                                  fallback, and reports a staged pending
+                                  password too. Older releases keep using
+                                  -getPassword; the 3.0 plaintext files are no
+                                  longer read (macOSLAPS 4.0 deletes them).
+
+                                  New header and section style.
+===============================================================================
+HEADER
 #shellcheck shell=bash
-# shellcheck disable=SC2317
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin
-autoload is-at-least
 
-# This script must run as root
-if [[ ! $(id -u) = "0" ]]; then echo "Script must run be with root privileges."; exit 1; fi
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------- ###
+### | Where macOSLAPS is | ###
+### ---------------------- ###
+### The app in /Applications (4.0), or the old path for 3.x and 4.0.0       ###
+### (845). /usr/local/laps is legacy and removed in macOSLAPS 5.0.          ###
+LAPS=/Applications/macOSLAPS.app/Contents/MacOS/macOSLAPS
+[[ -x "$LAPS" ]] || LAPS=/usr/local/laps/macOSLAPS
+SYSTEM_KEYCHAIN=/Library/Keychains/System.keychain
+EXPORT_NAME_FILE=/var/root/.GeneratedLAPSServiceName
 
-#############################################################################################################################
-# macOSLAPS password grab and pre-emptive rotate script for Intune (and other MDMs)
-# By Henri Kovanen / Decens Oy / https://www.decens.fi
-# Version 3 / 2025-01-10
-#	* Tidying up and harmonizing things with the related scripts
-# Version 2 / 2024-08-06
-#	* Takes into account the new keychain method introduced in macOSLAPS 4.0.0
-#   * First version with changelog
-#
-
-# NOTE: All exits (save the root check) are 0 since Intune doesn't show any output if script fails, and we really don't
-# NEED the script to actually fail - we just need to see the last line echoed before exit.
-
-#############################################################################################################################
-
-# Define the treshold for rotating the password, i.e. if password expires in less than this many days, rotate the
-# password. This is to prevent an edge case where the password is grabbed in MDM but rotated automatically soon after,
-# causing grabbed password not to work until next grab. This is especially handy for Intune, which makes the devices to
-# check-in only every 8 hours or so, so theoretically the password could be out of sync for hours.
-
-rotateTresholdDays=7
-
-#############################################################################################################################
-# Start script, no need to modify anything below.
-#############################################################################################################################
-
-passwordFile="/var/root/Library/Application Support/macOSLAPS-password"
-expirationFile="/var/root/Library/Application Support/macOSLAPS-expiration"
-v4uuidFile="/var/root/.GeneratedLAPSServiceName"
-
-selfCleanup () {
-for file in "$passwordFile" "$expirationFile" "$v4uuidFile"; do
-if [[ -e "$file" ]]; then rm "$file"; fi
-done
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------------- ###
+### | Reading macOSLAPS | ###
+### --------------------- ###
+### macOSLAPS 4.0 prints JSON with -escrow and -status. Older releases only ###
+### have -getPassword, which copies the password to a temporary keychain    ###
+### item that a second, plain run removes again. read_password sets         ###
+### currentAdminPassword, currentAdminExpiration (yyyy-MM-dd HH:mm:ss),     ###
+### pendingAdminPassword and escrowCMS.                                     ###
+json_value () {
+    ## plutil prints "Could not extract value" on stdout on some macOS versions ##
+    local value
+    value=$(plutil -extract "$1" raw -o - - <<< "$2" 2>/dev/null) || return 0
+    printf '%s' "$value"
 }
-
-# Auto-execute selfCleanup function on script exit
-trap selfCleanup EXIT
-
-# Define the function to get password and expiration
-getCurrentLAPSPassword () {
-	if ! /usr/local/laps/macOSLAPS -getPassword > /dev/null 2>&1; then echo "Error running macOSLAPS"; fi
-    # Get the current admin password and expiration depending whether the method is file (3.0 and older) or keychain (4.x and newer)
-    if is-at-least "4.0.0" "$currentVersion"; then
-        # macOSLAPS 4.x or newer; follow the keychain procedure
-        currentAdminPasswordUUID=$(cat "/var/root/.GeneratedLAPSServiceName")
-        currentAdminPassword=$(security find-generic-password -w -s "$currentAdminPasswordUUID")
-		currentAdminExpiration=$(security find-generic-password -s "$currentAdminPasswordUUID" | /usr/bin/grep -Eo "\d{4}-\d{2}-\d{2}.*\d")
-    else
-        # macOSLAPS 3.x or older, follow the file procedure
-        currentAdminPassword=$(cat "/var/root/Library/Application Support/macOSLAPS-password")
-        currentAdminExpiration=$(cat "/var/root/Library/Application Support/macOSLAPS-expiration")
+iso_to_local () {
+    [[ -n "$1" ]] && printf '%s' "${${1[1,19]}/T/ }"
+}
+has_flag () {
+    "$LAPS" -help 2>/dev/null | grep -q -- "$1"
+}
+laps_method () {
+    ## Local or AD. 4.0: from -status, which merges both settings domains per key ##
+    if has_flag -status; then
+        json_value method "$("$LAPS" -status 2>/dev/null)"
+        return
     fi
-	# Running macOSLAPS again to clear the entries
-	/usr/local/laps/macOSLAPS >/dev/null 2>&1
+    local plist
+    for plist in "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" \
+                 "/Library/Managed Preferences/edu.psu.macoslaps.plist" \
+                 "/Library/Preferences/com.joshua-d-miller.macoslaps.plist" \
+                 "/Library/Preferences/edu.psu.macoslaps.plist"; do
+        if [ -f "$plist" ]; then
+            /usr/libexec/PlistBuddy -c "Print :Method" "$plist" 2>/dev/null
+            return
+        fi
+    done
+}
+read_password () {
+    currentAdminPassword="" currentAdminExpiration="" pendingAdminPassword="" escrowCMS=""
+    if has_flag -escrow; then
+        local out
+        out=$("$LAPS" -escrow 2>/dev/null) || return 1
+        if [[ "$out" == -----BEGIN* ]]; then
+            escrowCMS="$out"
+            return 0
+        fi
+        currentAdminPassword=$(json_value password "$out")
+        currentAdminExpiration=$(iso_to_local "$(json_value expires "$out")")
+        pendingAdminPassword=$(json_value pending "$out")
+        [[ -n "$currentAdminPassword" ]]
+        return
+    fi
+    ## macOSLAPS 3.1 - 4.0.0 (845) ##
+    "$LAPS" -getPassword > /dev/null 2>&1 || return 1
+    local service
+    service=$(tr -d '\n' < "$EXPORT_NAME_FILE" 2>/dev/null)
+    currentAdminPassword=$(security find-generic-password -w -s "$service" "$SYSTEM_KEYCHAIN" 2>/dev/null)
+    currentAdminExpiration=$(security find-generic-password -s "$service" "$SYSTEM_KEYCHAIN" 2>/dev/null | \
+        grep -Eo "[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}" | head -1)
+    ## A plain run removes the temporary copy ##
+    "$LAPS" > /dev/null 2>&1
+    rm -f "$EXPORT_NAME_FILE"
+    [[ -n "$currentAdminPassword" ]]
+}
+## The password, its expiry and a staged one, as one line ##
+password_line () {
+    local line="${currentAdminPassword} (expires ${currentAdminExpiration})"
+    [[ -n "$pendingAdminPassword" ]] && line="$line (pending: ${pendingAdminPassword})"
+    print -r -- "$line"
 }
 
-# Clear existing files if they exist.
-selfCleanup
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------ ###
+### | Settings | ###
+### ------------ ###
+### If the password expires in fewer than this many days, rotate it now, so ###
+### the MDM never holds a password that changes soon after it was           ###
+### collected. Intune devices check in only every 8 hours or so.            ###
+rotateThresholdDays=7
 
-if [[ ! -x /usr/local/laps/macOSLAPS ]]; then
-	echo "macOSLAPS not installed."
-	exit 0
-else
-	# Get current macOSLAPS version to determine the password retrieval method
-	currentVersion=$(/usr/local/laps/macOSLAPS -version)
-	# Determine managed vs. local settings (prefer managed over local)
-	# (new com.joshua-d-miller.macoslaps domain first, then the legacy edu.psu.macoslaps domain)
-	plistFile=""
-	for candidate in "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist" \
-	                 "/Library/Preferences/com.joshua-d-miller.macoslaps.plist" "/Library/Preferences/edu.psu.macoslaps.plist"; do
-		if [ -f "$candidate" ]; then plistFile="$candidate"; break; fi
-	done
-	if [ -z "$plistFile" ]; then
-		echo "macOSLAPS installed but no preferences found."
-		exit 0
-	fi
-
-	# Check if macOSLAPS is in AD mode
-	if [[ $( /usr/libexec/PlistBuddy -c "Print :Method" "$plistFile" ) == "AD" ]]; then
-		echo "macOSLAPS running in AD mode."
-		exit 0
-	fi
-
-	# Get the password and expiration
-	getCurrentLAPSPassword
-
-	# Calculate current expiration vs. rotation treshold
-	currentDate=$(date +%s)
-	# shellcheck disable=SC2086
-	expiryDate=$(date -j -f "%Y-%m-%d %H:%M:%S" "$currentAdminExpiration" +%s )
-	timeDiffDays="$(( (expiryDate-currentDate)/86400 ))"
-	if [[ "$timeDiffDays" -lt "$rotateTresholdDays" ]]; then
-		echo "Password expiry ($timeDiffDays) below treshold ($rotateTresholdDays), rotating the password..."
-		if ! /usr/local/laps/macOSLAPS -resetPassword > /dev/null 2>&1; then
-			echo "Error rotating the password!"
-			exit 0
-		fi
-		# Grab the password and expiration time after rotate
-		if ! /usr/local/laps/macOSLAPS -getPassword > /dev/null 2>&1; then
-			echo "Error running macOSLAPS"
-			exit 0
-		fi
-		getCurrentLAPSPassword
-	else
-		echo "Password expiry ($timeDiffDays) over treshold ($rotateTresholdDays), will not rotate."
-	fi
-
-	# Following test no longer needed as macOSLAPS starting from version 3.x tests the password with -getPassword flag.
-	# Uncomment following section if you're still using macOSLAPS 1.x/2.x.
-
-	# localAdmin=$( /usr/libexec/PlistBuddy -c "Print :LocalAdminAccount" "$plistFile" )
-
-	# if ! dscl . -authonly "$localAdmin" "$currentAdminPassword" >/dev/null 2>&1; then
-	# 	echo "Password testing failed!"
-	# 	selfCleanup
-	# 	exit 0
-	# fi
-
-	print -r -- "Successfully retrieved following password: $currentAdminPassword (expires $currentAdminExpiration)"
-	exit 0
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------- ###
+### | Main | ###
+### -------- ###
+### Every exit except the root check is 0: Intune shows no output when a    ###
+### script fails, and only the last line printed matters.                   ###
+if [[ $(id -u) != 0 ]]; then
+    echo "Script must be run with root privileges."
+    exit 1
+fi
+if [[ ! -x "$LAPS" ]]; then
+    echo "macOSLAPS not installed."
+    exit 0
+fi
+if [[ "$(laps_method)" == "AD" ]]; then
+    echo "macOSLAPS running in AD mode."
+    exit 0
+fi
+if ! read_password; then
+    echo "Error running macOSLAPS"
+    exit 0
+fi
+if [[ -n "$escrowCMS" ]]; then
+    print -r -- "$escrowCMS"
+    exit 0
 fi
 
+## Rotate now if the password expires soon ##
+currentDate=$(date +%s)
+expiryDate=$(date -j -f "%Y-%m-%d %H:%M:%S" "$currentAdminExpiration" +%s 2>/dev/null || echo 0)
+timeDiffDays=$(( (expiryDate - currentDate) / 86400 ))
+if [[ "$timeDiffDays" -lt "$rotateThresholdDays" ]]; then
+    echo "Password expiry ($timeDiffDays) below threshold ($rotateThresholdDays), rotating the password..."
+    if ! "$LAPS" -resetPassword > /dev/null 2>&1; then
+        echo "Error rotating the password!"
+        exit 0
+    fi
+    if ! read_password; then
+        echo "Error running macOSLAPS"
+        exit 0
+    fi
+else
+    echo "Password expiry ($timeDiffDays) over threshold ($rotateThresholdDays), will not rotate."
+fi
+print -r -- "Successfully retrieved following password: $(password_line)"
 exit 0
