@@ -80,7 +80,7 @@ launchctl print system/edu.psu.macoslaps-check >/dev/null 2>&1 && fail "old Laun
 stop_daemon
 RECEIPTS=$(pkgutil --pkgs | grep -i laps | sort | tr '\n' ' ')
 [ "$RECEIPTS" = "$NEW_RECEIPTS" ] && pass "receipts switched, old ones forgotten" || fail "receipts after upgrade: $RECEIPTS"
-[ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps present" || fail "/etc/paths.d/laps missing"
+[ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/Applications/macOSLAPS.app/Contents/MacOS" ] && pass "/etc/paths.d/laps now points into the app" || fail "/etc/paths.d/laps: $(cat /etc/paths.d/laps 2>/dev/null)"
 NEW_VERSION=$("$LAPS" -version 2>/dev/null)
 re='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 [[ "$NEW_VERSION" =~ $re ]] && pass "-version prints only the version with an export pending ($NEW_VERSION)" || fail "-version output: $(printf '%q' "$NEW_VERSION")"

@@ -42,7 +42,8 @@ launchctl print system/$LABEL >/dev/null 2>&1 && pass "LaunchDaemon $LABEL loade
 RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
 [ "$RECEIPTS" = "com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps-check " ] && pass "receipts com.joshua-d-miller.macoslaps and -check" || fail "receipts: $RECEIPTS"
 /usr/libexec/PlistBuddy -c "Print :ProgramArguments:0" "$PLIST" | grep -qx "$APP/Contents/MacOS/macOSLAPS" && pass "LaunchDaemon runs the app directly" || fail "LaunchDaemon program: $(/usr/libexec/PlistBuddy -c 'Print :ProgramArguments:0' "$PLIST")"
-[ "$(cat /etc/paths.d/laps 2>/dev/null)" = "/usr/local/laps" ] && pass "/etc/paths.d/laps" || fail "/etc/paths.d/laps missing or wrong"
+[ "$(cat /etc/paths.d/laps 2>/dev/null)" = "$APP/Contents/MacOS" ] && pass "/etc/paths.d/laps points into the app" || fail "/etc/paths.d/laps: $(cat /etc/paths.d/laps 2>/dev/null)"
+[ "$(env -i /bin/bash -c 'eval "$(/usr/libexec/path_helper -s)"; command -v macOSLAPS')" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "macOSLAPS on PATH is the app" || fail "macOSLAPS on PATH: $(env -i /bin/bash -c 'eval "$(/usr/libexec/path_helper -s)"; command -v macOSLAPS')"
 [ "$(stat -f '%Su:%Sg %Lp' "$PLIST")" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' "$PLIST")"
 [ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
 [ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
