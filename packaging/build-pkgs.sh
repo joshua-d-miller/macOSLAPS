@@ -14,7 +14,7 @@ set -euo pipefail
 
 BIN=$1; VERSION=$2; OUT=$3; IDENTITY=${4:-}; KEYCHAIN=${5:-}
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "build-pkgs.sh: version must look like 4.0.0.846, got '$VERSION'" >&2; exit 1; }
-MIN_MACOS=${MIN_MACOS:-12.0}
+MIN_MACOS=${MIN_MACOS:-13.0}
 HERE=$(cd "$(dirname "$0")" && pwd)
 REPO=$(dirname "$HERE")
 WORK=$(mktemp -d)
