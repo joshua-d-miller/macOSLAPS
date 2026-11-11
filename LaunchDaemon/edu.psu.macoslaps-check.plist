@@ -7,7 +7,6 @@
   <key>AssociatedBundleIdentifiers</key>
   <array>
     <string>edu.psu.macOSLAPS</string>
-    <string>edu.psu.macOSLAPS-repair</string>
     <string>edu.psu.macoslaps-check</string>
   </array>
   <key>ProgramArguments</key>
