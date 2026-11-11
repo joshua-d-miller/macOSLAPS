@@ -234,11 +234,14 @@ echo "::group::-status records the last run; failed password checks are not repe
 GOOD=$(get_pw)
 dscl . -passwd "/Users/$ACCT" "$GOOD" 'Changed-Behind-Its-Back-1'
 "$LAPS" -status | grep -q '"passwordVerifies":false' && pass "-status detects keychain/account mismatch" || fail "-status missed the mismatch"
-BEFORE=$(stat -f %m /var/db/macoslaps/state.plist)
+# verifiedAt changes only when the password is actually checked against the account
+# (-escrow also writes lastEscrow, so the file's modification time is not a signal).
+checked_at() { plutil -extract verifiedAt raw /var/db/macoslaps/state.plist 2>/dev/null; }
+BEFORE=$(checked_at)
 sleep 1
 for i in 1 2 3; do "$LAPS" -status >/dev/null; "$LAPS" -escrow >/dev/null 2>&1; done
-AFTER=$(stat -f %m /var/db/macoslaps/state.plist)
-[ "$BEFORE" = "$AFTER" ] && pass "failed check reused (no new authentication attempts)" || fail "failed check was repeated"
+AFTER=$(checked_at)
+[ -n "$BEFORE" ] && [ "$BEFORE" = "$AFTER" ] && pass "failed check reused (no new authentication attempts)" || fail "failed check was repeated ($BEFORE -> $AFTER)"
 dscl . -passwd "/Users/$ACCT" 'Changed-Behind-Its-Back-1' "$GOOD"
 "$LAPS" -resetPassword >/dev/null 2>&1   # a rotation verifies and clears the cached failure
 "$LAPS" -status | grep -q '"passwordVerifies":true' && pass "a rotation clears the cached failure" || fail "-status after recovery: $("$LAPS" -status)"
