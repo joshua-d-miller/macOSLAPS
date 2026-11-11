@@ -52,6 +52,20 @@ codesign --verify --strict --deep "$APP" && pass "installed app's signature is v
 [ "$(codesign -dv "$APP" 2>&1 | sed -n 's/^Identifier=//p')" = "com.joshua-d-miller.macoslaps" ] && pass "app signed com.joshua-d-miller.macoslaps" || fail "app identifier: $(codesign -dv "$APP" 2>&1 | grep ^Identifier)"
 echo "::endgroup::"
 
+echo "::group::Background item (Login Items) attribution"
+# macOS names a background item after the app it belongs to; without one it falls back to
+# the signer ("Joshua Miller", issue #75). Show what Background Task Management recorded.
+BTM=$(sfltool dumpbtm 2>/dev/null)
+ENTRIES=$(awk '/^ +#[0-9]+:$/ { if (block ~ /macoslaps/) print block; block = "" } { block = block "\n" $0 } END { if (block ~ /macoslaps/) print block }' <<< "$BTM")
+if [ -z "$BTM" ]; then
+    echo "::notice::sfltool dumpbtm printed nothing on this runner"
+else
+    echo "$ENTRIES"
+    echo "$ENTRIES" | grep -qE "^ +Name: macOSLAPS$" && pass "background item is named macOSLAPS" || echo "::warning::no BTM entry named macOSLAPS (see the entries above)"
+    echo "$ENTRIES" | grep -qE "^ +Name: Joshua Miller$" && echo "::warning::a BTM entry is still named after the signer"
+fi
+echo "::endgroup::"
+
 # Stop the daemon the pkg loaded so it can't race the test.
 launchctl bootout system/$LABEL 2>/dev/null || true
 
