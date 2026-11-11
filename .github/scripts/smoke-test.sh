@@ -358,16 +358,15 @@ CREATED1=$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')
 sleep 2
 "$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "repeated -initialize succeeds" || fail "repeated -initialize failed"
 [ "$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
-# After a rotation, an outdated FirstPass is not tried against the account.
-"$LAPS" -resetPassword >/dev/null 2>&1
-ROT=$(get_pw)
-"$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "-initialize on a managed Mac exits cleanly" || fail "-initialize on a managed Mac failed"
-[ "$(get_pw)" = "$ROT" ] && pass "-initialize leaves a rotated password alone" || fail "-initialize replaced the rotated password"
 # FirstPass in the configuration is readable by local users; -status must flag it while it is live.
 defaults write "$DOMAIN" FirstPass -string "$INIT"
 "$LAPS" -status | grep -q '"passwordIsFirstPass":true' && pass "-status flags a live FirstPass" || fail "-status does not flag a live FirstPass"
 "$LAPS" -resetPassword >/dev/null 2>&1
 "$LAPS" -status | grep -q '"passwordIsFirstPass":false' && pass "-status clears the flag after rotation" || fail "-status FirstPass flag after rotation"
+# After that rotation, an outdated FirstPass is not tried against the account.
+ROT=$(get_pw)
+"$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "-initialize on a managed Mac exits cleanly" || fail "-initialize on a managed Mac failed"
+[ "$(get_pw)" = "$ROT" ] && pass "-initialize leaves a rotated password alone" || fail "-initialize replaced the rotated password"
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 echo "::endgroup::"
 
