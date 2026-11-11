@@ -168,8 +168,65 @@ jobs:
           codesign --force --timestamp --options runtime --identifier edu.psu.macOSLAPS --sign "$APP_ID" "$BIN"
           codesign --verify --strict --verbose=2 "$BIN"
           echo "KC=$KC" >> "$GITHUB_ENV"
+          echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
           echo "INST_ID=$INST_ID" >> "$GITHUB_ENV"
           echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Assemble and sign macOSLAPS.app
+        id: app
+        env:
+          BIN: ${{ steps.binary.outputs.bin }}
+          SIGNED: ${{ steps.sign.outputs.signed }}
+          SHORT: ${{ steps.version.outputs.short }}
+          BUILD: ${{ steps.version.outputs.build }}
+        run: |
+          # macOSLAPS.app: the CLI as the main executable, the legacy migration helper in
+          # Contents/Helpers. Not packaged yet (step 23).
+          # Until migration lands (step 22) the main executable must keep the identifier
+          # edu.psu.macOSLAPS, which the existing keychain items trust. Signing a bundle
+          # signs its main executable, so the bundle is signed with that identifier too.
+          APP=build/app/macOSLAPS.app
+          rm -rf build/app; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers"
+          cp "$BIN" "$APP/Contents/MacOS/macOSLAPS"
+          if [ "$SIGNED" = "true" ]; then
+            cp build/helper/macOSLAPS-legacy "$APP/Contents/Helpers/macOSLAPS-legacy"
+            sign=(--sign "$APP_ID" --timestamp)
+          else
+            cp build/helper/macOSLAPS-legacy-unsigned-test "$APP/Contents/Helpers/macOSLAPS-legacy"
+            sign=(--sign -)
+          fi
+          python3 - "$APP/Contents/Info.plist" "$SHORT" "$BUILD" "$MIN_MACOS" <<'PY'
+          import plistlib, sys
+          path, short, build, minos = sys.argv[1:]
+          plistlib.dump({
+              "CFBundleIdentifier": "com.joshua-d-miller.macoslaps",
+              "CFBundleName": "macOSLAPS",
+              "CFBundleDisplayName": "macOSLAPS",
+              "CFBundleExecutable": "macOSLAPS",
+              "CFBundlePackageType": "APPL",
+              "CFBundleInfoDictionaryVersion": "6.0",
+              "CFBundleShortVersionString": short,
+              "CFBundleVersion": build,
+              "LSMinimumSystemVersion": minos,
+              "LSUIElement": True,
+              "NSHumanReadableCopyright": "Copyright Joshua D. Miller. Originally created at Penn State.",
+          }, open(path, "wb"))
+          PY
+          plutil -lint "$APP/Contents/Info.plist"
+          # Inside-out: the helper first, then the bundle (which signs the main executable).
+          codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
+          codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP"
+          codesign --verify --strict --deep --verbose=2 "$APP"
+          for f in "$APP" "$APP/Contents/Helpers/macOSLAPS-legacy"; do
+            echo "$f: $(codesign -dv "$f" 2>&1 | grep -E '^Identifier|^TeamIdentifier' | tr '\n' ' ')"
+          done
+          v=$("$APP/Contents/MacOS/macOSLAPS" -version 2>/dev/null)
+          [ "$v" = "$SHORT.$BUILD" ] || { echo "::error::app's macOSLAPS -version printed '$v'"; exit 1; }
+          rc=0; "$APP/Contents/Helpers/macOSLAPS-legacy" || rc=$?
+          [ "$rc" -eq 64 ] || { echo "::error::helper exit $rc without arguments (expected 64)"; exit 1; }
+          mkdir -p dist-app
+          ditto -c -k --keepParent "$APP" "dist-app/macOSLAPS-app-$SHORT.$BUILD.zip"
+          echo "app=$APP" >> "$GITHUB_OUTPUT"
 
       - name: Build pkgs
         id: package
@@ -248,6 +305,11 @@ jobs:
 
       - name: Checksums
         run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: macOSLAPS-app-${{ steps.binary.outputs.version }}
+          path: dist-app/*.zip
 
       - uses: actions/upload-artifact@v5
         with:
