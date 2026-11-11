@@ -1,13 +1,31 @@
-///
-///  TimeConversion.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 6/13/17.
-///
-///
+/*
+===============================================================================
+ macOSLAPS | Extensions | TimeConversion.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     Converts between Windows file time (Active Directory's password
+     expiration) and dates.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   claude    New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------- //
+// | Windows and Unix time | //
+// ------------------------- //
+// AD stores 100-nanosecond intervals since 1601.                            //
 class TimeConversion: NSObject {
     // Windows to Epoch time converter and vice versa
     class func epoch(exp_time: String) -> Date? {

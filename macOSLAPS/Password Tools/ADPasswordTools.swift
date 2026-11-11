@@ -1,18 +1,39 @@
-///
-///  ADPasswordTools.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 6/13/17.
-///  
-///  Last Update on November 10, 2026
+/*
+===============================================================================
+ macOSLAPS | Password Tools | ADPasswordTools.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     Reads and writes the password and its expiration in Active Directory,
+     for the AD method (the Windows LAPS model), with every ADSchema the
+     computer object may use.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Same rotation order as Local; restores every
+                        claude    LAPS attribute after a partial write; staged
+                                  rotation and finishing an interrupted one.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 import SystemConfiguration
 
-// Tools that will allow for passwords to be read
-// and written to Active Directory (Usually the default
-
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------- //
+// | Active Directory | //
+// -------------------- //
+// Connecting, checking the expiration, writing and restoring the            //
+// attributes.                                                               //
 public class ADTools: NSObject {
 
     // ADSchema: which LAPS attributes to write.

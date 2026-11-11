@@ -1,24 +1,43 @@
-///
-///  Escrow.swift
-///  macOSLAPS
-///
-///  Created November 10, 2026
-///
-///  `-escrow` prints the current password for an MDM inventory attribute
-///  (Jamf extension attribute, Intune custom attribute, WS1 sensor, ...).
-///
-///  - Without `EscrowCertificates`: one line of JSON with the password in plain
-///    text. The MDM's own access controls protect it (same exposure as 3.x/4.0b845).
-///  - With `EscrowCertificates`: the same JSON, encrypted as CMS (PKCS #7
-///    EnvelopedData) to every listed certificate, printed as a PEM block. Only the
-///    holders of those certificates' private keys can read it:
-///      Windows:  Unprotect-CmsMessage -Content (Get-Content escrow.txt -Raw)
-///      macOS:    security cms -D -i escrow.der   (base64-decode the PEM body first)
-///      Linux:    openssl cms -decrypt -inform PEM -in escrow.txt -recip cert.pem -inkey key.pem
-///
-///  Certificates can be given as PEM strings, base64 DER strings or plist <data>.
-///  Use RSA certificates (Windows needs the Document Encryption EKU,
-///  1.3.6.1.4.1.311.80.1, for Unprotect-CmsMessage).
+/*
+===============================================================================
+ macOSLAPS | Extensions | Escrow.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     -escrow prints the current password for an MDM inventory attribute
+     (Jamf extension attribute, Intune custom attribute, Workspace ONE
+     sensor, ...).
+     Without EscrowCertificates: one line of JSON with the password in
+     plain text; the MDM's own access controls protect it (the same
+     exposure as 3.x and 845).
+     With EscrowCertificates: the same JSON encrypted as CMS (PKCS #7
+     EnvelopedData) to every listed certificate, printed as a PEM block.
+     Only the holders of those certificates' private keys can read it.
+
+ Decrypting:
+     Windows: Unprotect-CmsMessage -Content (Get-Content escrow.txt -Raw)
+     macOS:   security cms -D -i escrow.der (base64-decode the PEM body)
+     Linux:   openssl cms -decrypt -inform PEM -in escrow.txt \
+                  -recip cert.pem -inkey key.pem
+     Certificates can be PEM strings, base64 DER strings or plist <data>.
+     Use RSA certificates; Windows needs the Document Encryption EKU
+     (1.3.6.1.4.1.311.80.1) for Unprotect-CmsMessage.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file: plaintext JSON or CMS escrow, fails
+                        claude    closed when EscrowCertificates is set but
+                                  unusable, reports a staged pending password.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import Security
@@ -26,6 +45,11 @@ import CryptoKit
 import CommonCrypto
 import SystemConfiguration
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------- //
+// | Escrow | //
+// ---------- //
+// Reads the certificates, builds the payload and prints it as JSON or CMS.  //
 enum Escrow {
     struct Payload: Codable {
         let v: Int
@@ -235,6 +259,11 @@ enum Escrow {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------- //
+// | Helpers | //
+// ----------- //
+// Computer name, JSON strings and hashes used by the payload.               //
 /// The Mac's computer name. (ProcessInfo.hostName does a DNS lookup and can stall for seconds.)
 func computerName() -> String {
     return (SCDynamicStoreCopyComputerName(nil, nil) as String?) ?? Host.current().localizedName ?? "unknown"
@@ -257,6 +286,12 @@ func sha256Hex(_ data: Data) -> String {
     return SHA256.hash(data: data).map { String(format: "%02X", $0) }.joined()
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------- //
+// | DER encoding | //
+// ---------------- //
+// Just enough DER to build the CMS EnvelopedData and read a certificate's   //
+// issuer and serial number.                                                 //
 /// Minimal DER encoder/decoder for the CMS structure above.
 enum DER {
     static func length(_ n: Int) -> Data {

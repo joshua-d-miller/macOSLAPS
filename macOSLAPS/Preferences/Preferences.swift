@@ -1,32 +1,41 @@
-///
-///  Preferences.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 6/13/17.
-///
-///  Last Updated November 8, 2026
-///
-///  Preference domains
-///  ------------------
-///  macOSLAPS is moving from the original `edu.psu.macoslaps` domain to
-///  `preferenceDomain` below. Both are read so existing deployments keep
-///  working; the keys are identical, only the domain (profile PayloadType)
-///  changes. The domain actually used is chosen as a whole (keys are never
-///  mixed between the two), in this order:
-///
-///    1. new domain, managed (configuration profile)
-///    2. legacy domain, managed (configuration profile)
-///    3. new domain, unmanaged (/Library/Preferences)
-///    4. legacy domain, unmanaged (/Library/Preferences)
-///    5. built-in defaults
-///
-///  Values are coerced to the expected type so a value written with the
-///  wrong type (e.g. `defaults write ... PasswordLength 14` without -int)
-///  is converted or replaced by the default with a warning instead of
-///  crashing the process (issue #86).
+/*
+===============================================================================
+ macOSLAPS | Preferences | Preferences.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     Reads the settings. macOSLAPS is moving from the original
+     edu.psu.macoslaps domain to com.joshua-d-miller.macoslaps; both are
+     read so existing deployments keep working. The new domain wins per
+     key and the legacy one fills only keys the new one doesn't set;
+     managed (configuration profile) values come before
+     /Library/Preferences, then the built-in defaults. Values are coerced
+     to the expected type, so one written with the wrong type is converted
+     or replaced by the default with a warning instead of crashing (#86).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New domain com.joshua-d-miller.macoslaps, per
+                        claude    key over the legacy one; type coercion;
+                                  -showconfig.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Domains and defaults | //
+// ------------------------ //
+// The two domains and every key's default.                                  //
 // New preference domain. Configuration profiles should use this as their PayloadType.
 let preferenceDomain = "com.joshua-d-miller.macoslaps"
 // Original domain. Still read for compatibility; logs a deprecation warning when used.
@@ -61,6 +70,11 @@ var defaultpreferences : [ String : Any ] = [
         ],
     ]
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------------- //
+// | Aliases and secrets | //
+// ----------------------- //
+// Older key spellings, and keys never printed.                              //
 // Misspellings seen in the wild, mapped to the real key. Read only when the real key is absent.
 let preferenceKeyAliases : [ String : String ] = [
     "PasswordSeperator"      :       "PasswordSeparator",
@@ -77,6 +91,11 @@ let requirementKeyAliases : [ String : String ] = [
 // Keys whose values must never be printed.
 let secretPreferenceKeys : Set<String> = ["FirstPass"]
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------------------- //
+// | Where a value came from | //
+// --------------------------- //
+// Managed or local, new or legacy domain, or the default.                   //
 enum PreferenceSource: String {
     case managedNew      = "configuration profile (new domain)"
     case managedLegacy   = "configuration profile (legacy edu.psu.macoslaps domain)"
@@ -85,6 +104,11 @@ enum PreferenceSource: String {
     case defaults        = "built-in defaults"
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Reading the settings | //
+// ------------------------ //
+// Merges both domains per key and remembers notices for the log.            //
 /// Settings are resolved one key at a time, in this order:
 ///   1. new domain, configuration profile (managed)
 ///   2. legacy edu.psu.macoslaps domain, configuration profile
@@ -190,7 +214,11 @@ final class PreferenceStore {
     }
 }
 
-// MARK: - Type coercion
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------- //
+// | Type coercion | //
+// ----------------- //
+// Turns a value of the wrong type into the right one, or nil.               //
 
 private func coerceInt(_ raw: Any) -> Int? {
     if let n = raw as? NSNumber { return n.intValue }
@@ -247,6 +275,11 @@ private func normalizeMethod(_ value: String) -> String {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Looking up a setting | //
+// ------------------------ //
+// The function the rest of macOSLAPS calls.                                 //
 /// Pull a configuration setting from the chosen preference domain or fall back to the default.
 /// The returned value always has the same type as the key's default, so callers' casts are safe.
 func GetPreference(preference_key key: String) -> Any? {
@@ -274,6 +307,12 @@ func GetPreference(preference_key key: String) -> Any? {
     return value
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------- //
+// | -showconfig | //
+// --------------- //
+// Every setting, where it came from, and whether it is managed. Never       //
+// FirstPass.                                                                //
 /// Prints the effective configuration for -showConfig. FirstPass is never printed.
 func printEffectiveConfiguration() {
     let prefs = PreferenceStore.shared

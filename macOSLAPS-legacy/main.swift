@@ -1,22 +1,43 @@
-///
-///  macOSLAPS-legacy
-///  Migration helper inside macOSLAPS.app (Contents/Helpers).
-///
-///  Signed with the legacy identifier edu.psu.macOSLAPS (team 9UYK4F9BSM), which is the
-///  only identity the keychain items created by macOSLAPS 3.x and 4.0.0 (845) trust.
-///  macOSLAPS itself is signed com.joshua-d-miller.macoslaps and cannot read them.
-///
-///  It does two things and nothing else, and only for macOSLAPS:
-///    read <service>        print {"password": ..., "comment": ...} as JSON on stdout
-///    tombstone <service>   overwrite the item's password with MIGRATED (comment "Migrated")
-///
-///  It refuses to run unless it is root and its parent process is the signed macOSLAPS
-///  app, so it can't be used as a general password dumper. Removed in 5.0.
-///
+/*
+===============================================================================
+ macOSLAPS | Migration helper | main.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     Migration helper inside macOSLAPS.app (Contents/Helpers). Signed with
+     the legacy identifier edu.psu.macOSLAPS (team 9UYK4F9BSM), the only
+     identity the keychain items created by macOSLAPS 3.x and 4.0.0 (845)
+     trust; macOSLAPS itself is signed com.joshua-d-miller.macoslaps and
+     cannot read them. It refuses to run unless it is root and its parent
+     process is the signed macOSLAPS, so it can't be used as a general
+     password dumper. Removed in 5.0.
+
+ Usage:
+     read <service>       print {"password": ..., "comment": ...}
+     tombstone <service>  overwrite the password with MIGRATED
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import Security
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------ //
+// | Who may run it | //
+// ------------------ //
+// Root, started by macOSLAPS signed by team 9UYK4F9BSM.                     //
 let keychainPath = "/Library/Keychains/System.keychain"
 let parentRequirement = """
     identifier "com.joshua-d-miller.macoslaps" and anchor apple generic \
@@ -48,6 +69,11 @@ func parentIsMacOSLAPS() -> Bool {
     #endif
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Arguments and checks | //
+// ------------------------ //
+// Refuses anything else.                                                    //
 let args = CommandLine.arguments
 guard args.count == 3, ["read", "tombstone"].contains(args[1]) else {
     die("macOSLAPS-legacy is used by macOSLAPS during migration and is not meant to be run directly.", 64)
@@ -63,6 +89,11 @@ guard SecKeychainOpen(keychainPath, &keychainRef) == errSecSuccess, let keychain
 // Never show a keychain prompt: an access list that doesn't trust us must fail.
 SecKeychainSetUserInteractionAllowed(false)
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------------------- //
+// | Reading or retiring the item | //
+// -------------------------------- //
+// Never shows a keychain prompt.                                            //
 func describe(_ status: OSStatus) -> String {
     "OSStatus \(status): \(SecCopyErrorMessageString(status, nil) as String? ?? "unknown")"
 }

@@ -1,26 +1,45 @@
-///
-///  PasswordPolicy.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 7/7/17 (as CharacterSetExlusion.swift).
-///
-///  Last updated: November 9, 2026
-///
-///  Pure password generation. This file depends only on Foundation so it can be
-///  compiled with the unit tests in Tests/GeneratorTests without root, Open
-///  Directory, or the rest of macOSLAPS.
-///
-///  Rules:
-///    - Passwords use printable ASCII 33-126 only (no spaces, no Unicode).
-///    - `length` counts generated characters only; separators added by grouping
-///      are not included (a length of 12 grouped by 4 is "xxxx-xxxx-xxxx").
-///    - Each PasswordRequirements count is a minimum and is always met.
-///    - Excluded characters and exclusion sets are always honored. Separator
-///      characters are excluded automatically when grouping is used.
-///    - Impossible policies throw instead of looping or silently ignoring rules.
+/*
+===============================================================================
+ macOSLAPS | Extensions | PasswordPolicy.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-07-07
+ Updated:   2026-11-11
+
+ Purpose:
+     Password generation, depending only on Foundation so the unit tests
+     in Tests/GeneratorTests compile it without root, Open Directory or
+     the rest of macOSLAPS. Started as CharacterSetExlusion.swift.
+
+ Rules:
+     Printable ASCII 33-126 only (no spaces, no Unicode).
+     length counts generated characters; grouping separators are extra (12
+     grouped by 4 is xxxx-xxxx-xxxx).
+     Each PasswordRequirements count is a minimum and is always met.
+     Excluded characters and exclusion sets are always honored; separators
+     are excluded automatically when grouping.
+     Impossible policies throw instead of looping or ignoring rules.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Rewritten: exact length, requirements always
+                        claude    met, every excluded character honored (#109,
+                                  #93, #121); readable style.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------------- //
+// | Character classes | //
+// --------------------- //
+// Uppercase, lowercase, numbers and symbols.                                //
 enum PasswordCharacterClass: String, CaseIterable {
     case Uppercase, Lowercase, Number, Symbol
 
@@ -35,6 +54,11 @@ enum PasswordCharacterClass: String, CaseIterable {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------- //
+// | Policy | //
+// ---------- //
+// What a password must and must not contain.                                //
 struct PasswordPolicy {
     var length: Int
     var excludedCharacters: Set<Character> = []
@@ -85,6 +109,11 @@ struct PasswordPolicy {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------- //
+// | Errors | //
+// ---------- //
+// Policies that can't be met, with a message for the log.                   //
 enum PasswordGenerationError: Error, CustomStringConvertible, Equatable {
     case invalidLength(Int)
     case emptyAlphabet
@@ -108,6 +137,11 @@ enum PasswordGenerationError: Error, CustomStringConvertible, Equatable {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------- //
+// | Generator | //
+// ------------- //
+// Picks the required characters first, fills the rest, shuffles and groups. //
 enum PasswordGenerator {
     static func generate(policy: PasswordPolicy) throws -> String {
         var rng = SystemRandomNumberGenerator()

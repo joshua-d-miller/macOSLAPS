@@ -1,18 +1,37 @@
-///
-///  secureToken.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 2/21/21.
-///
-///  Last updated November 10, 2026
-///
-///  Fails closed: the account only counts as having no secureToken when
-///  sysadminctl runs successfully and says DISABLED. An error, a timeout or
-///  unexpected output is "unknown", which rotation treats like a token (the old
-///  password is required), so a token is never removed by mistake.
+/*
+===============================================================================
+ macOSLAPS | Extensions | secureToken.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2021-02-21
+ Updated:   2026-11-11
+
+ Purpose:
+     Whether the local admin has a secureToken. Fails closed: the account
+     only counts as having no secureToken when sysadminctl runs
+     successfully and says DISABLED. An error, a timeout or unexpected
+     output is unknown, which rotation treats like a token (the old
+     password is required), so a token is never removed by mistake.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Fails closed; unknown is treated like a
+                        claude    token.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------- //
+// | secureToken status | //
+// ---------------------- //
+// Enabled, disabled or unknown, from sysadminctl.                           //
 enum SecureTokenStatus: String {
     case enabled, disabled, unknown
 }

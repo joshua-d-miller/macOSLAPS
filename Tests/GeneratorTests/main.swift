@@ -1,10 +1,39 @@
-// Unit tests for PasswordGenerator (macOSLAPS/Extensions/PasswordPolicy.swift).
-// No Xcode project or root needed:
-//   swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
-//   ./generator-tests
+/*
+===============================================================================
+ macOSLAPS | Tests | main.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-09
+ Updated:   2026-11-11
+
+ Purpose:
+     Unit tests for PasswordGenerator
+     (macOSLAPS/Extensions/PasswordPolicy.swift). No Xcode project or root
+     needed.
+
+ Usage:
+     swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift \
+         Tests/GeneratorTests/main.swift -o generator-tests
+     ./generator-tests
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------- //
+// | Checks | //
+// ---------- //
+// Counting checks and failures.                                             //
 var failures = 0
 var checks = 0
 
@@ -38,7 +67,11 @@ func generateOrFail(_ policy: PasswordPolicy, _ name: String) -> String? {
 
 func count(_ s: String, _ cls: PasswordCharacterClass) -> Int { s.filter { cls.contains($0) }.count }
 
-// MARK: Issue regressions
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------------- //
+// | Issue regressions | //
+// --------------------- //
+// #109, #93 and requirement counts.                                         //
 
 // #121 / #109: exact length, no off-by-one.
 for length in [1, 8, 12, 16, 17, 64] {
@@ -90,7 +123,11 @@ for _ in 0..<2000 {
     expect(pw.unicodeScalars.allSatisfy { (33...126).contains($0.value) }, "non-printable or non-ASCII in \(pw.debugDescription)")
 }
 
-// MARK: Readable style
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------ //
+// | Readable style | //
+// ------------------ //
+// Grouped, without look-alike characters.                                   //
 let readable = PasswordPolicy(length: 16, grouping: 4, separator: "-", style: "readable")
 for _ in 0..<2000 {
     guard let pw = generateOrFail(readable, "readable") else { break }
@@ -101,7 +138,10 @@ for _ in 0..<2000 {
 expectThrows(PasswordPolicy(length: 12, requirements: ["Symbol": 1], style: "readable"),
              .requirementUnsatisfiable("Symbol"), "readable with a symbol requirement")
 
-// MARK: Impossible policies throw
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------------------- //
+// | Impossible policies throw | //
+// ----------------------------- //
 
 expectThrows(PasswordPolicy(length: 0), .invalidLength(0), "zero length")
 expectThrows(PasswordPolicy(length: 8, exclusionSets: ["symbols", "letters", "numbers"]), .emptyAlphabet, "empty alphabet")
@@ -110,7 +150,10 @@ expectThrows(PasswordPolicy(length: 8, exclusionSets: ["symbols"], requirements:
 expectThrows(PasswordPolicy(length: 6, requirements: ["Uppercase": 3, "Number": 4]),
              .requirementsExceedLength(required: 7, length: 6), "requirements exceed length")
 
-// MARK: Grouping edge cases
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------------- //
+// | Grouping edge cases | //
+// ----------------------- //
 
 if let pw = generateOrFail(PasswordPolicy(length: 10, grouping: 4, separator: "-"), "uneven groups") {
     expect(pw.count == 12 && pw.split(separator: "-").map(\.count) == [4, 4, 2], "uneven grouping: \(pw)")
@@ -125,7 +168,11 @@ for _ in 0..<500 {
     expect(pw.filter { $0 == "-" }.count == 3, "separator appears inside a group: \(pw)")
 }
 
-// MARK: Randomized property test
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------------- //
+// | Randomized property test | //
+// ---------------------------- //
+// Random policies; every rule must hold on every password.                  //
 
 var rng = SystemRandomNumberGenerator()
 let sets = ["symbols", "letters", "numbers"]

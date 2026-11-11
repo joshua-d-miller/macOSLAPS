@@ -1,22 +1,47 @@
-///  ------------------------
-///     LAPS for macOS Devices
-///  ------------------------
-///  Command line executable that handles automatic
-///  generation and rotation of the local administrator
-///  password.
-///
-///  Current Usage:
-///    - Active Directory (Similar to Windows functionality)
-///    - Local (Password stored in Keychain Only)
-///  -------------------------
-///  Joshua D. Miller - josh.miller@outlook.com
-///  
-///  Last Updated November 11, 2026
-///  -------------------------
+/*
+===============================================================================
+ macOSLAPS | Command | main.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     The macOSLAPS command. Reads the arguments, moves a password stored
+     by an earlier macOSLAPS to the 4.0 keychain item, and rotates the
+     local admin's password when it is due, with the Active Directory
+     method (like Windows LAPS) or the Local method (keychain only,
+     escrowed by your MDM).
+
+ Usage:
+     macOSLAPS -help lists every argument.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    App bundle and new identity
+                        claude    (com.joshua-d-miller.macoslaps) with
+                                  migration from 3.x / 845; -status, -escrow,
+                                  -initialize, -uninstall; staged rotation
+                                  (-firstPass never stages); run lock; build
+                                  number in -version; deprecation notice for
+                                  /usr/local/laps.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------------- //
+// | Settings and run flags | //
+// -------------------------- //
+// The settings macOSLAPS runs with, read once from the preferences, and the //
+// flags the command-line arguments set.                                     //
 struct Constants {
     // Begin by tying date_formatter() to a variable
     static let dateFormatter = date_formatter()
@@ -40,6 +65,12 @@ struct Constants {
     static var initialize : Bool = false
     static var inside_hook : Bool = false
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------- //
+// | Arguments and version | //
+// ------------------------- //
+// Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
 let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge"]
 /// Version with build number, e.g. 4.0.0.868, so testers can tell builds apart
@@ -50,6 +81,12 @@ func fullVersion() -> String {
     guard let build = info?["CFBundleVersion"] as? String, !build.isEmpty else { return short }
     return "\(short).\(build)"
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------- //
+// | Root and the run lock | //
+// ------------------------- //
+// Rotation needs root, and only one rotation may run at a time.             //
 func verify_root() {
     // Check if running as root
     let current_running_User = NSUserName()
@@ -89,6 +126,12 @@ enum RunLock {
         }
     }
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------- //
+// | -uninstall | //
+// -------------- //
+// Runs the uninstall script inside the app bundle.                          //
 /// -uninstall [-purge]: runs Contents/Resources/uninstall.sh from the app bundle.
 func uninstall(purge: Bool) -> Never {
     guard let script = AppBundle.executable("Resources/uninstall.sh") else {
@@ -105,6 +148,12 @@ func uninstall(purge: Bool) -> Never {
     task.waitUntilExit()
     exit(task.terminationStatus)
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------- //
+// | -initialize | //
+// --------------- //
+// Adopts the current password without rotating it (#88).                    //
 /// -initialize (#88): adopt the current password without rotating it.
 func initializeWithoutRotating() -> Never {
     guard !Constants.first_password.isEmpty else {
@@ -150,6 +199,13 @@ func initializeWithoutRotating() -> Never {
     InventoryHook.run(reason: "initialize")
     exit(0)
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------------- //
+// | Rotating or staging | //
+// ----------------------- //
+// Finishes an interrupted rotation, applies a staged password once the MDM  //
+// has it, or stages or rotates a new one when it is due.                    //
 /// Decides what this run does about the password, with staged rotation:
 ///  - finish an apply that was interrupted (power loss / SIGKILL) if the account already
 ///    uses the pending password,
@@ -218,6 +274,12 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
     exit(0)
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------- //
+// | Main | //
+// -------- //
+// Handles each argument, then rotates with the AD or Local method when the  //
+// password is due.                                                          //
 func macOSLAPS() {
     laps_log_shell_timeout = { path, timeout in
         laps_log.print("\(path) did not finish within \(Int(timeout)) seconds and was stopped.", .warn)

@@ -1,12 +1,40 @@
-// Keychain identity probe (CI only). Mirrors how macOSLAPS stores its password in the
-// System keychain, so the probe can show which code-signing identities can read an item.
-//   kcprobe add <service> <password>   create the item (this binary becomes its trusted app)
-//   kcprobe read <service>             print the password, or exit 3 with the OSStatus
-//   kcprobe update <service> <password> replace the password (marks the item migrated)
-//   kcprobe delete <service>           delete the item
+/*
+===============================================================================
+ macOSLAPS | CI probes | kcprobe.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     Keychain identity probe (CI only). Stores an item in the System
+     keychain the way macOSLAPS does, so the probe can show which
+     code-signing identities can read it. Retired in step 25.
+
+ Usage:
+     kcprobe add <service> <password>     create the item
+     kcprobe read <service>               print the password, or exit 3
+     kcprobe update <service> <password>  replace the password
+     kcprobe delete <service>             delete the item
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+*/
+
 import Foundation
 import Security
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------ //
+// | Keychain | //
+// ------------ //
 func systemKeychain() -> SecKeychain {
     var kc: SecKeychain?
     guard SecKeychainOpen("/Library/Keychains/System.keychain", &kc) == errSecSuccess, let k = kc else {
@@ -16,6 +44,10 @@ func systemKeychain() -> SecKeychain {
 }
 func describe(_ s: OSStatus) -> String { "\(s) \(SecCopyErrorMessageString(s, nil) as String? ?? "")" }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------ //
+// | Commands | //
+// ------------ //
 let args = CommandLine.arguments
 guard args.count >= 3 else { print("usage: kcprobe add|read|delete <service> [password]"); exit(64) }
 let service = args[2]

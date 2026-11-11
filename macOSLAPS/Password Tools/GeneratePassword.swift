@@ -1,17 +1,35 @@
-///
-///  Generate Password.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 6/13/17.
-///
-///  Last updated: November 9, 2026
-///
-///  Builds a PasswordPolicy from the preferences and generates a password with
-///  PasswordGenerator (Extensions/PasswordPolicy.swift). Fixes #109, #93, #121:
-///  exact length, requirements always met, every excluded character honored.
+/*
+===============================================================================
+ macOSLAPS | Password Tools | GeneratePassword.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     Builds a PasswordPolicy from the preferences and generates a password
+     with PasswordGenerator (Extensions/PasswordPolicy.swift).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Uses PasswordPolicy: exact length,
+                        claude    requirements always met, every excluded
+                                  character honored (#109, #93, #121).
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------------- //
+// | Policy from the settings | //
+// ---------------------------- //
+// PasswordLength, requirements, exclusions, grouping and style.             //
 func currentPasswordPolicy(length: Int) -> PasswordPolicy {
     var style = (GetPreference(preference_key: "PasswordStyle") as? String ?? "random").lowercased()
     if style == "passphrase" {
@@ -39,6 +57,11 @@ func currentPasswordPolicy(length: Int) -> PasswordPolicy {
     )
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------- //
+// | Generating | //
+// -------------- //
+// A new password, or the run stops with the policy's error.                 //
 // Generate a randomized password from printable ASCII using the configured policy
 func PasswordGen(length: Int) -> String {
     let policy = currentPasswordPolicy(length: length)

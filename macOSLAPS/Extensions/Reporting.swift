@@ -1,18 +1,41 @@
-///
-///  Reporting.swift
-///  macOSLAPS
-///
-///  Created November 10, 2026
-///
-///  `-status`     one line of JSON for an MDM inventory attribute / smart group
-///  `-status -v`  the same checks as a readable checklist for a technician
-///  InventoryHook optional command run after a password change so the MDM
-///                picks up the new escrow value sooner (e.g. `jamf recon`)
+/*
+===============================================================================
+ macOSLAPS | Extensions | Reporting.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     -status prints one line of JSON for an MDM inventory attribute or
+     smart group; -status -v prints the same checks as a readable
+     checklist for a technician. Also the InventoryHook (a command run
+     after a password change so the MDM collects it sooner, e.g. jamf
+     recon) and the state kept between runs.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file: -status (account, secureToken,
+                        claude    FileVault, stored password, escrow, staging,
+                                  migration), InventoryHook, state between runs
+                                  with cached failed checks.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 import Security
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------ //
+// | -status report | //
+// ------------------ //
+// Every field -status prints.                                               //
 struct StatusReport: Codable {
     var v = 1
     var version: String
@@ -55,6 +78,11 @@ struct StatusReport: Codable {
     var migratedFrom: String?
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------------- //
+// | -status and -status -v | //
+// -------------------------- //
+// Collects the checks and prints them as JSON or as a checklist.            //
 enum Status {
     private static func shell(_ path: String, _ args: [String]) -> String {
         guard FileManager.default.isExecutableFile(atPath: path) else { return "" }
@@ -230,6 +258,11 @@ enum Status {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------ //
+// | Inventory hook | //
+// ------------------ //
+// Runs jamf recon or a custom command after a change, never inside itself.  //
 enum InventoryHook {
     /// Set in the hook's environment so macOSLAPS runs started by it (for example an
     /// extension attribute run by `jamf recon`) never rotate or start the hook again.
@@ -300,6 +333,12 @@ enum InventoryHook {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------- //
+// | State between runs | //
+// ---------------------- //
+// /var/db/macoslaps/state.plist: last run, staging counters, migration, and //
+// a cached result of checking the stored password. Never a password.        //
 /// Non-secret state kept between runs in /var/db/macoslaps/state.plist (root only):
 /// the last rotation run's time, result and error, and a cached result of checking the
 /// stored password against the account. No password is ever written here.
@@ -411,6 +450,11 @@ enum RunState {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------- //
+// | Helpers | //
+// ----------- //
+// Certificate expiry and date formats for the JSON.                         //
 /// Earliest expiry among certificates (nil if none or unreadable).
 func earliestExpiry(_ certs: [SecCertificate]) -> Date? {
     certs.compactMap { cert -> Date? in

@@ -1,22 +1,41 @@
-///
-///  LocalPasswordTools.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 6/13/17.
-///
-///  Last Update on November 9, 2026
-///
-///  Rotation is done in a fixed order shared by the AD and Local methods:
-///    1. change the account password (FirstPass / stored password / reset)
-///    2. verify the new password against the account
-///    3. store it (keychain, then AD for the AD method)
-///  Any failure after step 1 reverts the account to the previous password when it
-///  is known, so the keychain and the account never disagree (#110, #96).
+/*
+===============================================================================
+ macOSLAPS | Password Tools | LocalPasswordTools.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2017-06-13
+ Updated:   2026-11-11
+
+ Purpose:
+     Changes the local admin's password. Rotation is done in a fixed order
+     shared by the AD and Local methods: change the account password
+     (FirstPass, stored password or reset), verify it, then store it
+     (keychain, then AD). Any failure after the change reverts the account
+     when the previous password is known, so the keychain and the account
+     never disagree (#110, #96).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Fixed rotation order with revert; secureToken
+                        claude    fail-closed; stop signals held off between
+                                  change and store; staged rotation.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 import Security
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------------- //
+// | Holding off stop signals | //
+// ---------------------------- //
+// Between changing the account and storing the password.                    //
 /// Keeps SIGTERM / SIGINT / SIGHUP from stopping macOSLAPS between changing the
 /// account's password and storing the new one. Being stopped there would leave an
 /// account (possibly with a secureToken) on a password nobody has. A request to stop
@@ -28,6 +47,11 @@ enum CriticalSection {
     static func end() { for s in signals { signal(s, SIG_DFL) } }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------- //
+// | Local account | //
+// ----------------- //
+// Expiration, changing and verifying, reverting and storing.                //
 class LocalTools: NSObject {
     class func connect() -> ODRecord {
         // Pull Local Administrator Record

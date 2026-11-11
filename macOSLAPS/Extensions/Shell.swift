@@ -1,18 +1,37 @@
-///
-///  Shell.swift
-///  macOSLAPS
-///
-///  Created by Joshua D. Miller on 2/21/21.
-///
-///  Last updated November 10, 2026
-///
-///  Runs a system tool (sysadminctl, fdesetup, profiles, ...) and returns its output.
-///  Output is read while the tool runs, so tools that print more than the pipe
-///  buffer (64 KB) can't deadlock, and every call has a timeout so a stuck tool
-///  can never hang macOSLAPS (or the MDM inventory script that called it).
+/*
+===============================================================================
+ macOSLAPS | Extensions | Shell.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2021-02-21
+ Updated:   2026-11-11
+
+ Purpose:
+     Runs a system tool (sysadminctl, fdesetup, profiles, ...) and returns
+     its output. Output is read while the tool runs, so tools that print
+     more than the pipe buffer (64 KB) can't deadlock, and every call has
+     a timeout so a stuck tool can never hang macOSLAPS or the MDM script
+     that called it.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Reads output while the tool runs, with a
+                        claude    timeout (fixes the -status deadlock).
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Running system tools | //
+// ------------------------ //
+// execute returns the status and output; run only the output.               //
 class Shell: NSObject {
     struct Result {
         let status: Int32
@@ -76,6 +95,11 @@ class Shell: NSObject {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------------ //
+// | Timeout logging hook | //
+// ------------------------ //
+// Kept separate so this file also compiles in the standalone tests.         //
 /// Logging hook kept separate so Shell.swift also compiles in the standalone tests.
 var laps_log_shell_timeout: (String, TimeInterval) -> Void = { path, timeout in
     FileHandle.standardError.write("Warning: \(path) did not finish within \(Int(timeout)) seconds and was stopped.\n".data(using: .utf8)!)

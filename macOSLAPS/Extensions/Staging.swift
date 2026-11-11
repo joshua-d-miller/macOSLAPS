@@ -1,32 +1,50 @@
-///
-///  Staging.swift
-///  macOSLAPS
-///
-///  Created November 10, 2026
-///
-///  Staged rotation: the MDM gets the next password before the account uses it.
-///
-///  1. When the password is due (or -resetPassword), a new password is stored as
-///     *pending* in its own keychain item (KeychainNames.pending). The account is not
-///     changed yet.
-///  2. -escrow prints the current and the pending password. Each successful -escrow
-///     with a pending password counts as one export.
-///  3. The next run applies the pending password once it has been exported
-///     EscrowConfirmations times (default 2), or right away when the InventoryHook
-///     ran inventory successfully and that inventory exported it.
-///  4. Applying = change the account to the pending password, store it as the current
-///     one (and in AD), then remove the pending item. A marker written before the
-///     account changes lets the next run finish an apply that was interrupted
-///     (power loss, SIGKILL).
-///
-///  StagedRotation: auto (default) | on | off.
-///    auto: staging is used only when -escrow has run on this Mac in the last 14 days,
-///          i.e. the MDM collects the pending password. Macs whose inventory still
-///          uses the older -getPassword scripts keep rotating immediately.
+/*
+===============================================================================
+ macOSLAPS | Extensions | Staging.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     Staged rotation: the MDM gets the next password before the account
+     uses it.
+
+ How it fits:
+     1. When the password is due (or -resetPassword), a new password is
+     stored as pending in its own keychain item. The account is not
+     changed yet.
+     2. -escrow prints the current and the pending password; each
+     successful -escrow with a pending password counts as one export.
+     3. The next run applies the pending password once it has been
+     exported EscrowConfirmations times (default 2), or right away when
+     the InventoryHook ran inventory successfully and that inventory
+     exported it.
+     4. Applying: change the account, store the password as the current
+     one (and in AD), remove the pending item. A marker written first lets
+     the next run finish an apply that was interrupted.
+     StagedRotation: auto (default; only when -escrow ran in the last 14
+     days), on or off. -firstPass never stages.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------- //
+// | Staged rotation | //
+// ------------------- //
+// Mode, pending password, export counting and applying.                     //
 enum Staging {
     static let service = KeychainNames.pending
     static let autoWindow : TimeInterval = 14 * 24 * 60 * 60

@@ -1,19 +1,48 @@
-///
-///  KeychainService.swift
-///  macOSLAPS - Pulled from LAPS for macOS to use with System.keychain
-///
-///  Created by Joshua D. Miller on 7/21/18.
-///
-///  Sources: https://stackoverflow.com/a/37539998/1694526
-///  https://developer.apple.com/documentation/security/keychain_services/keychain_items/searching_for_keychain_items
-///  https://gitlab.com/orchardandgrove-oss/NoMADLogin-AD/blob/master/Mechs/KeychainAdd.swift
-///  Unlocking System Keychain code inspired by NoMad Login - Thanks Joel Rennich
-///  Another special thanks to Joel for critiqing my code to figure out the keychain function needed rewrote to compile in Xcode 11.1
-///  Last Updated Feb 26, 2024
+/*
+===============================================================================
+ macOSLAPS | Extensions | KeychainService.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2018-07-21
+ Updated:   2026-11-11
+
+ Purpose:
+     Stores the password in the System keychain. A root launchd daemon has
+     no modern alternative: the data protection keychain (and the Secure
+     Enclave) are unavailable outside a user context (Apple DTS, TN3137),
+     so the file-based keychain APIs Apple marks deprecated are kept for
+     the System keychain and confined to this file.
+
+ Credits:
+     Pulled from LAPS for macOS. Unlocking the System keychain was
+     inspired by NoMAD Login; thanks to Joel Rennich, who also critiqued
+     the keychain code when it needed rewriting for Xcode 11.1.
+     Sources: stackoverflow.com/a/37539998/1694526; Apple's Keychain
+     Services guide, Searching for Keychain Items; NoMADLogin-AD
+     Mechs/KeychainAdd.swift (gitlab.com/orchardandgrove-oss).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New keychain names under the 4.0 identity;
+                        claude    password and creation date stored in one
+                                  call; unreadable items fail closed; helpers
+                                  for migration (attributes, deleting as root).
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Cocoa
 import Security
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ----------------------- //
+// | Keychain item names | //
+// ----------------------- //
+// The service names of the stored and staged passwords.                     //
 /// Keychain service names. 4.0 stores under the new identity; the legacy names are
 /// read only by the migration helper (macOSLAPS-legacy) and removed in 5.0.
 enum KeychainNames {
@@ -22,6 +51,13 @@ enum KeychainNames {
     static let legacyCurrent = "macOSLAPS"
     static let legacyPending = "macOSLAPS-pending"
 }
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------------- //
+// | System keychain | //
+// ------------------- //
+// Saving, reading, exporting and deleting items. The deprecated calls stay  //
+// in this file.                                                             //
 /// Storage in the System keychain.
 ///
 /// A root launchd daemon has no modern alternative: the data protection keychain

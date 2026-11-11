@@ -1,7 +1,40 @@
-// Tests for Shell.execute (macOSLAPS/Extensions/Shell.swift). No root needed:
-//   swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests && ./shell-tests
+/*
+===============================================================================
+ macOSLAPS | Tests | main.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     Tests for Shell.execute (macOSLAPS/Extensions/Shell.swift). No root
+     needed.
+     1. Output larger than the 64 KB pipe buffer must not deadlock.
+     2. stderr is captured with stdout, the trailing newline trimmed, the
+     exit status kept.
+     3. A tool that never exits is stopped at the timeout.
+
+ Usage:
+     swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift \
+         -o shell-tests && ./shell-tests
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+*/
+
 import Foundation
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------- //
+// | Checks | //
+// ---------- //
 var failures = 0
 func expect(_ ok: Bool, _ message: String) { if !ok { failures += 1; print("FAIL: \(message)") } else { print("PASS: \(message)") } }
 

@@ -1,35 +1,56 @@
-///
-///  Migration.swift
-///  macOSLAPS
-///
-///  Created November 11, 2026
-///
-///  Moves the password stored by macOSLAPS 3.x / 4.0.0 (845) to the 4.0 keychain items.
-///
-///  The old items ("macOSLAPS", "macOSLAPS-pending") trust only code signed
-///  edu.psu.macOSLAPS. macOSLAPS is now signed com.joshua-d-miller.macoslaps and is
-///  denied those items, so it asks the helper inside its bundle
-///  (Contents/Helpers/macOSLAPS-legacy, still signed edu.psu.macOSLAPS) to read them.
-///  The helper only works for root and only when its parent is the signed macOSLAPS.
-///
-///  First run without a new item:
-///    1. Candidates, in order: the old item (through the helper), the -getPassword
-///       export named in /var/root/.GeneratedLAPSServiceName, the 3.x plaintext file,
-///       and a staged pending password (in case a rotation was interrupted).
-///    2. The first candidate that verifies against the account is stored as the new
-///       item, keeping the original creation date (so rotation stays on schedule).
-///    3. A staged pending password moves to the new pending item.
-///    4. The old items are retired: the helper overwrites them with MIGRATED, then
-///       root's /usr/bin/security deletes them. 3.x plaintext files are removed.
-///    5. Nothing verifies but an old item exists: stop with "migration required"
-///       (never silently fall back to FirstPass or a reset).
-///
-///  The password travels over a pipe from the helper, never on a command line.
-///  Removed in 5.0 with the helper.
+/*
+===============================================================================
+ macOSLAPS | Extensions | Migration.swift
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-11
+ Updated:   2026-11-11
+
+ Purpose:
+     Moves the password stored by macOSLAPS 3.x / 4.0.0 (845) to the 4.0
+     keychain items. The old items trust only code signed
+     edu.psu.macOSLAPS, so macOSLAPS (now com.joshua-d-miller.macoslaps)
+     asks the helper inside its bundle (Contents/Helpers/macOSLAPS-legacy,
+     still signed edu.psu.macOSLAPS) to read them. The helper only works
+     for root with the signed macOSLAPS as its parent, and the password
+     travels over a pipe, never on a command line.
+
+ How it fits:
+     1. Candidates: the old item (through the helper), the -getPassword
+     export, the 3.x plaintext file, and a staged password after an
+     interrupted rotation.
+     2. The first that works for the account is stored, keeping its
+     creation date.
+     3. A staged password moves to the new pending item.
+     4. The old items are overwritten, then deleted by root's security;
+     3.x plaintext files are removed.
+     5. Nothing works but an old item exists: "migration required" until
+     -firstPass.
+     Removed in 5.0 with the helper.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file: migration through the legacy
+                        claude    helper, fallbacks, "migration required",
+                                  cleanup; AppBundle paths and the
+                                  /usr/local/laps deprecation check.
+
+                                  New header and section style.
+===============================================================================
+*/
 
 import Foundation
 import OpenDirectory
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------------------- //
+// | Paths in the app bundle | //
+// --------------------------- //
+// Where this process was started from, and the helper and resources inside  //
+// the app.                                                                  //
 /// Paths inside macOSLAPS.app, found from the running executable.
 enum AppBundle {
     /// The path this process was started with (not resolved: /usr/local/laps/macOSLAPS
@@ -59,6 +80,11 @@ enum AppBundle {
     }
 }
 
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ------------- //
+// | Migration | //
+// ------------- //
+// Runs once per root run before anything reads the keychain.                //
 enum Migration {
     static let exportNameFile = "/var/root/.GeneratedLAPSServiceName"
     static let plaintextPassword = "/var/root/Library/Application Support/macOSLAPS-password"
