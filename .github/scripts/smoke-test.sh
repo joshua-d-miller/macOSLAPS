@@ -61,8 +61,10 @@ if [ -z "$BTM" ]; then
     echo "::notice::sfltool dumpbtm printed nothing on this runner"
 else
     echo "$ENTRIES"
-    echo "$ENTRIES" | grep -qE "^ +Name: macOSLAPS$" && pass "background item is named macOSLAPS" || echo "::warning::no BTM entry named macOSLAPS (see the entries above)"
-    echo "$ENTRIES" | grep -qE "^ +Name: Joshua Miller$" && echo "::warning::a BTM entry is still named after the signer"
+    # The daemon must be filed under the app (Parent Identifier), so Login Items and the
+    # "added items that can run in the background" notice show macOSLAPS, not the signer.
+    echo "$ENTRIES" | grep -qE "^ +Parent Identifier: [0-9]+\.com\.joshua-d-miller\.macoslaps$" \
+        && pass "LaunchDaemon is attributed to macOSLAPS.app" || fail "LaunchDaemon has no parent app in Background Task Management"
 fi
 echo "::endgroup::"
 
