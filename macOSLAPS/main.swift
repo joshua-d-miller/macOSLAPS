@@ -96,6 +96,17 @@ func initializeWithoutRotating() -> Never {
         exit(1)
     }
     let record = LocalTools.connect()
+    // Already managed? Then leave everything alone: re-saving would reset the creation date
+    // and postpone rotation forever when an MDM runs -initialize on every check-in, and
+    // checking an outdated FirstPass would add a failed login each time.
+    let (stored, created) = KeychainService.loadPassword(service: "macOSLAPS")
+    if let current = stored, RunState.storedPasswordWorks(current, created: created, record: record) {
+        let due = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
+        let what = current == Constants.first_password ? "already initialized with this password" : "already managed by macOSLAPS (the password has been rotated since)"
+        laps_log.print("\(Constants.local_admin) is \(what). Nothing was changed; the next rotation is due \(due).", .info)
+        RunState.record("initialized", message: "already initialized")
+        exit(0)
+    }
     guard (try? record.verifyPassword(Constants.first_password)) != nil else {
         laps_log.print("The FirstPass value is not the current password for \(Constants.local_admin). Nothing was stored.", .error)
         exit(1)
@@ -216,9 +227,11 @@ func macOSLAPS() {
                   
                   -version          Prints Current Version of macOSLAPS and gracefully exits
                   
-                  -getpassword      If using the Local method, the password will be outputted
-                                    to the filesystem temporarily. Password is deleted upon
-                                    next automated or manual run
+                  -getpassword      Deprecated (use -escrow). Local method only: copies the
+                                    password to a temporary System keychain item that
+                                    /usr/bin/security can read, and writes that item's name
+                                    to /var/root/.GeneratedLAPSServiceName. The copy is
+                                    deleted on the next run.
                   
                   -resetpassword    Forces a password reset no matter the expiration date
                   -firstpass        Performs a password reset using the FirstPass Configuration

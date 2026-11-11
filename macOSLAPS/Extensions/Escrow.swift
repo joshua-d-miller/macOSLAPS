@@ -191,8 +191,8 @@ enum Escrow {
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
-        let payload = Payload(v: 1, account: Constants.local_admin, password: current, set: createdDate,
-                              expires: expires, verified: verified, host: computerName())
+        let payload = Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(createdDate),
+                              expires: isoDate(expires), verified: verified, host: computerName())
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         guard let json = try? encoder.encode(payload) else {

@@ -119,8 +119,8 @@ enum Status {
             passwordStored: password != nil,
             passwordVerifies: verifies,
             passwordIsFirstPass: isFirstPass,
-            lastRotation: createdDate,
-            expires: expires,
+            lastRotation: isoDate(createdDate),
+            expires: isoDate(expires),
             escrow: certConfig.unusable ? "error" : (certConfig.configured ? "cms" : "plaintext"),
             escrowCertificates: certs.map { String(Escrow.fingerprint($0).prefix(16)) },
             escrowCertificatesExpire: earliestExpiry(certs).map { RunState.iso.string(from: $0) },
@@ -365,4 +365,12 @@ func earliestExpiry(_ certs: [SecCertificate]) -> Date? {
               let number = entry[kSecPropertyKeyValue as String] as? NSNumber else { return nil }
         return Date(timeIntervalSinceReferenceDate: number.doubleValue)
     }.min()
+}
+
+/// Converts a macOSLAPS date ("yyyy-MM-dd HH:mm:ss", local time, as stored in the keychain
+/// comment) to ISO 8601 with the time zone offset for JSON output. Unparseable → as is.
+func isoDate(_ legacy: String?) -> String? {
+    guard let text = legacy else { return nil }
+    guard let date = Constants.dateFormatter.date(from: text) else { return text }
+    return RunState.iso.string(from: date)
 }

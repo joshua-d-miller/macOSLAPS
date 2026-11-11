@@ -223,7 +223,7 @@ echo "::endgroup::"
 
 echo "::group::-status records the last run; failed password checks are not repeated"
 "$LAPS" -resetPassword >/dev/null 2>&1
-"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["lastResult"]=="rotated" and "T" in d["lastRun"] and d["lastSuccess"], d' \
+"$LAPS" -status | python3 -c 'import json,sys,re; d=json.load(sys.stdin); iso=re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(Z|[+-]\d\d:\d\d)$"); assert d["lastResult"]=="rotated" and all(iso.match(d[k]) for k in ("lastRun","lastSuccess","lastRotation","expires")), d' \
     && pass "-status reports the last rotation" || fail "-status last run after rotation: $("$LAPS" -status)"
 "$LAPS" >/dev/null 2>&1
 "$LAPS" -status | grep -q '"lastResult":"not-due"' && pass "-status reports a not-due run" || fail "-status after a not-due run"
@@ -353,6 +353,16 @@ if "$LAPS" -firstPass 'Not-The-Password' -initialize >/dev/null 2>&1; then fail 
 dscl . -authonly "$ACCT" "$INIT" >/dev/null 2>&1 && pass "account not rotated by -initialize" || fail "account was rotated"
 "$LAPS" >/dev/null 2>&1
 [ "$(get_pw)" = "$INIT" ] && pass "scheduled run does not rotate before expiry" || fail "scheduled run rotated early"
+# Running -initialize again (an MDM doing it every check-in) must not move the date.
+CREATED1=$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')
+sleep 2
+"$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "repeated -initialize succeeds" || fail "repeated -initialize failed"
+[ "$(security find-generic-password -s macOSLAPS "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
+# After a rotation, an outdated FirstPass is not tried against the account.
+"$LAPS" -resetPassword >/dev/null 2>&1
+ROT=$(get_pw)
+"$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "-initialize on a managed Mac exits cleanly" || fail "-initialize on a managed Mac failed"
+[ "$(get_pw)" = "$ROT" ] && pass "-initialize leaves a rotated password alone" || fail "-initialize replaced the rotated password"
 # FirstPass in the configuration is readable by local users; -status must flag it while it is live.
 defaults write "$DOMAIN" FirstPass -string "$INIT"
 "$LAPS" -status | grep -q '"passwordIsFirstPass":true' && pass "-status flags a live FirstPass" || fail "-status does not flag a live FirstPass"
