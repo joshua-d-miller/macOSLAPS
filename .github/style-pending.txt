@@ -1,0 +1,35 @@
+# Files that don't have the header / section style yet (.github/scripts/check-style.sh).
+# Remove a file from this list when it is converted. The list only shrinks.
+.github/probes/kcprobe.swift
+.github/probes/keychain-identity-probe.sh
+.github/scripts/samba/provision-dc.sh
+.github/scripts/samba/verify-dc.sh
+.github/scripts/smoke-test.sh
+.github/scripts/upgrade-test.sh
+MDM Scripts/macoslaps4-mdm-install-script.sh
+MDM Scripts/macoslaps4-mdm-password-and-expiration.sh
+MDM Scripts/macoslaps4-mdm-password-simple.sh
+Tests/GeneratorTests/main.swift
+Tests/ShellTests/main.swift
+macOSLAPS-legacy/main.swift
+macOSLAPS/Extensions/DateFormatter.swift
+macOSLAPS/Extensions/Escrow.swift
+macOSLAPS/Extensions/KeychainService.swift
+macOSLAPS/Extensions/Logging.swift
+macOSLAPS/Extensions/Migration.swift
+macOSLAPS/Extensions/PasswordPolicy.swift
+macOSLAPS/Extensions/Reporting.swift
+macOSLAPS/Extensions/Shell.swift
+macOSLAPS/Extensions/Staging.swift
+macOSLAPS/Extensions/TimeConversion.swift
+macOSLAPS/Extensions/secureToken.swift
+macOSLAPS/Password Tools/ADPasswordTools.swift
+macOSLAPS/Password Tools/GeneratePassword.swift
+macOSLAPS/Password Tools/LocalPasswordTools.swift
+macOSLAPS/Preferences/Preferences.swift
+macOSLAPS/main.swift
+packaging/app-scripts/postinstall
+packaging/build-pkgs.sh
+packaging/daemon-scripts/postinstall
+packaging/daemon-scripts/preinstall
+packaging/uninstall.sh

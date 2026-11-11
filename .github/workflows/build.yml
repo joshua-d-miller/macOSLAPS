@@ -47,6 +47,9 @@ jobs:
         run: |
           plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist
           for f in packaging/*.sh packaging/*-scripts/*; do bash -n "$f" || exit 1; done
+          git ls-files '*.zsh' | while read -r f; do zsh -n "$f" || { echo "::error file=$f::zsh syntax"; exit 1; }; done
+      - name: Header and comment style
+        run: bash .github/scripts/check-style.sh
       - name: Compile and run shell helper tests
         run: |
           swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests

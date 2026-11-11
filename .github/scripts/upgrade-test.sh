@@ -175,6 +175,19 @@ python3 -c 'import json,re,sys; m=re.search(r"<result>(.*)</result>", sys.argv[1
     && pass "integrations/jamf escrow attribute" || fail "integrations/jamf escrow EA output"
 rm -f "/Library/Managed Preferences/edu.psu.macoslaps.plist"
 dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "none of the scripts rotated the password" || fail "a script rotated the password unexpectedly"
+# A staged password must reach Jamf too, or the Mac would switch to a password Jamf never stored.
+defaults write "$DOMAIN" StagedRotation -string on
+"$LAPS" -resetPassword >/dev/null 2>&1
+OUT=$(zsh "$REPO/jamf Extension Attributes/Password and Expiration Combined.zsh" 2>&1)
+STAGED=$(sed -n 's/.* Pending: \(.*\) |<\/result>$/\1/p' <<< "$OUT")
+echo "$OUT" | grep -qF "Password: $NEW_PW |" && [ -n "$STAGED" ] && [ "$STAGED" != "$NEW_PW" ] \
+    && pass "Jamf combined EA shows the staged password next to the current one" || fail "Jamf EA during staging: $(redact "$OUT")"
+OUT=$(zsh "$REPO/jamf Extension Attributes/Password Only.zsh" 2>&1)
+[ "$OUT" = "<result>| Password: $NEW_PW | Pending: $STAGED |</result>" ] && pass "Jamf password EA shows the staged password" || fail "Jamf password EA during staging"
+defaults write "$DOMAIN" StagedRotation -string off
+"$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied now
+dscl . -authonly "$ACCT" "$STAGED" >/dev/null 2>&1 && pass "the Mac moved to the password the EA reported as pending" || fail "account is not on the staged password"
+NEW_PW=$STAGED
 echo "::endgroup::"
 
 echo "::group::Binary-only and LaunchDaemon-only packages"
