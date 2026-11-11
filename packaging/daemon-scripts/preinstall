@@ -1,7 +1,32 @@
 #!/bin/sh
-# macOSLAPS LaunchDaemon preinstall: unload and remove the existing LaunchDaemon(s),
-# the current one and the one from 3.x / 4.0.0 (845), so the new one can be installed.
-# (Original by Richard Purves, github.com/franton.)
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | Packaging | daemon-scripts/preinstall
+===============================================================================
+ Version:   4.0.0
+ Author:    Richard Purves, Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     LaunchDaemon package preinstall: unloads and removes the existing
+     LaunchDaemon, the current one and the one from 3.x / 4.0.0 (845), so
+     the new one can be installed.
+
+ Credits:
+     Original by Richard Purves (github.com/franton).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Removes both the old edu.psu.macoslaps-check
+                        claude    and the new
+                                  com.joshua-d-miller.macoslaps-check daemon.
+
+                                  New header and section style.
+===============================================================================
+HEADER
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
 removed=0
 for label in com.joshua-d-miller.macoslaps-check edu.psu.macoslaps-check; do

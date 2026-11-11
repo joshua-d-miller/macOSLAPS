@@ -1,13 +1,46 @@
 #!/bin/bash
-# Which code-signing identities can read a System keychain item created by another?
-# Answers the questions the app-bundle migration depends on:
-#   1. Does an item created by edu.psu.macOSLAPS stay readable by the same identity at
-#      another path (the ACL matches the designated requirement, not the path)?
-#   2. Is a binary signed com.joshua-d-miller.macoslaps (same team) denied?
-#   3. Can a helper signed edu.psu.macOSLAPS inside an app signed with the new identity
-#      read it and delete it?
-#   4. The same against a real item created by the signed 4.0.0 (845) release.
-#   sudo bash keychain-identity-probe.sh <dir with signed probes> <845 pkg>
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | CI probes | keychain-identity-probe.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     Which code-signing identities can read a System keychain item created
+     by another? Answers the questions the app-bundle migration depends
+     on:
+     1. Does an item created by edu.psu.macOSLAPS stay readable by the
+     same identity at another path (the access list matches the
+     requirement, not the path)?
+     2. Is a binary signed com.joshua-d-miller.macoslaps (same team)
+     denied?
+     3. Can a helper signed edu.psu.macOSLAPS inside an app signed with
+     the new identity read it, and delete or overwrite it?
+     4. The same against a real item created by the signed 4.0.0 (845)
+     release.
+     Retired in step 25 of the 4.0 checklist.
+
+ Usage:
+     sudo bash keychain-identity-probe.sh <dir with signed probes> \
+         <845 pkg>
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+HEADER
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------- ###
+### | Setup | ###
+### --------- ###
+### The probe binaries and the checks.                                      ###
 set -uo pipefail
 P=$1; OLD_PKG=$2
 A=$P/a/kcprobe; A2=$P/elsewhere/kcprobe; B=$P/b/kcprobe
@@ -26,6 +59,11 @@ expect_read() {  # expect_read <ok|denied> <binary> <service> <label> [expected 
 for b in "$A" "$A2" "$B" "$MAIN" "$HELPER"; do codesign -dv "$b" 2>&1 | grep -E "^Identifier|^TeamIdentifier|^Authority=Developer" | tr '\n' ' '; echo " <- $b"; done
 
 echo "::group::Item created by a probe signed edu.psu.macOSLAPS"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------------------ ###
+### | An item created by the legacy identity | ###
+### ------------------------------------------ ###
 SVC=macOSLAPS-probe-$$
 "$A" add "$SVC" 'Probe-Pass-1' || { echo "::error::could not create the probe item"; exit 1; }
 security dump-keychain -a /Library/Keychains/System.keychain 2>/dev/null | grep -A40 "\"$SVC\"" | grep -iE "applications|requirement|identifier" | head -8
@@ -45,6 +83,11 @@ echo "::endgroup::"
 echo "::group::Item created by the signed 4.0.0 (845) release"
 installer -pkg "$OLD_PKG" -target / >/dev/null || { echo "::error::845 did not install"; exit 1; }
 launchctl bootout system/edu.psu.macoslaps-check 2>/dev/null || true
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------ ###
+### | A real item from 845 | ###
+### ------------------------ ###
 LAPS=/usr/local/laps/macOSLAPS; DOMAIN=/Library/Preferences/edu.psu.macoslaps
 codesign -dv "$LAPS" 2>&1 | grep -E "^Identifier|^TeamIdentifier|^Authority=Developer" | tr '\n' ' '; echo " <- 845"
 sysadminctl -addUser lapsprobe -fullName "LAPS Probe" -password 'Initial-Pass-1234' -admin 2>/dev/null

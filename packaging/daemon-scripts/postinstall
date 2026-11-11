@@ -1,7 +1,33 @@
 #!/bin/sh
-# macOSLAPS LaunchDaemon postinstall: forget the receipt from 3.x / 4.0.0 (845) and
-# load the LaunchDaemon. RunAtLoad starts a run right away, so a new installation
-# rotates without waiting for the interval. (Original by Richard Purves, github.com/franton.)
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | Packaging | daemon-scripts/postinstall
+===============================================================================
+ Version:   4.0.0
+ Author:    Richard Purves, Joshua D. Miller, Claude
+ Created:   2026-11-10
+ Updated:   2026-11-11
+
+ Purpose:
+     LaunchDaemon package postinstall: forgets the receipt from 3.x /
+     4.0.0 (845) and loads the LaunchDaemon. RunAtLoad starts a run right
+     away, so a new installation rotates without waiting for the interval.
+
+ Credits:
+     Original by Richard Purves (github.com/franton).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New label
+                        claude    com.joshua-d-miller.macoslaps-check;
+                                  RunAtLoad instead of kickstart -k (which
+                                  could stop a run in progress).
+
+                                  New header and section style.
+===============================================================================
+HEADER
 LAPS_DAEMON="/Library/LaunchDaemons/com.joshua-d-miller.macoslaps-check.plist"
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
 

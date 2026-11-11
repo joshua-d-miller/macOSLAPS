@@ -1,17 +1,42 @@
 #!/bin/bash
-# Removes macOSLAPS: the app, the /usr/local/laps symlink, the LaunchDaemon (current and
-# 3.x / 845 labels), /etc/paths.d/laps, and the installer receipts.
-#
-#   sudo /Applications/macOSLAPS.app/Contents/Resources/uninstall.sh [--purge]
-#   sudo macOSLAPS -uninstall [-purge]
-#
-# By default the stored password is KEPT in the System keychain, so reinstalling
-# macOSLAPS picks up where it left off. --purge also deletes the stored passwords
-# (current, pending, any legacy items and exports), the state in /var/db/macoslaps and
-# the log. After --purge nobody can look up the admin's password from this Mac:
-# make sure your MDM has it (or change it) first.
-#
-# Settings profiles are managed by your MDM and are not touched.
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | Packaging | uninstall.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-11
+ Updated:   2026-11-11
+
+ Purpose:
+     Removes macOSLAPS: the app, the /usr/local/laps symlink, the
+     LaunchDaemon (current and 3.x / 845 labels), /etc/paths.d/laps, and
+     the installer receipts. By default the stored password is KEPT in the
+     System keychain, so reinstalling macOSLAPS picks up where it left
+     off. --purge also deletes the stored passwords (current, pending,
+     legacy items and exports), the state in /var/db/macoslaps and the
+     log; after that nobody can look up the admin's password from this
+     Mac, so make sure your MDM has it (or change it) first. Settings
+     profiles are your MDM's and are not touched.
+
+ Usage:
+     sudo /Applications/macOSLAPS.app/Contents/Resources/\
+         uninstall.sh [--purge]
+     sudo macOSLAPS -uninstall [-purge]
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+HEADER
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------- ###
+### | Options | ###
+### ----------- ###
 set -u
 
 [ "$(id -u)" -eq 0 ] || { echo "uninstall.sh must be run as root." >&2; exit 77; }
@@ -26,6 +51,10 @@ done
 SYSKC=/Library/Keychains/System.keychain
 say() { echo "macOSLAPS uninstall: $*"; }
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------- ###
+### | LaunchDaemon, app and files | ###
+### ------------------------------- ###
 for label in com.joshua-d-miller.macoslaps-check edu.psu.macoslaps-check; do
     /bin/launchctl bootout "system/$label" 2>/dev/null && say "stopped $label"
     plist="/Library/LaunchDaemons/$label.plist"
@@ -43,10 +72,18 @@ if [ -d /Applications/macOSLAPS.app ]; then
 fi
 /bin/rm -f /var/run/macOSLAPS.lock
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------ ###
+### | Receipts | ###
+### ------------ ###
 for receipt in com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps-check edu.psu.macOSLAPS edu.psu.macOSLAPS-check; do
     /usr/sbin/pkgutil --pkg-info "$receipt" >/dev/null 2>&1 && /usr/sbin/pkgutil --forget "$receipt" >/dev/null && say "forgot receipt $receipt"
 done
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------ ###
+### | Stored passwords (--purge) | ###
+### ------------------------------ ###
 if [ "$PURGE" -eq 1 ]; then
     if [ -f /var/root/.GeneratedLAPSServiceName ]; then
         export_name=$(/usr/bin/tr -d '\n' < /var/root/.GeneratedLAPSServiceName)

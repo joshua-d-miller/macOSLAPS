@@ -1,7 +1,28 @@
 #!/bin/sh
-# macOSLAPS app postinstall: the app now has its own receipt
-# (com.joshua-d-miller.macoslaps), so forget the one from 3.x / 4.0.0 (845).
-# /usr/local/laps/macOSLAPS is now a symlink into /Applications/macOSLAPS.app.
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | Packaging | app-scripts/postinstall
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-11
+ Updated:   2026-11-11
+
+ Purpose:
+     App package postinstall. The app has its own receipt
+     (com.joshua-d-miller.macoslaps) now, so the one from 3.x / 4.0.0
+     (845) is forgotten. /usr/local/laps/macOSLAPS is a legacy symlink
+     into the app.
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+HEADER
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
 /usr/sbin/pkgutil --forget edu.psu.macOSLAPS >/dev/null 2>&1
 [ -f /etc/paths.d/laps ] && /bin/chmod 644 /etc/paths.d/laps

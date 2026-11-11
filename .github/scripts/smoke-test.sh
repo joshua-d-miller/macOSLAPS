@@ -1,12 +1,42 @@
 #!/bin/bash
-# macOSLAPS smoke test for GitHub-hosted macOS runners. Run as root:
-#   sudo bash .github/scripts/smoke-test.sh
-#
-# Exercises Local mode end to end on a throwaway admin account:
-# first rotation, -getPassword export via `security`, export cleanup,
-# forced rotation, old password invalidated, and repeated generator checks.
-# The secureToken path is only exercised if the runner happens to grant
-# the test account a token; otherwise it needs community testing.
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | CI | smoke-test.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-08
+ Updated:   2026-11-11
+
+ Purpose:
+     macOSLAPS smoke test for GitHub-hosted macOS runners. Exercises the
+     installed package end to end on a throwaway admin account: layout,
+     rotation, exports, secureToken handling, preferences, -status,
+     -escrow (plain and CMS), -initialize, staged rotation, the inventory
+     hook, password styles and uninstall. The real secureToken path only
+     runs if the runner gives the test account a token; otherwise it needs
+     community testing.
+
+ Usage:
+     sudo bash .github/scripts/smoke-test.sh
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Tests for every 4.0 feature: app layout, new
+                        claude    label and receipts, Login Items attribution,
+                                  migration status, staging, -firstPass never
+                                  staging, uninstall.
+
+                                  New header and section style.
+===============================================================================
+HEADER
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------- ###
+### | Setup | ###
+### --------- ###
+### Paths, the test account and helpers.                                    ###
 set -uo pipefail
 
 LAPS=/usr/local/laps/macOSLAPS
@@ -30,6 +60,10 @@ pass() { echo "PASS: $*"; }
 fail() { echo "::error::FAIL: $*"; FAILURES=$((FAILURES + 1)); }
 fatal() { echo "::error::FATAL: $*"; exit 1; }
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------- ###
+### | Environment | ###
+### --------------- ###
 echo "::group::Environment"
 sw_vers
 uname -m
@@ -37,6 +71,10 @@ uname -m
 codesign -dv --verbose=2 "$LAPS" 2>&1 | grep -E "Identifier|Authority|Signature|flags" || true
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------------------------------------- ###
+### | Installed layout matches earlier releases | ###
+### --------------------------------------------- ###
 echo "::group::Installed layout matches earlier releases"
 launchctl print system/$LABEL >/dev/null 2>&1 && pass "LaunchDaemon $LABEL loaded by the installer" || fail "LaunchDaemon not loaded after install"
 RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
@@ -52,6 +90,10 @@ codesign --verify --strict --deep "$APP" && pass "installed app's signature is v
 [ "$(codesign -dv "$APP" 2>&1 | sed -n 's/^Identifier=//p')" = "com.joshua-d-miller.macoslaps" ] && pass "app signed com.joshua-d-miller.macoslaps" || fail "app identifier: $(codesign -dv "$APP" 2>&1 | grep ^Identifier)"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------------------------------------- ###
+### | Background item (Login Items) attribution | ###
+### --------------------------------------------- ###
 echo "::group::Background item (Login Items) attribution"
 # macOS names a background item after the app it belongs to; without one it falls back to
 # the signer ("Joshua Miller", issue #75). Show what Background Task Management recorded.
@@ -82,6 +124,10 @@ version_is_clean() {
 version_is_clean "no configuration"
 sudo -u nobody "$LAPS" -version >/dev/null 2>&1 && pass "-version works without root" || fail "-version fails without root"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------- ###
+### | Create test admin and config | ###
+### -------------------------------- ###
 echo "::group::Create test admin and config"
 sysadminctl -addUser "$ACCT" -fullName "LAPS Test" -password "$FIRST" -admin 2>&1
 TOKEN=$(sysadminctl -secureTokenStatus "$ACCT" 2>&1)
@@ -118,6 +164,10 @@ check_pw() {
     [[ "$pw" =~ $re ]] && pass "$label: printable ASCII only" || fail "$label: non-printable or non-ASCII character"
 }
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------------------------------------- ###
+### | First rotation (FirstPass from preferences) | ###
+### ----------------------------------------------- ###
 echo "::group::First rotation (FirstPass from preferences)"
 "$LAPS" -resetPassword && pass "first rotation exited 0" || fail "first rotation failed"
 PW1=$(get_pw) || fail "-getPassword failed after first rotation"
@@ -127,6 +177,10 @@ echo "::endgroup::"
 
 version_is_clean "legacy domain, export pending"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------------- ###
+### | Export item is removed on next run | ###
+### -------------------------------------- ###
 echo "::group::Export item is removed on next run"
 SVC=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
 "$LAPS"
@@ -134,6 +188,10 @@ security find-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1 \
     && fail "exported keychain item $SVC still present" || pass "exported keychain item removed"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------------------------- ###
+### | Forced rotation invalidates previous password | ###
+### ------------------------------------------------- ###
 echo "::group::Forced rotation invalidates previous password"
 "$LAPS" -resetPassword && pass "forced rotation exited 0" || fail "forced rotation failed"
 PW2=$(get_pw) || fail "-getPassword failed after forced rotation"
@@ -142,6 +200,10 @@ check_pw "${PW2:-}" "rotation 2"
 dscl . -authonly "$ACCT" "${PW1:-}" >/dev/null 2>&1 && fail "previous password still works" || pass "previous password invalidated"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------- ###
+### | Generator: $ROUNDS rotations | ###
+### -------------------------------- ###
 echo "::group::Generator: $ROUNDS rotations"
 for i in $(seq 1 "$ROUNDS"); do
     "$LAPS" -resetPassword >/dev/null 2>&1 || { fail "rotation $i failed"; continue; }
@@ -151,6 +213,10 @@ for i in $(seq 1 "$ROUNDS"); do
 done
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------------------------------------------- ###
+### | Simulated secureToken: old password must be known | ###
+### ----------------------------------------------------- ###
 echo "::group::Simulated secureToken: old password must be known"
 export MACOSLAPS_TEST_ASSUME_SECURETOKEN=1
 KNOWN='Known-Pass-5678'
@@ -178,6 +244,11 @@ dscl . -authonly "$ACCT" "$PWB" >/dev/null 2>&1 && fail "previous password still
 unset MACOSLAPS_TEST_ASSUME_SECURETOKEN
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------------------------------- ###
+### | A stop signal between changing and storing | ###
+### ---------------------------------------------- ###
+### The password is ignored.                                                ###
 echo "::group::A stop signal between changing and storing the password is ignored"
 MACOSLAPS_TEST_PAUSE_AFTER_CHANGE=5 "$LAPS" -resetPassword >/dev/null 2>&1 &
 RUN_PID=$!
@@ -189,6 +260,10 @@ SIG_PW=$(get_pw 2>/dev/null)
 dscl . -authonly "$ACCT" "$SIG_PW" >/dev/null 2>&1 && pass "account and keychain agree after the signals" || fail "account and keychain disagree after a stop signal"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------------- ###
+### | secureToken detection fails closed | ###
+### -------------------------------------- ###
 echo "::group::secureToken detection fails closed"
 SAVED_FIRSTPASS=$(defaults read "$DOMAIN" FirstPass 2>/dev/null || true)
 defaults delete "$DOMAIN" FirstPass 2>/dev/null || true
@@ -226,6 +301,11 @@ security find-generic-password -s "$KCSVC" "$SYSKC" 2>/dev/null | grep -q '"icmt
     && pass "-status reports secureToken false on the runner" || fail "-status secureToken value"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------- ###
+### | Preference domains | ###
+### ---------------------- ###
+### New domain wins per key, legacy fills the rest.                         ###
 echo "::group::Preference domains: new domain wins per key, legacy fills the rest"
 NEWDOM=/Library/Preferences/com.joshua-d-miller.macoslaps
 defaults write "$NEWDOM" PasswordLength -int 20
@@ -251,6 +331,11 @@ killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = $LEN  \[/Library/Preferences, legacy domain\]" && pass "back to legacy-only settings" || fail "settings not restored to legacy only"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------- ###
+### | -status records the last run | ###
+### -------------------------------- ###
+### Failed password checks are not repeated.                                ###
 echo "::group::-status records the last run; failed password checks are not repeated"
 "$LAPS" -resetPassword >/dev/null 2>&1
 "$LAPS" -status | python3 -c 'import json,sys,re; d=json.load(sys.stdin); iso=re.compile(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(Z|[+-]\d\d:\d\d)$"); assert d["lastResult"]=="rotated" and all(iso.match(d[k]) for k in ("lastRun","lastSuccess","lastRotation","expires")), d' \
@@ -283,6 +368,10 @@ dscl . -passwd "/Users/$ACCT" 'Changed-Behind-Its-Back-1' "$GOOD"
 grep -qF -- "$(get_pw)" /var/db/macoslaps/state.plist && fail "state file contains the password" || pass "state file holds no password"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------- ###
+### | -status | ###
+### ----------- ###
 echo "::group::-status"
 ST=$("$LAPS" -status)
 echo "$ST"
@@ -292,6 +381,10 @@ python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["accountExists"
 grep -q "The stored password works" /tmp/laps-status.txt && pass "-status -v checklist" || fail "-status -v missing checks"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------------- ###
+### | Two runs at once do not interleave | ###
+### -------------------------------------- ###
 echo "::group::Two runs at once do not interleave"
 "$LAPS" -resetPassword >/tmp/laps-a.log 2>&1 & A=$!
 "$LAPS" -resetPassword >/tmp/laps-b.log 2>&1 & B=$!
@@ -300,6 +393,10 @@ wait $A; RA=$?; wait $B; RB=$?
 PWL=$(get_pw) && dscl . -authonly "$ACCT" "$PWL" >/dev/null 2>&1 && pass "stored password authenticates after concurrent runs" || fail "keychain and account disagree after concurrent runs"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------------- ###
+### | -escrow (plaintext) | ###
+### ----------------------- ###
 echo "::group::-escrow (plaintext)"
 CUR=$(get_pw)
 ESC=$("$LAPS" -escrow)
@@ -307,6 +404,10 @@ python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sy
   && pass "-escrow plaintext JSON has the current, verified password" || fail "-escrow plaintext unexpected"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------- ###
+### | -escrow (CMS) | ###
+### ----------------- ###
 echo "::group::-escrow (CMS)"
 OPENSSL=$(ls /opt/homebrew/opt/openssl@3/bin/openssl /usr/local/opt/openssl@3/bin/openssl 2>/dev/null | head -1)
 if [ -z "$OPENSSL" ]; then
@@ -383,6 +484,10 @@ else
 fi
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------------------------------------- ###
+### | -initialize (#88): adopt current password without rotating | ###
+### -------------------------------------------------------------- ###
 echo "::group::-initialize (#88): adopt current password without rotating"
 INIT='Init-Pass-2468'
 dscl . -passwd "/Users/$ACCT" "$INIT"
@@ -409,6 +514,11 @@ ROT=$(get_pw)
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------- ###
+### | Staged rotation | ###
+### ------------------- ###
+### The MDM gets the next password before the account uses it.              ###
 echo "::group::Staged rotation: the MDM gets the next password before the account uses it"
 defaults write "$DOMAIN" StagedRotation -string on
 defaults write "$DOMAIN" EscrowConfirmations -int 2
@@ -480,6 +590,10 @@ defaults write "$DOMAIN" StagedRotation -string off
 "$LAPS" -status | grep -q '"stagedRotation":"off (inactive)"' && pass "staging off" || fail "staging off status"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------ ###
+### | InventoryHook custom | ###
+### ------------------------ ###
 echo "::group::InventoryHook custom"
 rm -f /tmp/laps-hook-ran
 defaults write "$DOMAIN" InventoryHook -string custom
@@ -516,6 +630,10 @@ python3 -c 'import json,sys; d=json.load(open("/tmp/laps-hook-escrow.json")); as
 defaults delete "$DOMAIN" InventoryHook; defaults delete "$DOMAIN" InventoryHookCommand
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------- ###
+### | PasswordStyle readable | ###
+### -------------------------- ###
 echo "::group::PasswordStyle readable"
 defaults write "$DOMAIN" PasswordStyle -string readable
 "$LAPS" -resetPassword >/dev/null 2>&1 || fail "readable rotation failed"
@@ -541,6 +659,11 @@ else
     echo "::notice::Test account has no secureToken on this runner; secureToken path needs community testing."
 fi
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------------------------------------- ###
+### | -uninstall keeps the password, uninstall.sh | ###
+### ----------------------------------------------- ###
+### --purge removes it.                                                     ###
 echo "::group::-uninstall keeps the password, uninstall.sh --purge removes it"
 KEPT=$(get_pw 2>/dev/null)
 cp "$APP/Contents/Resources/uninstall.sh" /tmp/laps-uninstall.sh

@@ -1,12 +1,42 @@
 #!/bin/bash
-# Upgrade test: install the last published release, rotate with it, then install the
-# new packages over it and prove nothing an existing deployment relies on breaks.
-#   sudo bash .github/scripts/upgrade-test.sh <old full pkg> <dir with the new pkgs> <signed: true|false>
-#
-# Migration: the new build (signed com.joshua-d-miller.macoslaps) can't read the old
-# "macOSLAPS" item; its helper (signed edu.psu.macOSLAPS) reads it and the password moves
-# to the new item. That needs the Developer ID signature, so unsigned builds migrate
-# from the -getPassword export instead (the fallback).
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | CI | upgrade-test.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-09
+ Updated:   2026-11-11
+
+ Purpose:
+     Installs the last published release, rotates with it, then installs
+     the new packages over it and proves nothing an existing deployment
+     relies on breaks. Migration: the new build (signed
+     com.joshua-d-miller.macoslaps) can't read the old macOSLAPS item; its
+     helper (signed edu.psu.macOSLAPS) reads it and the password moves to
+     the new item. That needs the Developer ID signature, so unsigned
+     builds migrate from the -getPassword export instead.
+
+ Usage:
+     sudo bash .github/scripts/upgrade-test.sh <old full pkg> \
+         <dir with the new pkgs> <signed: true|false>
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    Migration from 845, the required/recovery
+                        claude    path, the 3.x plaintext fallback, new label
+                                  and receipts, EAs during staging.
+
+                                  New header and section style.
+===============================================================================
+HEADER
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------- ###
+### | Setup | ###
+### --------- ###
+### Paths, the test account and helpers.                                    ###
 set -uo pipefail
 
 OLD_PKG=$1; NEW_DIR=$2; SIGNED=${3:-false}
@@ -47,6 +77,10 @@ NEW_BIN=$(ls "$NEW_DIR"/macOSLAPS-Binary-*.pkg | head -1)
 NEW_LD=$(ls "$NEW_DIR"/macOSLAPS-LD-*.pkg | head -1)
 [ -f "$NEW_FULL" ] && [ -f "$NEW_BIN" ] && [ -f "$NEW_LD" ] || fatal "new packages not found in $NEW_DIR"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------------------------------------------- ###
+### | Install the previous release and rotate with it | ###
+### --------------------------------------------------- ###
 echo "::group::Install the previous release and rotate with it"
 installer -pkg "$OLD_PKG" -target / || fatal "previous release did not install"
 stop_daemon
@@ -71,6 +105,10 @@ echo "Previous release's item: $OLD_CREATED"
 # MDM script would between its two calls.
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------- ###
+### | Upgrade in place | ###
+### -------------------- ###
 echo "::group::Upgrade in place"
 installer -pkg "$NEW_FULL" -target / || fatal "new package did not install over the previous release"
 launchctl print system/$LABEL >/dev/null 2>&1 && pass "new LaunchDaemon $LABEL loaded after upgrade" || fail "LaunchDaemon not loaded after upgrade"
@@ -86,6 +124,10 @@ re='^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$'
 [[ "$NEW_VERSION" =~ $re ]] && pass "-version prints only the version with an export pending ($NEW_VERSION)" || fail "-version output: $(printf '%q' "$NEW_VERSION")"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------------------------------- ###
+### | Migration from the previous release's keychain item | ###
+### ------------------------------------------------------- ###
 echo "::group::Migration from the previous release's keychain item"
 "$LAPS" -status >/dev/null   # migrates now if the installer's run hasn't already
 [ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
@@ -109,6 +151,10 @@ dscl . -authonly "$ACCT" "$OLD_PW" >/dev/null 2>&1 && fail "old password still w
 security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "rotation re-created a legacy item" || pass "no legacy item after rotation"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------------------------------------------------- ###
+### | Migration required, and recovery with -firstPass -initialize | ###
+### ---------------------------------------------------------------- ###
 echo "::group::Migration required, and recovery with -firstPass -initialize"
 # A legacy item nobody can use: it trusts only /usr/bin/security and holds a wrong password.
 CUR=$NEW_PW
@@ -126,6 +172,10 @@ security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "un
 [ "$(status_field migration)" != "required" ] && pass "-status: no longer required" || fail "-status still says required"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------------- ###
+### | Fallback: 3.x plaintext file | ###
+### -------------------------------- ###
 echo "::group::Fallback: 3.x plaintext file"
 security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
 security add-generic-password -s macOSLAPS -a "LAPS Password" -w 'Not-The-Password-2' -j "Created: 2026-02-03 04:05:06" "$SYSKC"
@@ -144,6 +194,11 @@ NEW_PW=$(get_pw)
 [ "$NEW_PW" != "$CUR" ] && dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "overdue migrated password rotated on schedule" || fail "overdue migrated password was not rotated"
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------------------------------- ###
+### | Use a password with shell and JSON special | ###
+### ---------------------------------------------- ###
+### Characters for the script checks.                                       ###
 echo "::group::Use a password with shell and JSON special characters for the script checks"
 # Random passwords only sometimes contain these, so set one that always does.
 TRICKY='Ab\c"d/e$f`g*h\b1'
@@ -153,6 +208,11 @@ NEW_PW=$TRICKY
 echo "::endgroup::"
 
 redact() { python3 -c 'import sys; print(sys.argv[1].replace(sys.argv[2], "<password>"))' "$1" "$NEW_PW"; }
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------------------------------- ###
+### | Scripts admins already deploy keep working | ###
+### ---------------------------------------------- ###
 echo "::group::Scripts admins already deploy keep working"
 OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-and-expiration.sh" 2>&1)
 redact "$OUT"
@@ -191,6 +251,10 @@ dscl . -authonly "$ACCT" "$STAGED" >/dev/null 2>&1 && pass "the Mac moved to the
 NEW_PW=$STAGED
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------------------------------- ###
+### | Binary-only and LaunchDaemon-only packages | ###
+### ---------------------------------------------- ###
 echo "::group::Binary-only and LaunchDaemon-only packages"
 installer -pkg "$NEW_BIN" -target / && pass "Binary package installs" || fail "Binary package failed"
 installer -pkg "$NEW_LD" -target / && pass "LaunchDaemon package installs" || fail "LaunchDaemon package failed"

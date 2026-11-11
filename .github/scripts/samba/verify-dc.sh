@@ -1,8 +1,32 @@
 #!/bin/bash
-# Checks the DC the way a joined Mac will use it: a computer account
-# authenticates as itself and writes its own LAPS attributes, and a
-# domain admin can read them back. Also checks that an ordinary user
-# can NOT read them (they are confidential).
+: <<'HEADER'
+===============================================================================
+ macOSLAPS | CI | AD | verify-dc.sh
+===============================================================================
+ Version:   4.0.0
+ Author:    Joshua D. Miller, Claude
+ Created:   2026-11-09
+ Updated:   2026-11-11
+
+ Purpose:
+     Checks the DC the way a joined Mac uses it: a computer account
+     authenticates as itself and writes its own LAPS attributes, and a
+     domain admin can read them back. Also checks that an ordinary user
+     can NOT read them (they are confidential).
+===============================================================================
+ CHANGELOG
+===============================================================================
+ Version   Date         Author    Description
+ -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-11   joshua    New file.
+                        claude
+                                  New header and section style.
+===============================================================================
+HEADER
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------- ###
+### | Setup | ###
+### --------- ###
 set -uo pipefail
 REALM=${REALM:-LAPS.TEST}
 : "${ADMINPASS:?}"
