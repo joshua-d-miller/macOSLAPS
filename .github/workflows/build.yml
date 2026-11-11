@@ -43,6 +43,8 @@ jobs:
         run: |
           swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
           ./generator-tests
+      - name: Lint the example settings and LaunchDaemon plists
+        run: plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist
       - name: Compile and run shell helper tests
         run: |
           swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests

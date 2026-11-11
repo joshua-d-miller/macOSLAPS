@@ -134,6 +134,67 @@ func initializeWithoutRotating() -> Never {
     InventoryHook.run(reason: "initialize")
     exit(0)
 }
+/// Decides what this run does about the password, with staged rotation:
+///  - finish an apply that was interrupted (power loss / SIGKILL) if the account already
+///    uses the pending password,
+///  - apply a pending password once the MDM has it (or when staging is off),
+///  - otherwise stage a new password when one is due, or wait.
+/// `apply(nil)` rotates to a newly generated password; `apply(p)` to the pending one.
+/// Returns only when nothing needed doing (not due, no pending); otherwise exits.
+func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (String?) -> Void) {
+    if Staging.interruptedApply, let pending = Staging.pending() {
+        let record = LocalTools.connect()
+        if (try? record.verifyPassword(pending.password)) != nil {
+            laps_log.print("Finishing a rotation that was interrupted after the account was changed.", .warn)
+            let status = KeychainService.savePassword(service: "macOSLAPS", account: "LAPS Password", data: pending.password)
+            guard status == noErr else {
+                laps_log.print("Unable to store the password while finishing the interrupted rotation (OSStatus \(status)).", .error)
+                exit(1)
+            }
+            finishInterrupted(pending.password)
+            Staging.finishApply()
+            RunState.record("rotated", message: "finished an interrupted rotation")
+            RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
+            InventoryHook.run(reason: "finishing an interrupted rotation")
+            exit(0)
+        }
+        // The account was never changed: the pending password is still just pending.
+        RunState.set([:], remove: ["applying"])
+    }
+
+    if let pending = Staging.pending() {
+        if !Staging.active {
+            laps_log.print("Staged rotation is off; applying the pending password now.", .info)
+            apply(pending.password); exit(0)
+        }
+        if !Staging.confirmed && Constants.pw_reset {
+            Staging.runHookAndCheck()
+            RunLock.acquire()
+        }
+        if Staging.confirmed {
+            laps_log.print("The pending password has been collected by the MDM (\(Staging.exports) export(s)). Applying it.", .info)
+            apply(pending.password); exit(0)
+        }
+        laps_log.print("A new password is staged and waiting for the MDM to collect it (\(Staging.exports) of \(Staging.confirmationsNeeded) -escrow export(s)). The current password stays in use until then.", .info)
+        RunState.record("staged", message: "waiting for \(Staging.confirmationsNeeded - Staging.exports) more -escrow export(s)")
+        exit(0)
+    }
+
+    guard due else { return }
+    guard Staging.active else { apply(nil); exit(0) }
+
+    let next = PasswordGen(length: Constants.password_length)
+    guard Staging.stage(next) else { exit(1) }
+    laps_log.print("Staged a new password for \(Constants.local_admin). It will be applied after the MDM collects it with -escrow (\(Staging.confirmationsNeeded) export(s), or sooner through the InventoryHook).", .info)
+    Staging.runHookAndCheck()
+    if Staging.confirmed {
+        RunLock.acquire()
+        apply(next); exit(0)
+    }
+    RunState.record("staged", message: "waiting for \(Staging.confirmationsNeeded) -escrow export(s)")
+    exit(0)
+}
+
 func macOSLAPS() {
     laps_log_shell_timeout = { path, timeout in
         laps_log.print("\(path) did not finish within \(Int(timeout)) seconds and was stopped.", .warn)
@@ -307,13 +368,17 @@ func macOSLAPS() {
         // Convert that time into a date
         let exp_date = TimeConversion.epoch(exp_time: ad_exp_time)
         // Compare that newly calculated date against now to see if a change is required
-        if exp_date! < Date() {
+        rotateOrStage(due: exp_date! < Date(), finishInterrupted: { pending in
+            ADTools.restoreAfterInterruptedApply(computer_record: ad_computer_record, password: pending)
+        }, apply: { staged in
             // Check if the domain controller that we are connected to is writable
             ADTools.verify_dc_writability(computer_record: ad_computer_record)
-            // Performs Password Change for local admin account
             PreferenceStore.shared.emitNotices()
             laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
-            ADTools.password_change(computer_record: ad_computer_record)
+            ADTools.password_change(computer_record: ad_computer_record, staged: staged)
+        })
+        if exp_date! < Date() {
+            exit(0)
         }
         else {
             let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
@@ -333,11 +398,13 @@ func macOSLAPS() {
         } else {
             exp_date = LocalTools.get_expiration_date()
         }
-        if exp_date! < Date() {
+        rotateOrStage(due: exp_date! < Date(), finishInterrupted: { _ in }, apply: { staged in
             PreferenceStore.shared.emitNotices()
-            LocalTools.password_change()
+            LocalTools.password_change(staged: staged)
             let new_exp_date = LocalTools.get_expiration_date()
             laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
+        })
+        if exp_date! < Date() {
             exit(0)
         }
         else {

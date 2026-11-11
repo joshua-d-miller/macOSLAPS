@@ -42,6 +42,8 @@ defaults write "$DOMAIN" Method -string Local
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 defaults write "$DOMAIN" PasswordLength -int 16
 defaults write "$DOMAIN" DaysTillExpiration -int 30
+# Most checks expect -resetPassword to rotate immediately; staging has its own tests.
+defaults write "$DOMAIN" StagedRotation -string off
 "$LAPS" -resetPassword || fatal "previous release could not rotate"
 OLD_PW=$(get_pw) || fatal "previous release could not export"
 dscl . -authonly "$ACCT" "$OLD_PW" >/dev/null 2>&1 && pass "previous release rotated and exported" || fatal "previous release's password does not authenticate"

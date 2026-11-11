@@ -54,13 +54,21 @@
 	<!-- Escrow (macOSLAPS -escrow). Add RSA certificates to encrypt for your admins. -->
 	<key>EscrowCertificates</key>
 	<array>
-		<!-- <string>-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----</string> -->
+		<!-- One <string> per certificate: the PEM text (BEGIN CERTIFICATE ... END CERTIFICATE) or base64 DER -->
 	</array>
+
+	<!-- Staged rotation: the MDM collects the next password (via -escrow) before it is used -->
+	<key>StagedRotation</key>
+	<string>auto</string>             <!-- auto (when -escrow runs on this Mac), on or off -->
+	<key>EscrowConfirmations</key>
+	<integer>2</integer>              <!-- -escrow exports needed before a staged password is applied -->
 
 	<!-- Refresh MDM inventory after a rotation -->
 	<key>InventoryHook</key>
 	<string></string>                 <!-- jamf or custom -->
 	<key>InventoryHookCommand</key>
 	<array/>                          <!-- e.g. /usr/local/bin/some-agent, refresh -->
+	<key>InventoryHookConfirms</key>
+	<false/>                          <!-- custom hook: true if it collects inventory (confirms staged passwords) -->
 </dict>
 </plist>

@@ -16,6 +16,9 @@ Log messages go to stderr for these commands, so only the result is captured.
 | `workspace-one/` | Workspace ONE sensors |
 | `generic/` | Anything else (Iru/Kandji, Mosyle, Addigy, ...) |
 
+## Staged rotation (4.0)
+With `StagedRotation` on (or `auto`, the default, once your MDM runs `-escrow`), a new password is first stored as **pending** and `-escrow` reports it next to the current one (`"pending"`, `"pendingSet"`). macOSLAPS changes the account to it only after `-escrow` has reported it `EscrowConfirmations` times (default 2), so your MDM always has the password the Mac is using. Keep both values: if the current password doesn't work, try the pending one.
+
 To refresh inventory right after a rotation, set `InventoryHook` to `jamf`, or to `custom` with `InventoryHookCommand` for your MDM's agent command.
 
 ## Decrypting CMS escrow

@@ -35,6 +35,10 @@ enum Escrow {
         let expires: String?
         let verified: Bool
         let host: String
+        /// Staged rotation: the next password, not yet in use. Keep it with the current
+        /// one; it becomes the account's password once macOSLAPS applies it.
+        let pending: String?
+        let pendingSet: String?
     }
 
     /// What `EscrowCertificates` holds.
@@ -191,8 +195,10 @@ enum Escrow {
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
+        let staged = Staging.pending()
         let payload = Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(createdDate),
-                              expires: isoDate(expires), verified: verified, host: computerName())
+                              expires: isoDate(expires), verified: verified, host: computerName(),
+                              pending: staged?.password, pendingSet: isoDate(staged?.created))
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
         guard let json = try? encoder.encode(payload) else {
@@ -213,11 +219,13 @@ enum Escrow {
         }
         if !config.configured {
             print(String(data: json, encoding: .utf8)!)
+            if staged != nil { Staging.noteExported() } else { Staging.noteEscrowRan() }
             exit(0)
         }
         do {
             let der = try envelope(json, recipients: config.certificates)
             print(pem(der, label: "CMS"))
+            if staged != nil { Staging.noteExported() } else { Staging.noteEscrowRan() }
             exit(0)
         } catch {
             laps_log.print("Unable to encrypt the escrow payload: \(error). The password was NOT printed.", .error)

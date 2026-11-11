@@ -117,9 +117,10 @@ public class ADTools: NSObject {
             exit(1)
         }
     }
-    class func password_change(computer_record: Array<ODRecord>) {
-        // Generate random password
-        let password = PasswordGen(length: Constants.password_length)
+    /// Rotates the account and writes AD. `staged` is the pending password when applying a
+    /// staged rotation; otherwise a new password is generated.
+    class func password_change(computer_record: Array<ODRecord>, staged: String? = nil) {
+        let password = staged ?? PasswordGen(length: Constants.password_length)
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = TimeConversion.windows()
         // Format Expiration Date
@@ -128,6 +129,7 @@ public class ADTools: NSObject {
         // Change and verify the local password (shared with the Local method)
         let local_admin_record = LocalTools.connect()
         CriticalSection.begin()
+        if staged != nil { Staging.beginApply() }
         let previous_password = LocalTools.changeAndVerify(record: local_admin_record, to: password)
 
         // Write our new password to the System Keychain
@@ -154,6 +156,7 @@ public class ADTools: NSObject {
         }
 
         laps_log.print("Password change has been written to Active Directory for the local administrator \(Constants.local_admin). The new expiration date is \(formatted_new_exp_date)", .info)
+        Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
         RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)
@@ -212,6 +215,14 @@ public class ADTools: NSObject {
             laps_log.print("Active Directory LAPS attributes restored\(previousPassword == nil ? " (marked expired; the previous password is unknown)" : " to the previous password, marked expired") so the next run retries.", .warn)
         } else {
             laps_log.print("Could not restore some Active Directory LAPS attributes (\(problems.joined(separator: "; "))). The directory may not match this Mac until the next successful rotation.", .error)
+        }
+    }
+
+    /// Interrupted staged apply: the account already uses `password`; bring AD in line.
+    class func restoreAfterInterruptedApply(computer_record: Array<ODRecord>, password: String) {
+        if set_password(computer_record: computer_record, password: password, new_ad_exp_date: TimeConversion.windows()!) != 0 {
+            laps_log.print("The interrupted rotation was finished locally, but Active Directory could not be updated. The next run will try again.", .error)
+            restore(computer_record: computer_record, previousPassword: password)
         }
     }
 

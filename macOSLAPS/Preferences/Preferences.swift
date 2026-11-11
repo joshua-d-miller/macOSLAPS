@@ -49,6 +49,9 @@ var defaultpreferences : [ String : Any ] = [
     "PasswordStyle"          :       "random",
     "InventoryHook"          :       "",
     "InventoryHookCommand"   :       [String](),
+    "InventoryHookConfirms"  :       false,
+    "StagedRotation"         :       "auto",
+    "EscrowConfirmations"    :       2,
     "EscrowCertificates"     :       [Any](),
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,

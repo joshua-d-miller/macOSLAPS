@@ -65,6 +65,8 @@ defaults write "$DOMAIN" Method -string Local
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 defaults write "$DOMAIN" PasswordLength -int "$LEN"
 defaults write "$DOMAIN" DaysTillExpiration -int 30
+# Most checks expect -resetPassword to rotate immediately; staging has its own tests.
+defaults write "$DOMAIN" StagedRotation -string off
 defaults write "$DOMAIN" RemovePassChars -string "$EXCLUDED"
 defaults read "$DOMAIN"
 echo "::endgroup::"
@@ -368,6 +370,68 @@ ROT=$(get_pw)
 "$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "-initialize on a managed Mac exits cleanly" || fail "-initialize on a managed Mac failed"
 [ "$(get_pw)" = "$ROT" ] && pass "-initialize leaves a rotated password alone" || fail "-initialize replaced the rotated password"
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
+echo "::endgroup::"
+
+echo "::group::Staged rotation: the MDM gets the next password before the account uses it"
+defaults write "$DOMAIN" StagedRotation -string on
+defaults write "$DOMAIN" EscrowConfirmations -int 2
+defaults write "$DOMAIN" InventoryHook -string ""
+BEFORE=$(get_pw)
+"$LAPS" -resetPassword >/dev/null 2>&1 && pass "-resetPassword with staging exits cleanly" || fail "-resetPassword with staging failed"
+[ "$(get_pw)" = "$BEFORE" ] && dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && pass "staging leaves the current password in use" || fail "staging changed the account"
+ST=$("$LAPS" -status)
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["pending"] and d["pendingExports"]==0 and d["pendingExportsNeeded"]==2 and d["lastResult"]=="staged", d' "$ST" \
+    && pass "-status shows the staged password (0 of 2)" || fail "-status staging fields: $ST"
+E1=$("$LAPS" -escrow 2>/dev/null)
+PENDING=$(python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["password"]==sys.argv[2]; print(d["pending"])' "$E1" "$BEFORE") \
+    && [ -n "$PENDING" ] && [ "$PENDING" != "$BEFORE" ] && pass "-escrow reports current and pending passwords" || fail "-escrow pending output"
+"$LAPS" >/dev/null 2>&1
+dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && pass "not applied after 1 of 2 exports" || fail "applied too early"
+"$LAPS" -escrow >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+dscl . -authonly "$ACCT" "$PENDING" >/dev/null 2>&1 && [ "$(get_pw)" = "$PENDING" ] && pass "applied after 2 exports: account and keychain use the escrowed pending password" || fail "pending password not applied after 2 exports"
+dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && fail "previous password still works after apply" || pass "previous password invalidated"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert not d["pending"] and d["lastResult"]=="rotated", d' && pass "no pending password after apply" || fail "pending left after apply"
+"$LAPS" -escrow 2>/dev/null | python3 -c 'import json,sys; d=json.load(sys.stdin); assert "pending" not in d, d' && pass "-escrow has no pending field when nothing is staged" || fail "-escrow still shows pending"
+
+# A hook that collects inventory confirms immediately (applied in the same run).
+rm -f /tmp/laps-collected.json
+cat > /tmp/laps-collect.sh <<HOOK
+#!/bin/sh
+out=\$("$LAPS" -escrow 2>/dev/null)
+case "\$out" in *'"pending"'*) printf '%s' "\$out" > /tmp/laps-collected.json ;; esac
+HOOK
+chmod +x /tmp/laps-collect.sh
+defaults write "$DOMAIN" InventoryHook -string custom
+defaults write "$DOMAIN" InventoryHookCommand -array /tmp/laps-collect.sh
+defaults write "$DOMAIN" InventoryHookConfirms -bool true
+BEFORE=$(get_pw)
+"$LAPS" -resetPassword >/dev/null 2>&1
+AFTER=$(get_pw)
+COLLECTED=$(python3 -c 'import json; print(json.load(open("/tmp/laps-collected.json"))["pending"])' 2>/dev/null)
+[ "$AFTER" != "$BEFORE" ] && [ "$AFTER" = "$COLLECTED" ] && dscl . -authonly "$ACCT" "$AFTER" >/dev/null 2>&1 \
+    && pass "hook collected the pending password; applied in the same run" || fail "hook confirmation (before/after/collected differ unexpectedly)"
+defaults write "$DOMAIN" InventoryHook -string ""
+defaults delete "$DOMAIN" InventoryHookConfirms
+
+# Power loss / SIGKILL after the account changed: the next run finishes the job.
+"$LAPS" -resetPassword >/dev/null 2>&1                     # stage
+"$LAPS" -escrow >/dev/null 2>&1; "$LAPS" -escrow >/dev/null 2>&1
+P2=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["pending"])' "$("$LAPS" -escrow 2>/dev/null)")
+MACOSLAPS_TEST_PAUSE_AFTER_CHANGE=10 "$LAPS" >/dev/null 2>&1 &
+KPID=$!
+sleep 4
+kill -9 "$KPID" 2>/dev/null; wait "$KPID" 2>/dev/null
+dscl . -authonly "$ACCT" "$P2" >/dev/null 2>&1 && [ "$(get_pw)" != "$P2" ] && pass "simulated crash: account changed, keychain not yet updated" || echo "::notice::crash simulation timing missed the window"
+"$LAPS" >/dev/null 2>&1
+[ "$(get_pw)" = "$P2" ] && dscl . -authonly "$ACCT" "$P2" >/dev/null 2>&1 && pass "next run finished the interrupted rotation" || fail "interrupted rotation not recovered"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert not d["pending"] and d["passwordVerifies"], d' && pass "clean state after recovery" || fail "state after recovery"
+
+# auto mode: active only when -escrow has run recently.
+defaults write "$DOMAIN" StagedRotation -string auto
+"$LAPS" -status | grep -q '"stagedRotation":"auto (active)"' && pass "auto mode is active after -escrow ran" || fail "auto mode not active after -escrow"
+defaults write "$DOMAIN" StagedRotation -string off
+"$LAPS" -status | grep -q '"stagedRotation":"off (inactive)"' && pass "staging off" || fail "staging off status"
 echo "::endgroup::"
 
 echo "::group::InventoryHook custom"

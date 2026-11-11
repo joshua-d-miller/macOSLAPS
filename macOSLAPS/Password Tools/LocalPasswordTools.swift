@@ -154,10 +154,13 @@ class LocalTools: NSObject {
         }
     }
 
-    class func password_change() {
+    /// Rotates the account. `staged` is the pending password when applying a staged
+    /// rotation; otherwise a new password is generated.
+    class func password_change(staged: String? = nil) {
         let record = connect()
-        let password = PasswordGen(length: Constants.password_length)
+        let password = staged ?? PasswordGen(length: Constants.password_length)
         CriticalSection.begin()
+        if staged != nil { Staging.beginApply() }
         let previous_password = changeAndVerify(record: record, to: password)
         // Test-only: widen the window so CI can send a signal inside it.
         if let pause = ProcessInfo.processInfo.environment["MACOSLAPS_TEST_PAUSE_AFTER_CHANGE"].flatMap(Double.init) {
@@ -172,6 +175,7 @@ class LocalTools: NSObject {
             exit(1)
         }
         laps_log.print("Password change has been completed locally.", .info)
+        Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
         RunState.noteVerified(true, created: KeychainService.loadPassword(service: "macOSLAPS").1)

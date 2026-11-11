@@ -37,6 +37,11 @@ struct StatusReport: Codable {
     var escrowCertificates: [String]
     var escrowCertificatesExpire: String?
     var inventoryHook: String
+    var stagedRotation: String
+    var pending: Bool
+    var pendingSince: String?
+    var pendingExports: Int?
+    var pendingExportsNeeded: Int?
     var lastRun: String?
     var lastResult: String?
     var lastMessage: String?
@@ -99,6 +104,7 @@ enum Status {
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = password == nil ? nil : LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
+        let staged = Staging.pending()
         let certConfig = Escrow.certificateConfig()
         let certs = certConfig.certificates
         let hook = (GetPreference(preference_key: "InventoryHook") as? String ?? "").lowercased()
@@ -125,6 +131,11 @@ enum Status {
             escrowCertificates: certs.map { String(Escrow.fingerprint($0).prefix(16)) },
             escrowCertificatesExpire: earliestExpiry(certs).map { RunState.iso.string(from: $0) },
             inventoryHook: hook.isEmpty ? "none" : hook,
+            stagedRotation: Staging.mode + (Staging.active ? " (active)" : " (inactive)"),
+            pending: staged != nil,
+            pendingSince: isoDate(staged?.created),
+            pendingExports: staged == nil ? nil : Staging.exports,
+            pendingExportsNeeded: staged == nil ? nil : Staging.confirmationsNeeded,
             lastRun: RunState.lastRun().run,
             lastResult: RunState.lastRun().result,
             lastMessage: RunState.lastRun().message,
@@ -187,6 +198,10 @@ enum Status {
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
+        print("ℹ️  Staged rotation: \(report.stagedRotation)")
+        if report.pending {
+            print("ℹ️  A new password is staged since \(report.pendingSince ?? "?"): collected by the MDM \(report.pendingExports ?? 0) of \(report.pendingExportsNeeded ?? 0) time(s). It becomes the account's password after that.")
+        }
         if let expires = report.escrowCertificatesExpire.flatMap(RunState.iso.date(from:)) {
             let days = Int(expires.timeIntervalSinceNow / 86400)
             if days < 0 { line(false, "An escrow certificate has expired", "Replace it in EscrowCertificates.") }
@@ -207,28 +222,40 @@ enum InventoryHook {
     /// extension attribute run by `jamf recon`) never rotate or start the hook again.
     static let environmentMarker = "MACOSLAPS_INVENTORY_HOOK"
 
+    /// Whether a successful run of the configured hook means inventory was collected
+    /// (jamf recon does; a custom command only when InventoryHookConfirms is true).
+    static var confirmsExports : Bool {
+        switch (GetPreference(preference_key: "InventoryHook") as? String ?? "").lowercased() {
+        case "jamf": return true
+        case "custom": return GetPreference(preference_key: "InventoryHookConfirms") as? Bool ?? false
+        default: return false
+        }
+    }
+
     /// Runs the configured hook (if any) and waits up to `timeout` seconds. Never fatal.
-    static func run(reason: String, timeout: TimeInterval = 300) {
+    /// Returns true when a hook ran and exited 0.
+    @discardableResult
+    static func run(reason: String, timeout: TimeInterval = 300) -> Bool {
         // The rotation is finished; don't make other runs wait for the hook.
         RunLock.release()
-        if Constants.inside_hook { return }
+        if Constants.inside_hook { return false }
         let mode = (GetPreference(preference_key: "InventoryHook") as? String ?? "")
             .trimmingCharacters(in: .whitespaces).lowercased()
         var command: [String]
         switch mode {
         case "", "none":
-            return
+            return false
         case "jamf":
             command = ["/usr/local/bin/jamf", "recon"]
         case "custom":
             command = GetPreference(preference_key: "InventoryHookCommand") as? [String] ?? []
         default:
             laps_log.print("Unknown InventoryHook \"\(mode)\". Use jamf or custom.", .warn)
-            return
+            return false
         }
         guard let executable = command.first, FileManager.default.isExecutableFile(atPath: executable) else {
             laps_log.print("InventoryHook \(mode): \(command.first ?? "no command") is not an executable file. Skipped.", .warn)
-            return
+            return false
         }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -242,17 +269,20 @@ enum InventoryHook {
             try process.run()
         } catch {
             laps_log.print("InventoryHook \(mode) could not start: \(describe(error))", .warn)
-            return
+            return false
         }
         let deadline = Date().addingTimeInterval(timeout)
         while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
         if process.isRunning {
             process.terminate()
             laps_log.print("InventoryHook \(mode) (after \(reason)) did not finish within \(Int(timeout)) seconds and was stopped.", .warn)
+            return false
         } else if process.terminationStatus == 0 {
             laps_log.print("InventoryHook \(mode) ran after \(reason).", .info)
+            return true
         } else {
             laps_log.print("InventoryHook \(mode) (after \(reason)) exited with status \(process.terminationStatus).", .warn)
+            return false
         }
     }
 }
@@ -289,6 +319,17 @@ enum RunState {
         var dict = load()
         change(&dict)
         save(dict)
+    }
+
+    // MARK: Generic values (used by Staging)
+
+    static func value(_ key: String) -> String? { load()[key] as? String }
+    static func intValue(_ key: String) -> Int { (load()[key] as? NSNumber)?.intValue ?? 0 }
+    static func set(_ values: [String: Any], remove: [String] = []) {
+        update { d in
+            for (k, v) in values { d[k] = v }
+            for k in remove { d.removeValue(forKey: k) }
+        }
     }
 
     // MARK: Last run
