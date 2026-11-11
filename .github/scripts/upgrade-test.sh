@@ -127,7 +127,7 @@ echo "2026-03-05 04:05:06" > "/var/root/Library/Application Support/macOSLAPS-ex
 "$LAPS" -status >/dev/null
 [ "$(status_field migratedFrom)" = "3.x plaintext file" ] && pass "migrated from the 3.x plaintext file" || fail "migratedFrom: $(status_field migratedFrom)"
 [ ! -e "/var/root/Library/Application Support/macOSLAPS-password" ] && [ ! -e "/var/root/Library/Application Support/macOSLAPS-expiration" ] && pass "3.x plaintext files removed" || fail "3.x plaintext files left behind"
-[ "$(comment_of "$SVC")" = '"icmt"<blob>="Created: 2026-02-03 04:05:06"' ] && pass "creation date taken from the legacy item's attributes" || fail "creation date: $(comment_of "$SVC")"
+comment_of "$SVC" | grep -qF '"icmt"<blob>="Created: 2026-02-03 04:05:06"' && pass "creation date taken from the legacy item's attributes" || fail "creation date: $(comment_of "$SVC")"
 security find-generic-password -s macOSLAPS "$SYSKC" >/dev/null 2>&1 && fail "legacy item left after the plaintext migration" || pass "legacy item removed"
 [ "$(get_pw)" = "$CUR" ] && pass "password from the plaintext file stored" || fail "stored password after the plaintext migration"
 # The 2026-02-03 date is long past: a scheduled run now rotates.

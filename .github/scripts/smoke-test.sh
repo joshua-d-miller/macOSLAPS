@@ -12,7 +12,7 @@ set -uo pipefail
 LAPS=/usr/local/laps/macOSLAPS
 APP=/Applications/macOSLAPS.app
 # Keychain service of the stored password (4.0 identity; 3.x/845 used "macOSLAPS").
-SVC=com.joshua-d-miller.macoslaps
+KCSVC=com.joshua-d-miller.macoslaps
 ACCT=lapstest
 FIRST='Initial-Pass-1234'
 LEN=16
@@ -80,8 +80,9 @@ echo "::endgroup::"
 
 get_pw() {
     "$LAPS" -getPassword >&2 || return 1
-    SVC=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
-    security find-generic-password -w -s "$SVC" "$SYSKC"
+    local export_name
+    export_name=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
+    security find-generic-password -w -s "$export_name" "$SYSKC"
 }
 
 check_pw() {
@@ -175,7 +176,7 @@ KNOWN2='Known-Pass-9753'
 CURRENT=$(get_pw 2>/dev/null)
 dscl . -passwd "/Users/$ACCT" "$CURRENT" "$KNOWN2" 2>/dev/null || dscl . -passwd "/Users/$ACCT" "$KNOWN2"
 # 1. Token status unknown and no stored password: refuse, change nothing.
-security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
+security delete-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1
 if MACOSLAPS_TEST_SECURETOKEN=unknown "$LAPS" -resetPassword >/dev/null 2>&1; then
     fail "unknown token status with no known password still rotated"
 else
@@ -198,7 +199,7 @@ if "$LAPS" -resetPassword >/dev/null 2>&1; then
 else
     fail "no token + out-of-date keychain did not recover"
 fi
-security find-generic-password -s "$SVC" "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
+security find-generic-password -s "$KCSVC" "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
     && pass "a newly created keychain item has its creation date" || fail "new keychain item is missing its Created: comment"
 [ -n "$SAVED_FIRSTPASS" ] && defaults write "$DOMAIN" FirstPass -string "$SAVED_FIRSTPASS"
 "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["secureToken"] is False, d' \
@@ -369,10 +370,10 @@ dscl . -authonly "$ACCT" "$INIT" >/dev/null 2>&1 && pass "account not rotated by
 "$LAPS" >/dev/null 2>&1
 [ "$(get_pw)" = "$INIT" ] && pass "scheduled run does not rotate before expiry" || fail "scheduled run rotated early"
 # Running -initialize again (an MDM doing it every check-in) must not move the date.
-CREATED1=$(security find-generic-password -s "$SVC" "$SYSKC" | grep '"icmt"')
+CREATED1=$(security find-generic-password -s "$KCSVC" "$SYSKC" | grep '"icmt"')
 sleep 2
 "$LAPS" -firstPass "$INIT" -initialize >/dev/null 2>&1 && pass "repeated -initialize succeeds" || fail "repeated -initialize failed"
-[ "$(security find-generic-password -s "$SVC" "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
+[ "$(security find-generic-password -s "$KCSVC" "$SYSKC" | grep '"icmt"')" = "$CREATED1" ] && pass "repeated -initialize keeps the creation date" || fail "repeated -initialize reset the creation date"
 # FirstPass in the configuration is readable by local users; -status must flag it while it is live.
 defaults write "$DOMAIN" FirstPass -string "$INIT"
 "$LAPS" -status | grep -q '"passwordIsFirstPass":true' && pass "-status flags a live FirstPass" || fail "-status does not flag a live FirstPass"
@@ -499,7 +500,7 @@ if [ "$HAS_TOKEN" -eq 1 ]; then
     KNOWN='Known-Pass-5678'
     CUR=$(get_pw)
     dscl . -passwd "/Users/$ACCT" "$CUR" "$KNOWN" || fail "could not set known password"
-    security delete-generic-password -s "$SVC" "$SYSKC" >/dev/null 2>&1
+    security delete-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1
     defaults delete "$DOMAIN" FirstPass
     "$LAPS" -resetPassword -firstPass "$KNOWN" && pass "CLI -firstPass rotation exited 0" || fail "CLI -firstPass rotation failed"
     PW3=$(get_pw) && check_pw "$PW3" "cli firstPass"
