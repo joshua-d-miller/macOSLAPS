@@ -27,7 +27,8 @@
                                   -initialize, -uninstall; staged rotation
                                   (-firstPass never stages); run lock; build
                                   number in -version; deprecation notice for
-                                  /usr/local/laps.
+                                  /usr/local/laps; admin group check on every
+                                  rotation run.
 
                                   New header and section style.
 ===============================================================================
@@ -458,6 +459,7 @@ func macOSLAPS() {
     }
     RunLock.acquire()
     RunState.begin()
+    AdminGroup.check()
     if Constants.initialize {
         initializeWithoutRotating()
     }

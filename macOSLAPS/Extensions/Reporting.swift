@@ -20,8 +20,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    New file: -status (account, secureToken,
                         claude    FileVault, stored password, escrow, staging,
-                                  migration), InventoryHook, state between runs
-                                  with cached failed checks.
+                                  migration, admin group), InventoryHook, state
+                                  between runs with cached failed checks.
 
                                   New header and section style.
 ===============================================================================
@@ -76,6 +76,12 @@ struct StatusReport: Codable {
     var migration: String
     var migratedAt: String?
     var migratedFrom: String?
+    /// Admin group protection: policy, admins not in ApprovedAdmins, an elevation tool
+    /// that makes auto report only, and the last admins macOSLAPS removed ("user time").
+    var adminGroupPolicy: String
+    var unapprovedAdmins: [String]
+    var elevationTool: String?
+    var demotedAdmins: [String]?
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -177,7 +183,11 @@ enum Status {
             osVersion: "\(osv.majorVersion).\(osv.minorVersion).\(osv.patchVersion)",
             migration: Migration.status,
             migratedAt: RunState.value("migratedAt"),
-            migratedFrom: RunState.value("migratedFrom"))
+            migratedFrom: RunState.value("migratedFrom"),
+            adminGroupPolicy: AdminGroup.policy,
+            unapprovedAdmins: AdminGroup.unapproved(),
+            elevationTool: AdminGroup.elevationTool(),
+            demotedAdmins: { let d = RunState.arrayValue("demotedAdmins"); return d.isEmpty ? nil : d }())
     }
 
     static func run(verbose: Bool) -> Never {
@@ -239,6 +249,17 @@ enum Status {
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
+        if report.unapprovedAdmins.isEmpty {
+            line(true, "Only approved accounts are admins (AdminGroupPolicy \(report.adminGroupPolicy))")
+        } else {
+            let enforced = report.adminGroupPolicy == "enforce" || (report.adminGroupPolicy == "auto" && report.elevationTool == nil)
+            line(false, "Admins not in ApprovedAdmins: \(report.unapprovedAdmins.joined(separator: ", "))",
+                 enforced ? "They are removed on the next run. Add them to ApprovedAdmins to keep them."
+                          : "Not removed (\(report.elevationTool.map { "\($0) is installed" } ?? "AdminGroupPolicy report")). Add them to ApprovedAdmins, or remove them.")
+        }
+        if let demoted = report.demotedAdmins?.suffix(3), !demoted.isEmpty {
+            print("ℹ️  Recently removed from the admin group: \(demoted.joined(separator: "; "))")
+        }
         print("ℹ️  Staged rotation: \(report.stagedRotation)")
         if report.pending {
             print("ℹ️  A new password is staged since \(report.pendingSince ?? "?"): collected by the MDM \(report.pendingExports ?? 0) of \(report.pendingExportsNeeded ?? 0) time(s). It becomes the account's password after that.")
@@ -377,6 +398,7 @@ enum RunState {
 
     static func value(_ key: String) -> String? { load()[key] as? String }
     static func intValue(_ key: String) -> Int { (load()[key] as? NSNumber)?.intValue ?? 0 }
+    static func arrayValue(_ key: String) -> [String] { load()[key] as? [String] ?? [] }
     static func set(_ values: [String: Any], remove: [String] = []) {
         update { d in
             for (k, v) in values { d[k] = v }

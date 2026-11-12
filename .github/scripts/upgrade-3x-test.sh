@@ -79,6 +79,10 @@ echo "3.0.4 reports: $("$LAPS" -version 2>&1)"
 codesign -dv "$LAPS" 2>&1 | grep -E "^Identifier|^TeamIdentifier|^Authority=Developer"
 sysadminctl -addUser "$ACCT" -fullName "LAPS 3x" -password "$FIRST" -admin 2>&1
 defaults write "$DOMAIN" LocalAdminAccount -string "$ACCT"
+# The runner's own admins (e.g. runner) stay admin: AdminGroupPolicy auto removes the rest.
+read -r -a RUNNER_ADMINS <<< "$(dscl . -read /Groups/admin GroupMembership | cut -d: -f2)"
+defaults write "$DOMAIN" ApprovedAdmins -array "${RUNNER_ADMINS[@]}"
+echo "Approved for CI: ${RUNNER_ADMINS[*]}"
 defaults write "$DOMAIN" Method -string Local
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 defaults write "$DOMAIN" PasswordLength -int 16

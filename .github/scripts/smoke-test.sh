@@ -134,6 +134,10 @@ TOKEN=$(sysadminctl -secureTokenStatus "$ACCT" 2>&1)
 echo "$TOKEN"
 if echo "$TOKEN" | grep -q ENABLED; then HAS_TOKEN=1; else HAS_TOKEN=0; fi
 defaults write "$DOMAIN" LocalAdminAccount -string "$ACCT"
+# The runner's own admins (e.g. runner) stay admin: AdminGroupPolicy auto removes the rest.
+read -r -a RUNNER_ADMINS <<< "$(dscl . -read /Groups/admin GroupMembership | cut -d: -f2)"
+defaults write "$DOMAIN" ApprovedAdmins -array "${RUNNER_ADMINS[@]}"
+echo "Approved for CI: ${RUNNER_ADMINS[*]}"
 defaults write "$DOMAIN" Method -string Local
 defaults write "$DOMAIN" FirstPass -string "$FIRST"
 defaults write "$DOMAIN" PasswordLength -int "$LEN"
@@ -658,6 +662,55 @@ if [ "$HAS_TOKEN" -eq 1 ]; then
 else
     echo "::notice::Test account has no secureToken on this runner; secureToken path needs community testing."
 fi
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------------------------- ###
+### | Admin group protection | ###
+### -------------------------- ###
+### Only the managed admin, root and ApprovedAdmins may stay admin. auto    ###
+### removes the rest unless an elevation tool is installed; nothing is      ###
+### removed without a verified password for the managed admin.              ###
+echo "::group::Admin group protection"
+EXTRA=lapsextra
+sysadminctl -addUser "$EXTRA" -fullName "LAPS Extra" -password 'Extra-Pass-1357' -admin >/dev/null 2>&1
+is_admin() { dseditgroup -o checkmember -m "$1" admin >/dev/null 2>&1; }
+is_admin "$EXTRA" || fail "could not create the extra admin"
+# report: listed, not removed
+defaults write "$DOMAIN" AdminGroupPolicy -string report
+"$LAPS" >/dev/null 2>&1
+is_admin "$EXTRA" && pass "report: unapproved admin kept" || fail "report removed an admin"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["unapprovedAdmins"]==["lapsextra"] and d["adminGroupPolicy"]=="report", d' \
+    && pass "-status lists the unapproved admin" || fail "-status unapprovedAdmins: $("$LAPS" -status)"
+# auto with a fake elevation tool: report only
+mkdir -p /Applications/Privileges.app
+defaults write "$DOMAIN" AdminGroupPolicy -string auto
+"$LAPS" >/dev/null 2>&1
+is_admin "$EXTRA" && "$LAPS" -status | grep -q '"elevationTool":"SAP Privileges"' && pass "auto + elevation tool: kept and reported" || fail "auto with an elevation tool"
+rm -rf /Applications/Privileges.app
+# no verified password for the managed admin: nothing is removed
+CUR=$(get_pw 2>/dev/null)
+dscl . -passwd "/Users/$ACCT" "$CUR" 'Not-Stored-Pass-1' >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+is_admin "$EXTRA" && pass "no verified managed-admin password: nothing removed" || fail "removed an admin without a working managed-admin password"
+dscl . -passwd "/Users/$ACCT" 'Not-Stored-Pass-1' "$CUR" >/dev/null 2>&1
+# auto: removed
+"$LAPS" >/dev/null 2>&1
+! is_admin "$EXTRA" && pass "auto: unapproved admin removed" || fail "auto did not remove the unapproved admin"
+is_admin "$ACCT" && pass "managed admin still admin" || fail "managed admin lost admin"
+"$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["unapprovedAdmins"]==[] and any(x.startswith("lapsextra ") for x in d["demotedAdmins"]), d' \
+    && pass "-status records the removal" || fail "-status demotedAdmins: $("$LAPS" -status)"
+for u in "${RUNNER_ADMINS[@]}"; do [ "$u" = root ] && continue; is_admin "$u" && pass "approved admin $u kept" || fail "approved admin $u removed"; done
+# approved by group
+dseditgroup -o edit -a "$EXTRA" -t user admin
+dseditgroup -o create lapsapproved >/dev/null 2>&1
+dseditgroup -o edit -a "$EXTRA" -t user lapsapproved
+defaults write "$DOMAIN" ApprovedAdmins -array "${RUNNER_ADMINS[@]}" group:lapsapproved
+"$LAPS" >/dev/null 2>&1
+is_admin "$EXTRA" && pass "approved through group:lapsapproved: kept" || fail "group approval did not keep the admin"
+defaults write "$DOMAIN" ApprovedAdmins -array "${RUNNER_ADMINS[@]}"
+dseditgroup -o delete lapsapproved >/dev/null 2>&1
+sysadminctl -deleteUser "$EXTRA" >/dev/null 2>&1
+echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ----------------------------------------------- ###
