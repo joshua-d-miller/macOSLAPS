@@ -29,7 +29,8 @@
                                   migration status, staging, -firstPass never
                                   staging, uninstall, device mode, the
                                   privileged service, admin group protection,
-                                  deadline.plist and the menu bar LaunchAgent.
+                                  deadline.plist, the menu bar LaunchAgent and
+                                  the log location, rotation and unified log.
 
                                   New header and section style.
 ===============================================================================
@@ -842,6 +843,26 @@ sysadminctl -deleteUser "$EXTRA" >/dev/null 2>&1
 echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### -------- ###
+### | Logs | ###
+### -------- ###
+### The log file in Application Support, its symlink in /Library/Logs,      ###
+### rotation and the unified log.                                           ###
+echo "::group::Logs"
+LOGF="/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log"
+"$LAPS" >/dev/null 2>&1
+[ "$(readlink /Library/Logs/macOSLAPS.log)" = "$LOGF" ] && pass "/Library/Logs/macOSLAPS.log links to Application Support" || fail "log symlink: $(ls -l /Library/Logs/macOSLAPS.log 2>&1)"
+[ "$(stat -f '%Su %Lp' "$LOGF" 2>/dev/null)" = "root 644" ] && [ -s "$LOGF" ] && pass "log file root 644 with lines" || fail "log file: $(ls -l "$LOGF" 2>&1)"
+rm -f /Library/Logs/macOSLAPS.log; "$LAPS" >/dev/null 2>&1
+[ -L /Library/Logs/macOSLAPS.log ] && pass "symlink made again after it was deleted" || fail "symlink not recreated"
+dd if=/dev/zero bs=1048576 count=6 2>/dev/null | tr '\0' 'x' >> "$LOGF"
+"$LAPS" >/dev/null 2>&1
+[ -f "$LOGF.1" ] && [ "$(stat -f %z "$LOGF")" -lt 1048576 ] && pass "log rotated at 5 MB" || fail "log rotation: $(ls -l "$LOGF"* 2>&1)"
+log show --last 15m --style compact --predicate 'subsystem == "com.joshua-d-miller.macoslaps"' 2>/dev/null | grep -qi "macoslaps" \
+    && pass "messages in the unified log" || fail "nothing in the unified log for com.joshua-d-miller.macoslaps"
+echo "::endgroup::"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ----------------------------------------------- ###
 ### | -uninstall keeps the password, uninstall.sh | ###
 ### ----------------------------------------------- ###
@@ -862,6 +883,7 @@ dscl . -authonly "$ACCT" "$KEPT" >/dev/null 2>&1 && pass "account untouched by -
 bash /tmp/laps-uninstall.sh --purge && pass "uninstall.sh --purge exited 0" || fail "uninstall.sh --purge failed"
 security find-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1 && fail "stored password left after --purge" || pass "stored password deleted by --purge"
 [ ! -e /var/db/macoslaps ] && pass "state removed by --purge" || fail "/var/db/macoslaps left after --purge"
+[ ! -e "/Library/Application Support/macOSLAPS" ] && [ ! -L /Library/Logs/macOSLAPS.log ] && pass "logs removed by --purge" || fail "logs left after --purge: $(ls -la "/Library/Application Support/macOSLAPS" /Library/Logs/macOSLAPS.log 2>&1)"
 echo "::endgroup::"
 
 echo "----"

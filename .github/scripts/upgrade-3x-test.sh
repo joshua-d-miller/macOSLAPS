@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Upgrade from macOSLAPS 3.0.4 (781), the last 3.x release: install it,
@@ -25,8 +25,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. Also checks the old log is kept
+                        claude    as macOSLAPS-3x.log.
 ===============================================================================
 HEADER
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
@@ -132,6 +132,9 @@ echo "::endgroup::"
 ### -------------------------- ###
 echo "::group::Rotation after upgrade"
 "$LAPS" -resetPassword >/dev/null 2>&1 && pass "rotation after upgrade" || fail "rotation after upgrade failed"
+OLDLOG="/Library/Application Support/macOSLAPS/Logs/macOSLAPS-3x.log"
+[ -s "$OLDLOG" ] && [ "$(readlink /Library/Logs/macOSLAPS.log)" = "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" ] \
+    && pass "the old log was kept as macOSLAPS-3x.log; /Library/Logs/macOSLAPS.log is now a symlink" || fail "log move: $(ls -l /Library/Logs/macOSLAPS.log "$OLDLOG" 2>&1)"
 NEW_PW=$(escrow_pw)
 [ -n "$NEW_PW" ] && [ "$NEW_PW" != "$OLD_PW" ] && dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "new password works" || fail "new password after upgrade"
 dscl . -authonly "$ACCT" "$OLD_PW" >/dev/null 2>&1 && fail "3.0.4's password still works" || pass "3.0.4's password invalidated"

@@ -47,5 +47,5 @@ body:
   - type: textarea
     id: log
     attributes:
-      label: Relevant lines from /Library/Logs/macOSLAPS.log
+      label: Relevant lines from /Library/Logs/macOSLAPS.log (4.0 and later keep it in /Library/Application Support/macOSLAPS/Logs)
       render: text

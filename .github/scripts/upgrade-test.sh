@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-09
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Installs the last published release, rotates with it, then installs
@@ -25,9 +25,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    Migration from 845, the required/recovery
+ 4.0.0     2026-11-12   joshua    Migration from 845, the required/recovery
                         claude    path, 3.x plaintext files never used, new
-                                  label and receipts, EAs during staging.
+                                  label and receipts, EAs during staging, the
+                                  old log kept as macOSLAPS-3x.log.
 
                                   New header and section style.
 ===============================================================================
@@ -134,6 +135,9 @@ echo "::endgroup::"
 ### ------------------------------------------------------- ###
 echo "::group::Migration from the previous release's keychain item"
 "$LAPS" -status >/dev/null   # migrates now if the installer's run hasn't already
+OLDLOG="/Library/Application Support/macOSLAPS/Logs/macOSLAPS-3x.log"
+[ -s "$OLDLOG" ] && [ "$(readlink /Library/Logs/macOSLAPS.log)" = "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" ] \
+    && pass "the old log was kept as macOSLAPS-3x.log; /Library/Logs/macOSLAPS.log is now a symlink" || fail "log move: $(ls -l /Library/Logs/macOSLAPS.log "$OLDLOG" 2>&1)"
 if [ "$SIGNED" = "true" ]; then
     [ "$(status_field migration)" = "migrated" ] && pass "-status: migrated" || fail "-status after upgrade: $("$LAPS" -status)"
     FROM=$(status_field migratedFrom)

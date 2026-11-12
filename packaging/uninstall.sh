@@ -30,7 +30,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-12   joshua    New file. Also removes the service daemon,
                         claude    its request folder, the deadline file and
-                                  the menu bar LaunchAgent.
+                                  the menu bar LaunchAgent; --purge also
+                                  removes the logs.
 ===============================================================================
 HEADER
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
@@ -107,6 +108,8 @@ if [ "$PURGE" -eq 1 ]; then
     /bin/rm -f "/var/root/Library/Application Support/macOSLAPS-password" "/var/root/Library/Application Support/macOSLAPS-expiration"
     /bin/rm -rf /var/db/macoslaps && say "removed /var/db/macoslaps"
     /bin/rm -f /Library/Logs/macOSLAPS.log
+    /bin/rm -rf "/Library/Application Support/macOSLAPS/Logs" && say "removed the logs"
+    /bin/rmdir "/Library/Application Support/macOSLAPS" 2>/dev/null
     say "stored passwords deleted (--purge)."
 else
     say "the stored password was kept in the System keychain (use --purge to delete it)."

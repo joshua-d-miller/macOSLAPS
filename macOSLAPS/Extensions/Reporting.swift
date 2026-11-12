@@ -309,7 +309,7 @@ enum Status {
         }
         if let result = report.lastResult {
             line(result != "failed", "Last run \(report.lastRun ?? "?"): \(result)" + (report.lastMessage.map { " — \($0)" } ?? ""),
-                 "Check /Library/Logs/macOSLAPS.log. Last successful run: \(report.lastSuccess ?? "never").")
+                 "Check /Library/Logs/macOSLAPS.log (or log show --predicate 'subsystem == \"com.joshua-d-miller.macoslaps\"'). Last successful run: \(report.lastSuccess ?? "never").")
         } else {
             print("ℹ️  No rotation run recorded yet on this build.")
         }
