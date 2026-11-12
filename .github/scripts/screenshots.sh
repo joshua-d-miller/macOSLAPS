@@ -37,6 +37,7 @@ HEADER
 set -uo pipefail
 PKG="$1"; OUT="$2"
 mkdir -p "$OUT"
+chmod 777 "$OUT"   # screencapture runs as the signed-in user
 installer -pkg "$PKG" -target / >/dev/null || { echo "::error::install failed"; exit 1; }
 APP=/Applications/macOSLAPS.app
 LAPS="$APP/Contents/MacOS/macOSLAPS"
@@ -73,8 +74,10 @@ shot() {
 }
 # window_of <pid> <layer>: the first on-screen window of that process at that layer.
 window_of() { as_gui /tmp/wininfo | awk -F'\t' -v p="$1" -v l="$2" '$3==p && $2==l && $6>20 {print $1; exit}'; }
-keys() { as_gui osascript -e "tell application \"System Events\" to keystroke \"$1\""; }
-key_code() { as_gui osascript -e "tell application \"System Events\" to key code $1"; }
+# AppleScript as the signed-in user; errors go to the log (e.g. no Accessibility access).
+ui() { as_gui osascript -e "$1" 2>&1 | sed 's/^/  osascript: /'; }
+keys() { ui "tell application \"System Events\" to keystroke \"$1\""; }
+key_code() { ui "tell application \"System Events\" to key code $1"; }
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### --------------------- ###
@@ -112,7 +115,13 @@ APP_PID=$(pgrep -u "$GUI_UID" -f "^$APP/Contents/MacOS/macOSLAPS$" | head -1)
 WIN=$(window_of "$APP_PID" 0)
 [ -n "$WIN" ] && pass "the app window is on screen" || fail "no app window"
 shot 01-window-empty "$WIN"
-as_gui osascript -e "tell application \"System Events\" to set frontmost of (first process whose unix id is $APP_PID) to true" >/dev/null 2>&1
+PROC="(first process whose unix id is $APP_PID)"
+ui "tell application \"System Events\" to set frontmost of $PROC to true"
+echo "Frontmost: $(as_gui osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)"
+echo "Window elements: $(as_gui osascript -e "tell application \"System Events\" to get {role, description} of every UI element of window 1 of $PROC" 2>&1)"
+# Put the cursor in the code field (the first text field) before typing.
+ui "tell application \"System Events\" to click text field 1 of window 1 of $PROC"
+sleep 0.5
 keys "$CODE"; sleep 0.5
 key_code 48; sleep 0.3     # Tab to the reason field
 keys "TICKET-4021"; sleep 1
@@ -129,7 +138,7 @@ python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.p
     && pass "revealed through the window by $GUI_USER with the ticket" || fail "the window did not reveal the password (revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1))"
 ST=$("$LAPS" -status)
 [ -n "$(jget "$ST" rotatesAt)" ] && pass "the grace period started" || fail "no deadline after the reveal"
-as_gui osascript -e "tell application \"System Events\" to click (first button whose name contains \"Phonetic\") of window 1 of (first process whose unix id is $APP_PID)" >/dev/null 2>&1
+ui "tell application \"System Events\" to click (first button whose name contains \"Phonetic\") of window 1 of $PROC"
 sleep 2
 shot 04-window-phonetic "$WIN"
 
@@ -143,7 +152,7 @@ AGENT_PID=$(pgrep -u "$GUI_UID" -f "macOSLAPS -agent" | head -1)
 [ -n "$AGENT_PID" ] && pass "the menu bar agent is running" || fail "the menu bar agent is not running"
 ITEM=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>0 {print $1; exit}')
 [ -n "$ITEM" ] && shot 05-menubar-item "$ITEM" || echo "::warning::no menu bar item window"
-as_gui osascript -e "tell application \"System Events\" to click menu bar item 1 of menu bar 2 of (first process whose unix id is $AGENT_PID)" >/dev/null 2>&1
+ui "tell application \"System Events\" to click menu bar item 1 of menu bar 2 of (first process whose unix id is $AGENT_PID)"
 sleep 2
 MENU=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>=101 {print $1; exit}')
 [ -n "$MENU" ] && shot 06-menubar-menu "$MENU" || echo "::warning::no menu window"
@@ -183,6 +192,16 @@ CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
 grep -q "^Password: " "$OUT/11-terminal-reveal.txt" && pass "-reveal from a pipe as $GUI_USER" || fail "-reveal from a pipe: $(cat "$OUT/11-terminal-reveal.txt")"
 as_gui /tmp/wininfo > "$OUT/windows.txt"
 ls -l "$OUT"
+# The images, also in the log (base64, between markers), for readers that can't
+# download artifacts.
+for f in "$OUT"/*.png; do
+    [ -s "$f" ] || continue
+    small="/tmp/$(basename "$f")"
+    sips -Z 1400 "$f" --out "$small" >/dev/null 2>&1 || cp "$f" "$small"
+    echo "::group::image $(basename "$f")"
+    echo "BEGIN-IMAGE $(basename "$f")"; base64 -i "$small" | fold -w 4000; echo "END-IMAGE $(basename "$f")"
+    echo "::endgroup::"
+done
 echo "----"
 [ "$FAILURES" -eq 0 ] || { echo "::error::$FAILURES check(s) failed"; exit 1; }
 echo "All screenshot checks passed."
