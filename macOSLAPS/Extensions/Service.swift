@@ -33,8 +33,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-12   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. A rotate-now request older than
+                        claude    the current deadline is ignored.
 ===============================================================================
 */
 
@@ -89,7 +89,21 @@ enum Service {
     static func processRequests() {
         let fm = FileManager.default
         guard let files = try? fm.contentsOfDirectory(atPath: requestFolder), !files.isEmpty else { return }
-        for f in files { try? fm.removeItem(atPath: (requestFolder as NSString).appendingPathComponent(f)) }
+        // Only a request made after the current deadline was set may end it: a late
+        // request meant for an earlier deadline (e.g. the menu bar agent's, at that
+        // deadline) must not cut a new grace period short.
+        let setAt = RunState.value("deadlineSetAt").flatMap { RunState.preciseISO.date(from: $0) }
+        var current = false
+        for f in files {
+            let path = (requestFolder as NSString).appendingPathComponent(f)
+            let made = (try? fm.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+            if setAt == nil || (made.map { $0 >= setAt! } ?? false) { current = true }
+            try? fm.removeItem(atPath: path)
+        }
+        guard current else {
+            laps_log.print("Ignored a rotate-now request made before the current deadline was set.", .info)
+            return
+        }
         if endGraceNow(by: "a rotate-now request") {
             laps_log.print("Rotate-now request: the grace period ends now.", .info)
         } else {

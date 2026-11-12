@@ -37,7 +37,9 @@
                                   waits for a near deadline so the rotation
                                   happens on time; -reason records why a
                                   password was revealed; deadline.plist tells
-                                  the menu bar agent when it rotates.
+                                  the menu bar agent when it rotates;
+                                  deadlineSetAt records when a deadline was
+                                  set.
 ===============================================================================
 */
 
@@ -182,7 +184,7 @@ enum Reveal {
 
     /// After every successful rotation (RunState.record("rotated")).
     static func afterRotation() {
-        RunState.set([:], remove: ["rotatesAt", "revealedAt", "rotateReason"])
+        RunState.set([:], remove: ["rotatesAt", "revealedAt", "rotateReason", "deadlineSetAt"])
         if deviceMode { replaceCode(reason: "after rotation") }
     }
 
@@ -252,7 +254,10 @@ enum Reveal {
         }
         var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal",
                                       "revealFailures": 0]
-        if let u = until { values["rotatesAt"] = RunState.iso.string(from: u) }
+        if let u = until {
+            values["rotatesAt"] = RunState.iso.string(from: u)
+            values["deadlineSetAt"] = RunState.preciseISO.string(from: Date())
+        }
         RunState.set(values)
         appendHistory("revealed \(who)")
         laps_log.print("The password for \(Constants.local_admin) was revealed to \(who)" +
@@ -325,7 +330,8 @@ enum Reveal {
             exit(64)
         }
         let deadline = Date().addingTimeInterval(seconds)
-        RunState.set(["rotatesAt": RunState.iso.string(from: deadline), "rotateReason": "expireIn"])
+        RunState.set(["rotatesAt": RunState.iso.string(from: deadline), "rotateReason": "expireIn",
+                      "deadlineSetAt": RunState.preciseISO.string(from: Date())])
         laps_log.print("The password for \(Constants.local_admin) changes at \(Constants.dateFormatter.string(from: deadline)) or on the first run after it.", .info)
         print("The password for \(Constants.local_admin) changes at \(Constants.dateFormatter.string(from: deadline)).")
         Service.kickCheck()

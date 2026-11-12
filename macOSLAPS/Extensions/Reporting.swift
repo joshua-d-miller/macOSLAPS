@@ -28,7 +28,7 @@
                                   without a FileVault recovery key escrow
                                   profile; externalChange; MDM-created admins;
                                   state changes are locked and written
-                                  atomically.
+                                  atomically; precise times for deadlineSetAt.
 
                                   New header and section style.
 ===============================================================================
@@ -442,6 +442,13 @@ enum RunState {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
         f.timeZone = TimeZone.current
+        return f
+    }()
+
+    /// With fractional seconds, for comparing with file times (deadlineSetAt).
+    static let preciseISO : ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
 

@@ -809,6 +809,14 @@ BEFORE=$(get_pw)
 "$LAPS" >/dev/null 2>&1
 AFTER=$(get_pw)
 [ "$AFTER" != "$BEFORE" ] && [ -z "$(jget "$("$LAPS" -status)" rotatesAt)" ] && pass "request file during a grace period: rotated" || fail "request file with a deadline"
+# A request made before the current deadline was set (e.g. the agent's, for an earlier
+# deadline) must not end it.
+"$LAPS" -expireIn 2h >/dev/null 2>&1
+touch -t "$(date -v-10M +%Y%m%d%H%M.%S)" "$REQ/stale-request"; sleep 6
+[ -z "$(ls -A "$REQ")" ] && [ -n "$(jget "$("$LAPS" -status)" rotatesAt)" ] \
+    && python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); assert (r-D.datetime.now(r.tzinfo)).total_seconds() > 3600, d' "$("$LAPS" -status)" \
+    && pass "a request older than the deadline is removed and ignored" || fail "stale request: $(ls -A "$REQ") / $("$LAPS" -status)"
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
 # The deadline file the menu bar agent reads: world-readable, gone after rotation.
 DL="/Library/Application Support/macOSLAPS/deadline.plist"
 "$LAPS" -expireIn 2h >/dev/null 2>&1
