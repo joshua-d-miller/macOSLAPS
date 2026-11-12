@@ -26,7 +26,9 @@
                                   a deadline change publishes deadline.plist
                                   for the menu bar agent; device mode warns
                                   without a FileVault recovery key escrow
-                                  profile; externalChange; MDM-created admins.
+                                  profile; externalChange; MDM-created admins;
+                                  state changes are locked and written
+                                  atomically.
 
                                   New header and section style.
 ===============================================================================
@@ -448,14 +450,25 @@ enum RunState {
               let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return [:] }
         return dict
     }
+    /// Written to a 600 temporary file and renamed over the old one, so a reader never
+    /// sees half a file.
     private static func save(_ dict: [String: Any]) {
         let fm = FileManager.default
         try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         guard let data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) else { return }
-        fm.createFile(atPath: path, contents: data, attributes: [.posixPermissions: 0o600])
+        let temporary = path + ".tmp"
+        guard fm.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o600]) else { return }
+        if rename(temporary, path) != 0 { unlink(temporary) }
     }
+    /// The check daemon, the service and commands such as -expireIn and -escrow can all
+    /// change the state at once. Each load-change-save holds an exclusive lock, so one
+    /// can't write back a stale copy over another's change.
     private static func update(_ change: (inout [String: Any]) -> Void) {
         guard getuid() == 0 else { return }
+        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        let lock = open(directory + "/.state.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
+        if lock >= 0 { flock(lock, LOCK_EX) }
+        defer { if lock >= 0 { flock(lock, LOCK_UN); close(lock) } }
         var dict = load()
         change(&dict)
         save(dict)
