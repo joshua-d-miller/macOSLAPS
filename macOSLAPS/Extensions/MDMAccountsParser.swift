@@ -39,7 +39,10 @@ struct AutoSetupAdmin: Equatable {
 enum MDMAccountsParser {
     /// The AutoSetupAdminAccounts entries, [] when the list is empty, or nil when the
     /// output doesn't contain a list that can be read with confidence.
-    static func parse(_ output: String) -> [AutoSetupAdmin]? {
+    static func parse(_ raw: String) -> [AutoSetupAdmin]? {
+        // Output pasted through Mail or Slack gains curly quotes; mdmclient prints straight ones.
+        let output = raw.replacingOccurrences(of: "\u{201C}", with: "\"")
+                        .replacingOccurrences(of: "\u{201D}", with: "\"")
         if let start = output.range(of: "Daemon response:"),
            let dict = plist(String(output[start.upperBound...])) as? [String: Any],
            let responses = dict["QueryResponses"] as? [String: Any] {

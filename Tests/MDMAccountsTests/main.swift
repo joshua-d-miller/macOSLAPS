@@ -88,6 +88,26 @@ expect(MDMAccountsParser.parse(withDate)?.first?.shortName == "ladmin", "falls b
 expect(MDMAccountsParser.parse(sample("( { shortName = ladmin; } )")) == nil, "an entry without a GUID makes the list unreadable")
 expect(MDMAccountsParser.parse(sample("( \"ladmin\" )")) == nil, "an entry that isn't a dictionary makes the list unreadable")
 expect(MDMAccountsParser.parse(sample("( { GUID = \"(x)\"; shortName = \"a)b\"; } )")) == [AutoSetupAdmin(guid: "(x)", shortName: "a)b")], "parentheses inside quotes")
+// Real output from a Penn State Mac with a Jamf PreStage admin (2026-11-12, via Joshua),
+// once with straight quotes as mdmclient prints them and once as pasted (curly quotes).
+let psu = """
+Daemon response: {
+    QueryResponses =     {
+        AutoSetupAdminAccounts =     (
+                    {
+                GUID = "22F40CA2-8731-4D62-AC31-DAD9C40D1A79";
+                shortName = cetc;
+            }
+        );
+        AvailableDeviceCapacity = 35;
+        AwaitingConfiguration = 0;
+        BatteryLevel = 1;
+    };
+}
+"""
+let cetc = [AutoSetupAdmin(guid: "22F40CA2-8731-4D62-AC31-DAD9C40D1A79", shortName: "cetc")]
+expect(MDMAccountsParser.parse(psu) == cetc, "real PreStage admin output (cetc)")
+expect(MDMAccountsParser.parse(psu.replacingOccurrences(of: "\"22F40CA2-8731-4D62-AC31-DAD9C40D1A79\"", with: "\u{201C}22F40CA2-8731-4D62-AC31-DAD9C40D1A79\u{201D}")) == cetc, "the same with curly quotes from a paste")
 let noKey = sample(one).replacingOccurrences(of: "AutoSetupAdminAccounts", with: "SomethingElse")
 expect(MDMAccountsParser.parse(noKey) == nil, "no AutoSetupAdminAccounts key: unreadable, not empty")
 expect(MDMAccountsParser.parse("") == nil, "no output: unreadable")
