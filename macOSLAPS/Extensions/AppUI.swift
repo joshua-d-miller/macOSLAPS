@@ -30,8 +30,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-12   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. The window and menu say the
+                        claude    admin will be logged out only when it is
+                                  logged in.
 ===============================================================================
 */
 
@@ -270,7 +271,7 @@ struct MainView: View {
         VStack(alignment: .leading, spacing: 4) {
             if let deadline = model.deadline {
                 Text(AppUI.t("Password works until %@ (%@)", AppUI.time(deadline), AppUI.remaining(deadline.timeIntervalSince(model.now))))
-                if (model.status["rotateReason"] as? String) != nil, Reveal.action == "rotateAndLogout" {
+                if (model.status["rotateReason"] as? String) != nil, Reveal.logoutApplies(Reveal.action) {
                     Text(AppUI.t("%@ will be logged out at that time.", model.account)).foregroundColor(.secondary)
                 }
             } else if let expires = (model.status["expires"] as? String).flatMap(RunState.iso.date(from:)) {
@@ -406,7 +407,7 @@ final class AgentDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCe
         let menu = NSMenu()
         menu.addItem(withTitle: AppUI.t("Local Admin Account: %@", d.account), action: nil, keyEquivalent: "")
         menu.addItem(withTitle: AppUI.t("Password works until %@ (%@)", AppUI.time(d.rotatesAt), AppUI.remaining(left)), action: nil, keyEquivalent: "")
-        if d.action == "rotateAndLogout" {
+        if Reveal.logoutApplies(d.action) {
             menu.addItem(withTitle: AppUI.t("%@ will be logged out at that time.", d.account), action: nil, keyEquivalent: "")
         }
         menu.addItem(.separator())

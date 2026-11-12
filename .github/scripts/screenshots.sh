@@ -178,6 +178,21 @@ ax_find "$APP_PID" AXButton 1 press; sleep 6   # Reveal Password
 shot 03-window-revealed "$WIN"
 python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any(sys.argv[1] in x and "TICKET-4021" in x for x in h), h' "$GUI_USER" \
     && pass "revealed through the window by $GUI_USER with the ticket" || fail "the window did not reveal the password (revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1))"
+WIN_TEXT=$(as_gui osascript -e "tell application \"System Events\" to tell $PROC
+    set out to \"\"
+    repeat with e in (get entire contents of window 1)
+        try
+            set out to out & (value of e as text) & linefeed
+        end try
+    end repeat
+    return out
+end tell" 2>&1)
+echo "$WIN_TEXT" | grep -q "logged out" \
+    && fail "the window warns of a logout though ladmin isn't logged in" \
+    || pass "the window doesn't warn of a logout (ladmin isn't logged in)"
+echo "$WIN_TEXT" | grep -q "works until" \
+    && pass "the window shows when the password stops working" \
+    || fail "the window text: $WIN_TEXT"
 ST=$("$LAPS" -status)
 [ -n "$(jget "$ST" rotatesAt)" ] && pass "the grace period started" || fail "no deadline after the reveal"
 ax_find "$APP_PID" AXButton 2 press   # Copy, Show Phonetic, Done
@@ -232,6 +247,9 @@ CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
 { echo "$ printf '%s\n' \"\$code\" | macOSLAPS -reveal -reason TICKET-4022"
   printf '%s\n' "$CODE" | as_gui "$LAPS" -reveal -reason TICKET-4022 2>&1; } > "$OUT/11-terminal-reveal.txt"
 grep -q "^Password: " "$OUT/11-terminal-reveal.txt" && pass "-reveal from a pipe as $GUI_USER" || fail "-reveal from a pipe: $(cat "$OUT/11-terminal-reveal.txt")"
+grep -q "logged out" "$OUT/11-terminal-reveal.txt" \
+    && fail "-reveal warns of a logout though ladmin isn't logged in" \
+    || pass "-reveal doesn't warn of a logout (ladmin isn't logged in)"
 as_gui /tmp/wininfo > "$OUT/windows.txt"
 ls -l "$OUT"
 # The images, also in the log (base64, between markers), for readers that can't

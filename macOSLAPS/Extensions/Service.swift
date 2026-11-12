@@ -34,7 +34,9 @@
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-12   joshua    New file. A rotate-now request older than
-                        claude    the current deadline is ignored.
+                        claude    the current deadline is ignored. "Will be
+                                  logged out" only when the admin is logged
+                                  in.
 ===============================================================================
 */
 
@@ -243,7 +245,7 @@ enum Service {
         if let until = RunState.iso.date(from: r.2) {
             let minutes = Int(until.timeIntervalSinceNow / 60)
             print("Works until: \(Constants.dateFormatter.string(from: until)) (\(minutes / 60) h \(minutes % 60) min)")
-            if Reveal.action == "rotateAndLogout" { print("\(Constants.local_admin) will be logged out at that time.") }
+            if Reveal.logoutApplies(Reveal.action) { print("\(Constants.local_admin) will be logged out at that time.") }
         }
         if !r.3 { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
         exit(0)

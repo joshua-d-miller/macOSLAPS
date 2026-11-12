@@ -39,7 +39,8 @@
                                   password was revealed; deadline.plist tells
                                   the menu bar agent when it rotates;
                                   deadlineSetAt records when a deadline was
-                                  set.
+                                  set. "Will be logged out" is shown only
+                                  when the managed admin is logged in.
 ===============================================================================
 */
 
@@ -188,6 +189,25 @@ enum Reveal {
         if deviceMode { replaceCode(reason: "after rotation") }
     }
 
+    /// Whether the managed admin has a GUI login session (the kind
+    /// logOutManagedAdmin ends). Any user can ask; nil when it can't tell.
+    static func managedAdminLoggedIn() -> Bool? {
+        guard let entry = getpwnam(Constants.local_admin) else { return false }
+        let uid = entry.pointee.pw_uid
+        guard let store = SCDynamicStoreCreate(nil, "macOSLAPS" as CFString, nil, nil),
+              let info = SCDynamicStoreCopyValue(store, "State:/Users/ConsoleUser" as CFString) as? [String: Any],
+              let sessions = info["SessionInfo"] as? [[String: Any]] else { return nil }
+        return sessions.contains {
+            ($0["kCGSSessionUserIDKey"] as? NSNumber)?.uint32Value == uid ||
+            ($0["kCGSSessionUserNameKey"] as? String) == Constants.local_admin
+        }
+    }
+
+    /// The logout warning applies: rotateAndLogout and the admin is (or may be) logged in.
+    static func logoutApplies(_ action: String) -> Bool {
+        action == "rotateAndLogout" && managedAdminLoggedIn() != false
+    }
+
     /// Ends the managed admin's login session, if it has one.
     static func logOutManagedAdmin() {
         guard let entry = getpwnam(Constants.local_admin) else { return }
@@ -292,7 +312,7 @@ enum Reveal {
             if let until = result.worksUntil {
                 let minutes = Int(until.timeIntervalSinceNow / 60)
                 print("Works until: \(Constants.dateFormatter.string(from: until)) (\(minutes / 60) h \(minutes % 60) min)")
-                if action == "rotateAndLogout" { print("\(Constants.local_admin) will be logged out at that time.") }
+                if logoutApplies(action) { print("\(Constants.local_admin) will be logged out at that time.") }
             }
             if !result.verified { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
             exit(0)
