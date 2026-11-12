@@ -33,7 +33,9 @@
                                   -agent and the app window when opened from
                                   Finder; a rotation run stops after an outside
                                   password change and checks
-                                  AllowMDMManagedAccount.
+                                  AllowMDMManagedAccount; -reveal codes and
+                                  -firstPass - come from a prompt or standard
+                                  input, never the command line.
 
                                   New header and section style.
 ===============================================================================
@@ -86,6 +88,37 @@ func argumentValue(after flag: String) -> String? {
           !knownArguments.contains(raw[i + 1].lowercased()) else { return nil }
     return raw[i + 1]
 }
+/// A secret (a reveal code, a FirstPass) read without ever being on the command line,
+/// where any process could see it: a prompt that doesn't echo when run in Terminal,
+/// otherwise one line from standard input (printf '%s\n' "$code" | macOSLAPS -reveal).
+enum SecretInput {
+    static func read(prompt: String) -> String? {
+        if isatty(STDIN_FILENO) != 0 {
+            var buffer = [CChar](repeating: 0, count: 1024)
+            defer { for i in buffer.indices { buffer[i] = 0 } }
+            guard readpassphrase(prompt, &buffer, buffer.count, Int32(RPP_REQUIRE_TTY)) != nil else { return nil }
+            let value = String(cString: buffer)
+            return value.isEmpty ? nil : value
+        }
+        guard var line = readLine(strippingNewline: true) else { return nil }
+        if line.hasSuffix("\r") { line.removeLast() }
+        return line.isEmpty ? nil : line
+    }
+
+    /// The reveal code for -reveal: never from the command line.
+    static func revealCode() -> String {
+        if let given = argumentValue(after: "-reveal"), given != "-" {
+            laps_log.print("Don't put the reveal code on the command line, where other processes can see it. Run macOSLAPS -reveal and type it, or pipe it: printf '%s\\n' \"$code\" | macOSLAPS -reveal", .error)
+            exit(64)
+        }
+        guard let code = read(prompt: "Reveal code: ") else {
+            laps_log.print("-reveal needs the reveal code: type it at the prompt, or pipe it: printf '%s\\n' \"$code\" | macOSLAPS -reveal", .error)
+            exit(64)
+        }
+        return code
+    }
+}
+
 /// Version with build number, e.g. 4.0.0.868, so testers can tell builds apart
 /// and version comparisons (sort -V, is-at-least) order builds correctly.
 func fullVersion() -> String {
@@ -340,8 +373,8 @@ func macOSLAPS() {
         Service.run()
     }
     if NSUserName() != "root" {
-        if args.contains("-reveal"), let code = argumentValue(after: "-reveal") {
-            Service.clientReveal(code: code, reason: argumentValue(after: "-reason") ?? "")
+        if args.contains("-reveal") {
+            Service.clientReveal(code: SecretInput.revealCode(), reason: argumentValue(after: "-reason") ?? "")
         }
         if args.contains("-status") && !args.contains("-v") { Service.clientStatus() }
         if args.contains("-rotatenow") { Service.rotateNow() }
@@ -365,7 +398,7 @@ func macOSLAPS() {
         case "-getpassword":
             verify_root()
             if Reveal.deviceMode {
-                laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal <code>, or the app).", .error)
+                laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
                 exit(1)
             }
             if Constants.method == "Local" {
@@ -423,11 +456,7 @@ func macOSLAPS() {
             Escrow.run()
         case "-reveal":
             verify_root()
-            guard let code = argumentValue(after: "-reveal") else {
-                laps_log.print("-reveal needs the reveal code: macOSLAPS -reveal <code>", .error)
-                exit(64)
-            }
-            Reveal.runCommand(code: code)
+            Reveal.runCommand(code: SecretInput.revealCode())
         case "-expirein":
             verify_root()
             guard let time = argumentValue(after: "-expirein") else {
@@ -457,7 +486,10 @@ func macOSLAPS() {
                   -firstpass        Performs a password reset using the FirstPass Configuration
                                     Profile key or the password you specify after this flag.
                                     The password of the admin MUST be this password or the
-                                    change WILL FAIL.
+                                    change WILL FAIL. Use -firstPass - to type it at a
+                                    prompt or pipe it in, so it never shows in the
+                                    process list:
+                                    printf '%s\\n' "$pw" | macOSLAPS -firstPass - -resetPassword
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -472,11 +504,14 @@ func macOSLAPS() {
                                     The first rotation then happens after
                                     DaysTillExpiration (#88).
 
-                  -reveal <code>    RetrievalMode device: shows the password for the
-                                    reveal code (escrowed with -escrow) and starts
-                                    the RevealGracePeriod countdown. Works without
-                                    root through the macOSLAPS service. Add
-                                    -reason "<ticket>" to record why.
+                  -reveal           RetrievalMode device: asks for the reveal code
+                                    (escrowed with -escrow), shows the password and
+                                    starts the RevealGracePeriod countdown. Type the
+                                    code at the prompt or pipe it in; it is never
+                                    accepted on the command line:
+                                    printf '%s\\n' "$code" | macOSLAPS -reveal
+                                    Works without root through the macOSLAPS service.
+                                    Add -reason "<ticket>" to record why.
 
                   -rotateNow        Ends an active reveal or -expireIn grace period
                                     now (any user; the menu bar uses this).
@@ -507,8 +542,18 @@ func macOSLAPS() {
             if let flag_index = raw_arguments.firstIndex(where: { $0.lowercased() == "-firstpass" }),
                flag_index + 1 < raw_arguments.count,
                !knownArguments.contains(raw_arguments[flag_index + 1].lowercased()) {
-                Constants.first_password = raw_arguments[flag_index + 1]
-                laps_log.print("The -firstPass argument was invoked. Using the password given on the command line.", .info)
+                if raw_arguments[flag_index + 1] == "-" {
+                    // -firstPass -: typed at a prompt or piped in, never on the command line.
+                    guard let typed = SecretInput.read(prompt: "Current password for \(Constants.local_admin): ") else {
+                        laps_log.print("-firstPass - needs the current password on standard input.", .error)
+                        exit(1)
+                    }
+                    Constants.first_password = typed
+                    laps_log.print("The -firstPass argument was invoked. Using the password given on standard input.", .info)
+                } else {
+                    Constants.first_password = raw_arguments[flag_index + 1]
+                    laps_log.print("The -firstPass argument was invoked. Using the password given on the command line, which other processes can see while macOSLAPS runs. Pipe it instead: printf '%s\\n' \"$password\" | macOSLAPS -firstPass - -resetPassword", .warn)
+                }
             } else {
                 laps_log.print("The -firstPass argument was invoked. Using the FirstPass value from the configuration.", .info)
             }

@@ -219,7 +219,7 @@ enum Service {
         return result
     }
 
-    /// -reveal <code> without root.
+    /// -reveal without root (the code comes from SecretInput, never the command line).
     static func clientReveal(code: String, reason: String) -> Never {
         typealias R = (Bool, String, String, Bool)
         guard let r: R = call({ s, done in s.reveal(code: code, reason: reason) { done(($0, $1, $2, $3)) } }) else { exit(1) }

@@ -31,7 +31,8 @@
                                   privileged service, admin group protection,
                                   deadline.plist, the menu bar LaunchAgent and
                                   the log location, rotation and unified log,
-                                  the MDM-created admin list.
+                                  the MDM-created admin list, secrets read from
+                                  a pipe (-reveal, -firstPass -).
 
                                   New header and section style.
 ===============================================================================
@@ -252,6 +253,21 @@ PWA=$(get_pw) && check_pw "$PWA" "token sim, CLI firstPass (after)"
 dscl . -passwd "/Users/$ACCT" "$KNOWN"
 "$LAPS" -firstPass "$KNOWN" -resetPassword && pass "-firstPass <pw> -resetPassword succeeded" || fail "-firstPass <pw> -resetPassword failed"
 PWB=$(get_pw) && check_pw "$PWB" "token sim, CLI firstPass (before)"
+# -firstPass - : the password comes in on a pipe, never on the command line.
+dscl . -passwd "/Users/$ACCT" "$KNOWN"
+printf '%s\n' "$KNOWN" | "$LAPS" -firstPass - -resetPassword && pass "-firstPass - reads the password from a pipe" || fail "-firstPass - with a piped password failed"
+PWP=$(get_pw) && check_pw "$PWP" "token sim, piped firstPass"
+grep -q "other processes can see" "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" \
+    && pass "a password on the command line logs a warning" || fail "no warning for -firstPass <password>"
+if printf '' | "$LAPS" -firstPass - -resetPassword >/dev/null 2>&1; then
+    fail "-firstPass - with nothing piped in still rotated"
+else
+    pass "-firstPass - with nothing piped in refuses"
+fi
+dscl . -authonly "$ACCT" "$PWP" >/dev/null 2>&1 && pass "account unchanged after the empty pipe" || fail "account changed after an empty -firstPass -"
+dscl . -passwd "/Users/$ACCT" "$PWP" "$KNOWN" 2>/dev/null || dscl . -passwd "/Users/$ACCT" "$KNOWN"
+"$LAPS" -firstPass "$KNOWN" -resetPassword >/dev/null 2>&1 || fail "re-taking the account for the stored-password path"
+PWB=$(get_pw)
 # Stored-password path.
 "$LAPS" -resetPassword && pass "rotation with the stored password succeeded" || fail "rotation with the stored password failed"
 PWC=$(get_pw) && check_pw "$PWC" "token sim, stored password"
@@ -695,7 +711,9 @@ fi
 ### rotation.                                                               ###
 echo "::group::Device mode (reveal codes)"
 code_now() { jget "$("$LAPS" -escrow 2>/dev/null)" revealCode; }
-reveal_pw() { "$LAPS" -reveal "$1" 2>/dev/null | sed -n 's/^Password: //p'; }
+# The code goes in on standard input; on the command line it is refused.
+rev() { local c="$1"; shift; printf '%s\n' "$c" | "$@" -reveal; }
+reveal_pw() { rev "$1" "$LAPS" 2>/dev/null | sed -n 's/^Password: //p'; }
 BEFORE=$(get_pw)
 defaults write "$DOMAIN" RetrievalMode -string device
 "$LAPS" >/dev/null 2>&1
@@ -704,11 +722,15 @@ CODE=$(jget "$E" revealCode)
 python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["mode"]=="device" and "password" not in d and "pending" not in d, d' "$E" \
     && [[ "$CODE" =~ ^[A-HJKMNP-Z2-9]{4}(-[A-HJKMNP-Z2-9]{4}){3}$ ]] && pass "-escrow prints a reveal code, no password" || fail "device-mode -escrow: $E"
 "$LAPS" -getPassword >/dev/null 2>&1 && fail "-getPassword works in device mode" || pass "-getPassword refused in device mode"
-"$LAPS" -reveal AAAA-BBBB-CCCC-DDDD >/dev/null 2>&1 && fail "a wrong code revealed the password" || pass "wrong code refused"
+rev AAAA-BBBB-CCCC-DDDD "$LAPS" >/dev/null 2>&1 && fail "a wrong code revealed the password" || pass "wrong code refused"
 [ "$(jget "$("$LAPS" -status)" revealFailures)" = "1" ] && pass "-status counts the wrong code" || fail "revealFailures: $("$LAPS" -status)"
 LOWER=$(tr -d '-' <<< "$CODE" | tr 'A-Z' 'a-z')
-OUT=$("$LAPS" -reveal "$LOWER" 2>/dev/null)
+OUT=$(rev "$LOWER" "$LAPS" 2>/dev/null)
 grep -qxF "Password: $BEFORE" <<< "$OUT" && grep -q "^Works until: " <<< "$OUT" && pass "right code (any case, no dashes) shows the password and the deadline" || fail "-reveal output: $(sed 's/Password: .*/Password: <redacted>/' <<< "$OUT")"
+CODE_NOW=$(code_now)
+OUT=$("$LAPS" -reveal "$CODE_NOW" 2>&1); RC=$?
+[ "$RC" -eq 64 ] && ! grep -q "^Password:" <<< "$OUT" && grep -q "on the command line" <<< "$OUT" \
+    && pass "a reveal code on the command line is refused" || fail "-reveal <code> in argv: rc $RC, $(sed 's/Password: .*/Password: <redacted>/' <<< "$OUT")"
 ST=$("$LAPS" -status)
 python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); n=D.datetime.now(r.tzinfo); assert d["revealedAt"] and d["rotateReason"]=="reveal" and d["revealFailures"]==0 and 3.9*3600 < (r-n).total_seconds() <= 4*3600, d' "$ST" \
     && pass "-status: revealed, rotates in 4 h, failures reset" || fail "-status after reveal: $ST"
@@ -720,12 +742,12 @@ R1=$(jget "$("$LAPS" -status)" rotatesAt); sleep 2
 "$LAPS" >/dev/null 2>&1
 CODE3=$(code_now); AFTER=$(reveal_pw "$CODE3")
 [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ] && dscl . -authonly "$ACCT" "$AFTER" >/dev/null 2>&1 && pass "passed deadline: the next run rotated" || fail "no rotation after the deadline"
-[ "$CODE3" != "$CODE" ] && ! "$LAPS" -reveal "$CODE" >/dev/null 2>&1 && pass "the rotation issued a new code; the old one no longer works" || fail "old code after the rotation"
+[ "$CODE3" != "$CODE" ] && ! rev "$CODE" "$LAPS" >/dev/null 2>&1 && pass "the rotation issued a new code; the old one no longer works" || fail "old code after the rotation"
 dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && fail "the revealed password still works after the deadline" || pass "the revealed password stopped working"
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline the last reveal set
-for i in 1 2 3 4 5; do "$LAPS" -reveal ZZZZ-ZZZZ-ZZZZ-ZZZZ >/dev/null 2>&1; done
+for i in 1 2 3 4 5; do rev ZZZZ-ZZZZ-ZZZZ-ZZZZ "$LAPS" >/dev/null 2>&1; done
 GOOD=$(code_now)
-"$LAPS" -reveal "$GOOD" >/dev/null 2>&1 && fail "reveal worked while locked" || pass "five wrong codes lock reveals, even for the right one"
+rev "$GOOD" "$LAPS" >/dev/null 2>&1 && fail "reveal worked while locked" || pass "five wrong codes lock reveals, even for the right one"
 [ "$(jget "$("$LAPS" -status)" revealLocked)" = "True" ] && pass "-status: revealLocked" || fail "revealLocked: $("$LAPS" -status)"
 "$LAPS" -resetPassword >/dev/null 2>&1
 [ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && [ "$(code_now)" != "$GOOD" ] && pass "a rotation unlocks reveals with a new code" || fail "still locked after -resetPassword"
@@ -758,17 +780,17 @@ OUT=$(asuser "$LAPS" -status 2>&1)
 defaults write "$DOMAIN" RetrievalMode -string device
 "$LAPS" >/dev/null 2>&1
 CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
-EXPECT=$("$LAPS" -reveal "$CODE" 2>/dev/null | sed -n 's/^Password: //p')
+EXPECT=$(reveal_pw "$CODE")
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1      # rotate: clean deadline, new code
 CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
-asuser "$LAPS" -reveal WRONG-WRONG-WRONG-WRNG >/dev/null 2>&1 && fail "wrong code accepted through the service" || pass "wrong code refused through the service"
-OUT=$(asuser "$LAPS" -reveal "$CODE" -reason "TICKET-42" 2>/dev/null)
+printf '%s\n' WRONG-WRONG-WRONG-WRNG | asuser "$LAPS" -reveal >/dev/null 2>&1 && fail "wrong code accepted through the service" || pass "wrong code refused through the service"
+OUT=$(printf '%s\n' "$CODE" | asuser "$LAPS" -reveal -reason "TICKET-42" 2>/dev/null)
 PW=$(sed -n 's/^Password: //p' <<< "$OUT")
 [ -n "$PW" ] && dscl . -authonly "$ACCT" "$PW" >/dev/null 2>&1 && grep -q "^Works until: " <<< "$OUT" && pass "standard user reveals through the service" || fail "reveal as a standard user"
 python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any("lapsstd" in x and "TICKET-42" in x for x in h), h' \
     && pass "the reveal is recorded with the user and the reason" || fail "revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1)"
 cp "$APP/Contents/MacOS/macOSLAPS" /tmp/laps-unsigned && codesign --force --sign - /tmp/laps-unsigned >/dev/null 2>&1 && chmod 755 /tmp/laps-unsigned
-asuser /tmp/laps-unsigned -reveal "$CODE" >/dev/null 2>&1 && fail "the service answered an unsigned copy" || pass "the service refuses a copy without the macOSLAPS signature"
+printf '%s\n' "$CODE" | asuser /tmp/laps-unsigned -reveal >/dev/null 2>&1 && fail "the service answered an unsigned copy" || pass "the service refuses a copy without the macOSLAPS signature"
 rm -f /tmp/laps-unsigned
 asuser "$LAPS" -rotateNow >/dev/null 2>&1 && [ -n "$(jget "$("$LAPS" -status)" rotatesAt)" ] \
     && python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); assert (r-D.datetime.now(r.tzinfo)).total_seconds() <= 1, d' "$("$LAPS" -status)" \

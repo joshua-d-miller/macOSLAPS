@@ -5,7 +5,7 @@
 ===============================================================================
  Version:   4.0.0
  Author:    Henri Kovanen (Decens Oy), Joshua D. Miller, Claude
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Installs (or updates, or uninstalls) macOSLAPS from an MDM and makes
@@ -56,7 +56,7 @@
                                   Option to prevent admin account creation
                                   (managedAdminAccountMustExist).
 
- 4.0.0     2026-11-11   joshua    macOSLAPS 4.0: finds the app in /Applications
+ 4.0.0     2026-11-12   joshua    macOSLAPS 4.0: finds the app in /Applications
                         claude    (falling back to /usr/local/laps) and the
                                   LaunchDaemon
                                   com.joshua-d-miller.macoslaps-check (falling
@@ -74,7 +74,9 @@
                                   LaunchDaemon so a new StartInterval takes
                                   effect (kickstart did not); the PID marker is
                                   no longer world-writable; the log is appended
-                                  to, not overwritten.
+                                  to, not overwritten. The admin password is
+                                  piped to -firstPass -, never put on the
+                                  command line.
 
                                   New header and section style (scriptVersion
                                   11).
@@ -904,7 +906,8 @@ fi
 if [ $rotatePassword = true ]; then
     echoOut "Rotating the password..."
     set -o pipefail
-    if "$LAPS" -firstPass "$managedAdminAccountPassword" 2>&1 | tee -a "$logFile"; then
+    # Piped in (-firstPass -) so the password never shows in the process list.
+    if printf '%s\n' "$managedAdminAccountPassword" | "$LAPS" -firstPass - 2>&1 | tee -a "$logFile"; then
         echoOut "Password rotated successfully."
     else
         echoOut "Error! Password was not rotated successfully, check logs for troubleshooting. Cleaning up and exiting."
