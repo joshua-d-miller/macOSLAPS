@@ -44,7 +44,7 @@ while IFS= read -r f; do
         echo "::error file=$f::legacy name: $hit"
         FAILURES=$((FAILURES + 1))
     done < <(grep -niE 'edu\.psu|psu\.edu|penn ?state' "$f" | cut -c1-120)
-done < <(git grep -liE 'edu\.psu|psu\.edu|penn ?state' -- . ":!$ALLOW")
+done < <(git grep -liE 'edu\.psu|psu\.edu|penn ?state' -- . ":!$ALLOW" ":!.github/scripts/check-legacy-names.sh")
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### --------------------------- ###
