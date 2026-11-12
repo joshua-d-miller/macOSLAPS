@@ -229,7 +229,8 @@ enum Reveal {
             let deadline = Date().addingTimeInterval(TimeInterval(graceHours) * 3600)
             until = rotatesAt.map { min($0, deadline) } ?? deadline   // a second reveal never extends it
         }
-        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal"]
+        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal",
+                                      "revealFailures": 0]
         if let u = until { values["rotatesAt"] = RunState.iso.string(from: u) }
         RunState.set(values)
         appendHistory("revealed \(who)")

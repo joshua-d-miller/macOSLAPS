@@ -85,7 +85,7 @@ RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
 [ "$(stat -f '%Su:%Sg %Lp' "$PLIST")" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' "$PLIST")"
 launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && pass "service LaunchDaemon loaded" || fail "service LaunchDaemon not loaded"
 REQ="/Library/Application Support/macOSLAPS/Requests"
-[ "$(stat -f '%Su:%Sg %Lp' "$REQ")" = "root:wheel 1733" ] && pass "request folder root:wheel 1733" || fail "request folder: $(stat -f '%Su:%Sg %Lp' "$REQ" 2>&1)"
+[ "$(stat -f '%Su:%Sg %Mp%Lp' "$REQ")" = "root:wheel 1733" ] && pass "request folder root:wheel 1733" || fail "request folder: $(stat -f '%Su:%Sg %Mp%Lp' "$REQ" 2>&1)"
 [ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
 [ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
 [ "$(readlink "$LAPS")" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "$LAPS is a symlink into the app" || fail "$LAPS -> $(readlink "$LAPS")"

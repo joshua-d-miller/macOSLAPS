@@ -177,7 +177,10 @@ enum Service {
         let listener = NSXPCListener(machServiceName: machName)
         listener.delegate = delegate
         listener.resume()
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
+        // launchd doesn't start a second copy while this one runs, so watch the request
+        // folder here too.
+        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+            processRequests()
             if delegate.open <= 0 && Date().timeIntervalSince(delegate.lastActivity) > idleExit { exit(0) }
         }
         RunLoop.main.run()
