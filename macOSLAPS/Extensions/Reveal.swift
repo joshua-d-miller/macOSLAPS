@@ -5,15 +5,16 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
-     Device mode (RetrievalMode device): the MDM gets a one-time reveal
-     code instead of the password, so the password never leaves the Mac.
+     Device mode (RetrievalMode device): the MDM gets a reveal code
+     instead of the password, so the password never leaves the Mac.
      Someone with the code reveals the password on the Mac (macOSLAPS
-     -reveal, or the app), the code is replaced at once, and after
-     RevealGracePeriod the admin is logged out and the password rotates.
-     -expireIn sets the same deadline in escrow mode.
+     -reveal, or the app) to elevate; the same code works again until the
+     rotation. After RevealGracePeriod the admin is logged out (if it has
+     a session) and the password rotates with a new code. -expireIn sets
+     the same deadline in escrow mode.
 
  Settings:
      RetrievalMode      escrow (default) | device
@@ -29,8 +30,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. A code reveals the password until
+                        claude    the next rotation (Joshua: re-elevating
+                                  during the grace period needs no new code);
+                                  the rotation issues a new one.
 ===============================================================================
 */
 
@@ -154,9 +157,9 @@ enum Reveal {
 // | -reveal | //
 // ----------- //
 // Checks a code and, when it is right, shows the password and starts the    //
-// grace period. Every attempt is recorded; five wrong ones lock reveals     //
-// until the next rotation. The code is single use: a new one is issued at   //
-// once.                                                                     //
+// grace period. The same code works again until the rotation (to elevate    //
+// again); the rotation issues a new one. Every attempt is recorded; five    //
+// wrong ones lock reveals until the next rotation.                          //
     struct Result {
         let password: String
         let worksUntil: Date?
@@ -203,13 +206,15 @@ enum Reveal {
             let deadline = Date().addingTimeInterval(TimeInterval(graceHours) * 3600)
             until = rotatesAt.map { min($0, deadline) } ?? deadline   // a second reveal never extends it
         }
-        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal"]
+        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal",
+                                      "revealFailures": 0]
         if let u = until { values["rotatesAt"] = RunState.iso.string(from: u) }
         RunState.set(values)
         appendHistory("revealed \(who)")
         laps_log.print("The password for \(Constants.local_admin) was revealed to \(who)" +
                        (until.map { "; it changes at \(Constants.dateFormatter.string(from: $0))." } ?? "."), .warn)
-        replaceCode(reason: "the previous one was used")
+        // The code keeps working until the rotation: the password it reveals is already
+        // exposed until then, so revealing it again (to elevate again) adds nothing.
         return .success(Result(password: pw, worksUntil: until, verified: verified))
     }
 
@@ -238,7 +243,6 @@ enum Reveal {
                 if action == "rotateAndLogout" { print("\(Constants.local_admin) will be logged out at that time.") }
             }
             if !result.verified { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
-            InventoryHook.run(reason: "a reveal (new code)")
             exit(0)
         }
     }

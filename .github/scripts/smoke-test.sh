@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-08
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      macOSLAPS smoke test for GitHub-hosted macOS runners. Exercises the
@@ -691,15 +691,15 @@ grep -qxF "Password: $BEFORE" <<< "$OUT" && grep -q "^Works until: " <<< "$OUT" 
 ST=$("$LAPS" -status)
 python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); n=D.datetime.now(r.tzinfo); assert d["revealedAt"] and d["rotateReason"]=="reveal" and d["revealFailures"]==0 and 3.9*3600 < (r-n).total_seconds() <= 4*3600, d' "$ST" \
     && pass "-status: revealed, rotates in 4 h, failures reset" || fail "-status after reveal: $ST"
-"$LAPS" -reveal "$CODE" >/dev/null 2>&1 && fail "a used code worked again" || pass "a code works only once"
-CODE2=$(code_now)
-[ -n "$CODE2" ] && [ "$CODE2" != "$CODE" ] && pass "a new code is issued right after a reveal" || fail "no new code after the reveal"
+[ "$(code_now)" = "$CODE" ] && pass "the code stays the same until the rotation" || fail "the code changed after a reveal"
 R1=$(jget "$("$LAPS" -status)" rotatesAt); sleep 2
-[ "$(reveal_pw "$CODE2")" = "$BEFORE" ] && [ "$(jget "$("$LAPS" -status)" rotatesAt)" = "$R1" ] && pass "a second reveal doesn't extend the deadline" || fail "second reveal moved the deadline"
+[ "$(reveal_pw "$CODE")" = "$BEFORE" ] && [ "$(jget "$("$LAPS" -status)" rotatesAt)" = "$R1" ] \
+    && pass "the same code reveals again (to elevate again) without extending the deadline" || fail "second reveal with the same code"
 "$LAPS" -expireIn 0 >/dev/null 2>&1
 "$LAPS" >/dev/null 2>&1
 CODE3=$(code_now); AFTER=$(reveal_pw "$CODE3")
 [ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ] && dscl . -authonly "$ACCT" "$AFTER" >/dev/null 2>&1 && pass "passed deadline: the next run rotated" || fail "no rotation after the deadline"
+[ "$CODE3" != "$CODE" ] && ! "$LAPS" -reveal "$CODE" >/dev/null 2>&1 && pass "the rotation issued a new code; the old one no longer works" || fail "old code after the rotation"
 dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && fail "the revealed password still works after the deadline" || pass "the revealed password stopped working"
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline the last reveal set
 for i in 1 2 3 4 5; do "$LAPS" -reveal ZZZZ-ZZZZ-ZZZZ-ZZZZ >/dev/null 2>&1; done
