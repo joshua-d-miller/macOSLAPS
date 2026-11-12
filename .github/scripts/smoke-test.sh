@@ -30,7 +30,8 @@
                                   staging, uninstall, device mode, the
                                   privileged service, admin group protection,
                                   deadline.plist, the menu bar LaunchAgent and
-                                  the log location, rotation and unified log.
+                                  the log location, rotation and unified log,
+                                  the MDM-created admin list.
 
                                   New header and section style.
 ===============================================================================
@@ -814,6 +815,12 @@ echo "::group::Admin group protection"
 EXTRA=lapsextra
 sysadminctl -addUser "$EXTRA" -fullName "LAPS Extra" -password 'Extra-Pass-1357' -admin >/dev/null 2>&1
 is_admin() { dseditgroup -o checkmember -m "$1" admin >/dev/null 2>&1; }
+MDMLIST=$(jget "$("$LAPS" -status)" mdmAdminList)
+case "$MDMLIST" in
+    none|"not enrolled") pass "MDM-created admin list read on a runner without ADE ($MDMLIST)" ;;
+    *) fail "mdmAdminList on the runner: $MDMLIST" ;;
+esac
+[ "$(jget "$("$LAPS" -status)" localAdminIsMDMAccount)" = "False" ] && pass "the managed admin is not reported as MDM-created" || fail "localAdminIsMDMAccount: $("$LAPS" -status)"
 is_admin "$EXTRA" || fail "could not create the extra admin"
 # report: listed, not removed
 defaults write "$DOMAIN" AdminGroupPolicy -string report

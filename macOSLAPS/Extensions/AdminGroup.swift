@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Admin group protection. Anyone who knows the managed admin's password
@@ -25,8 +25,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. Admins your MDM created during
+                        claude    Automated Device Enrollment are never
+                                  removed; nobody is removed when an enrolled
+                                  Mac's list of them can't be read.
 ===============================================================================
 */
 
@@ -88,6 +90,8 @@ enum AdminGroup {
     static func isApproved(_ user: String) -> Bool {
         let name = user.lowercased()
         if name == "root" || name == Constants.local_admin.lowercased() { return true }
+        // Created by the MDM during Automated Device Enrollment: never removed.
+        if MDMAccounts.isCreatedByMDM(user) { return true }
         for entry in approvedEntries {
             if entry.lowercased().hasPrefix("group:") {
                 let group = String(entry.dropFirst("group:".count))
@@ -140,6 +144,10 @@ enum AdminGroup {
         if mode == "report" || (mode == "auto" && tool != nil) {
             let why = mode == "report" ? "AdminGroupPolicy is report" : "\(tool!) is installed"
             laps_log.print("Admins not in ApprovedAdmins: \(list). Not removed (\(why)).", .warn)
+            return
+        }
+        if let why = MDMAccounts.unsafeToRemoveAdmins {
+            laps_log.print("Admins not in ApprovedAdmins: \(list). Not removed: the list of admin accounts your MDM created can't be read (\(why)), so macOSLAPS can't tell them apart.", .warn)
             return
         }
         guard managedAdminWorks() else {

@@ -90,5 +90,9 @@
 	<string>rotateAndLogout</string>  <!-- rotateAndLogout or rotate -->
 	<key>ADRevealCode</key>
 	<false/>                          <!-- Method AD in device mode: write the code to AD -->
+
+	<!-- LocalAdminAccount created by your MDM during Automated Device Enrollment -->
+	<key>AllowMDMManagedAccount</key>
+	<true/>                           <!-- true: manage it, with a warning; false: refuse -->
 </dict>
 </plist>

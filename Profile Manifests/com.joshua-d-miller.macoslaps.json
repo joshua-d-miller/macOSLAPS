@@ -278,6 +278,13 @@
       "property_order": 130,
       "type": "boolean",
       "default": false
+    },
+    "AllowMDMManagedAccount": {
+      "title": "Allow an MDM-created admin",
+      "description": "If LocalAdminAccount was created by your MDM during Automated Device Enrollment (PreStage admin, Intune ADE admin, Auto Admin), true manages it with a warning (the MDM can change its password too); false refuses.",
+      "property_order": 135,
+      "type": "boolean",
+      "default": true
     }
   }
 }

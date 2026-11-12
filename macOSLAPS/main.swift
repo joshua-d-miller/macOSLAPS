@@ -32,7 +32,8 @@
                                   of a grace period; -service, -rotateNow,
                                   -agent and the app window when opened from
                                   Finder; a rotation run stops after an outside
-                                  password change.
+                                  password change and checks
+                                  AllowMDMManagedAccount.
 
                                   New header and section style.
 ===============================================================================
@@ -530,6 +531,7 @@ func macOSLAPS() {
     RunLock.acquire()
     RunState.begin()
     Ownership.exitIfStopped()
+    MDMAccounts.checkManagedAccount()
     AdminGroup.check()
     // A reveal or -expireIn deadline that has passed forces this run to rotate.
     Reveal.endOfGraceIfDue()

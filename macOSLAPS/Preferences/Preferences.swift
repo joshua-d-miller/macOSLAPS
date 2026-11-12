@@ -25,7 +25,8 @@
                         claude    key over the legacy one; type coercion;
                                   -showconfig; ApprovedAdmins, AdminGroupPolicy
                                   and the reveal settings; reads the domains
-                                  through CFPreferences.
+                                  through CFPreferences;
+                                  AllowMDMManagedAccount.
 
                                   New header and section style.
 ===============================================================================
@@ -70,6 +71,7 @@ var defaultpreferences : [ String : Any ] = [
     "RevealGracePeriod"      :       4,
     "RevealAction"           :       "rotateAndLogout",
     "ADRevealCode"           :       false,
+    "AllowMDMManagedAccount" :       true,
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,
