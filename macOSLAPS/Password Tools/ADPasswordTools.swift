@@ -18,7 +18,9 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    Same rotation order as Local; restores every
                         claude    LAPS attribute after a partial write; staged
-                                  rotation and finishing an interrupted one.
+                                  rotation and finishing an interrupted one;
+                                  device mode writes the reveal code
+                                  (ADRevealCode) or only the expiration.
 
                                   New header and section style.
 ===============================================================================
@@ -189,12 +191,14 @@ public class ADTools: NSObject {
     /// A failure can leave some attributes written; callers then use restore(...).
     class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
         let record = computer_record[0]
+        // Device mode: the reveal code (ADRevealCode) or only the expiration, never the password.
+        let secret = Reveal.directorySecret(password: password)
         if writesWindowsLAPS && schema != "legacy" {
             ADTools.noteExperimentalSchemaOnce()
         }
         if writesLegacy {
             do {
-                try record.setValue(password, forAttribute: legacyPassword)
+                if let s = secret { try record.setValue(s.value, forAttribute: legacyPassword) }
                 try record.setValue(new_ad_exp_date, forAttribute: legacyExpiration)
             } catch {
                 laps_log.print("There was an error writing the legacy LAPS attributes (\(describe(error)))", .error)
@@ -203,7 +207,7 @@ public class ADTools: NSObject {
         }
         if writesWindowsLAPS {
             do {
-                try record.setValue(windowsLAPSValue(account: Constants.local_admin, password: password), forAttribute: windowsPassword)
+                if let s = secret { try record.setValue(windowsLAPSValue(account: s.account, password: s.value), forAttribute: windowsPassword) }
                 try record.setValue(new_ad_exp_date, forAttribute: windowsExpiration)
             } catch {
                 laps_log.print("There was an error writing the Windows LAPS attributes (\(describe(error)))", .error)
@@ -216,8 +220,10 @@ public class ADTools: NSObject {
     /// Best effort after a failed write: put every attribute this ADSchema uses back on
     /// the previous password, already expired so the next run rotates again. When the
     /// previous password is unknown, only the expiration is reset (to "expired").
-    class func restore(computer_record: Array<ODRecord>, previousPassword: String?) {
+    class func restore(computer_record: Array<ODRecord>, previousPassword givenPrevious: String?) {
         let record = computer_record[0]
+        // Device mode never writes a password to AD; restore the code (or nothing) instead.
+        let previousPassword = givenPrevious.flatMap { Reveal.directorySecret(password: $0)?.value }
         let expired = "126227988000000000"   // 2001-01-01
         var problems : [String] = []
         func attempt(_ value: String, _ attribute: String) {

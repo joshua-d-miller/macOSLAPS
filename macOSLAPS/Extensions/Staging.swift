@@ -31,7 +31,7 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file.
+ 4.0.0     2026-11-11   joshua    New file. Never stages in device mode.
                         claude
                                   New header and section style.
 ===============================================================================
@@ -60,6 +60,8 @@ enum Staging {
 
     /// Whether new passwords are staged on this Mac right now.
     static var active : Bool {
+        // Device mode: the MDM never gets the password, so there is nothing to wait for.
+        if Reveal.deviceMode { return false }
         switch mode {
         case "on": return true
         case "off": return false

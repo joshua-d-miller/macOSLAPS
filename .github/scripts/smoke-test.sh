@@ -664,6 +664,63 @@ else
 fi
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------ ###
+### | Device mode (reveal codes) | ###
+### ------------------------------ ###
+### The MDM gets a one-time code, never the password. -reveal shows the     ###
+### password, replaces the code and starts the grace period; a passed       ###
+### deadline rotates; five wrong codes lock reveals until the next          ###
+### rotation.                                                               ###
+echo "::group::Device mode (reveal codes)"
+jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
+code_now() { jget "$("$LAPS" -escrow 2>/dev/null)" revealCode; }
+reveal_pw() { "$LAPS" -reveal "$1" 2>/dev/null | sed -n 's/^Password: //p'; }
+BEFORE=$(get_pw)
+defaults write "$DOMAIN" RetrievalMode -string device
+"$LAPS" >/dev/null 2>&1
+E=$("$LAPS" -escrow 2>/dev/null)
+CODE=$(jget "$E" revealCode)
+python3 -c 'import json,sys; d=json.loads(sys.argv[1]); assert d["mode"]=="device" and "password" not in d and "pending" not in d, d' "$E" \
+    && [[ "$CODE" =~ ^[A-HJKMNP-Z2-9]{4}(-[A-HJKMNP-Z2-9]{4}){3}$ ]] && pass "-escrow prints a reveal code, no password" || fail "device-mode -escrow: $E"
+"$LAPS" -getPassword >/dev/null 2>&1 && fail "-getPassword works in device mode" || pass "-getPassword refused in device mode"
+"$LAPS" -reveal AAAA-BBBB-CCCC-DDDD >/dev/null 2>&1 && fail "a wrong code revealed the password" || pass "wrong code refused"
+[ "$(jget "$("$LAPS" -status)" revealFailures)" = "1" ] && pass "-status counts the wrong code" || fail "revealFailures: $("$LAPS" -status)"
+LOWER=$(tr -d '-' <<< "$CODE" | tr 'A-Z' 'a-z')
+OUT=$("$LAPS" -reveal "$LOWER" 2>/dev/null)
+grep -qxF "Password: $BEFORE" <<< "$OUT" && grep -q "^Works until: " <<< "$OUT" && pass "right code (any case, no dashes) shows the password and the deadline" || fail "-reveal output: $(sed 's/Password: .*/Password: <redacted>/' <<< "$OUT")"
+ST=$("$LAPS" -status)
+python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); n=D.datetime.now(r.tzinfo); assert d["revealedAt"] and d["rotateReason"]=="reveal" and d["revealFailures"]==0 and 3.9*3600 < (r-n).total_seconds() <= 4*3600, d' "$ST" \
+    && pass "-status: revealed, rotates in 4 h, failures reset" || fail "-status after reveal: $ST"
+"$LAPS" -reveal "$CODE" >/dev/null 2>&1 && fail "a used code worked again" || pass "a code works only once"
+CODE2=$(code_now)
+[ -n "$CODE2" ] && [ "$CODE2" != "$CODE" ] && pass "a new code is issued right after a reveal" || fail "no new code after the reveal"
+R1=$(jget "$("$LAPS" -status)" rotatesAt); sleep 2
+[ "$(reveal_pw "$CODE2")" = "$BEFORE" ] && [ "$(jget "$("$LAPS" -status)" rotatesAt)" = "$R1" ] && pass "a second reveal doesn't extend the deadline" || fail "second reveal moved the deadline"
+"$LAPS" -expireIn 0 >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+CODE3=$(code_now); AFTER=$(reveal_pw "$CODE3")
+[ -n "$AFTER" ] && [ "$AFTER" != "$BEFORE" ] && dscl . -authonly "$ACCT" "$AFTER" >/dev/null 2>&1 && pass "passed deadline: the next run rotated" || fail "no rotation after the deadline"
+dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && fail "the revealed password still works after the deadline" || pass "the revealed password stopped working"
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline the last reveal set
+for i in 1 2 3 4 5; do "$LAPS" -reveal ZZZZ-ZZZZ-ZZZZ-ZZZZ >/dev/null 2>&1; done
+GOOD=$(code_now)
+"$LAPS" -reveal "$GOOD" >/dev/null 2>&1 && fail "reveal worked while locked" || pass "five wrong codes lock reveals, even for the right one"
+[ "$(jget "$("$LAPS" -status)" revealLocked)" = "True" ] && pass "-status: revealLocked" || fail "revealLocked: $("$LAPS" -status)"
+"$LAPS" -resetPassword >/dev/null 2>&1
+[ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && [ "$(code_now)" != "$GOOD" ] && pass "a rotation unlocks reveals with a new code" || fail "still locked after -resetPassword"
+LAST=$(reveal_pw "$(code_now)")
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
+defaults write "$DOMAIN" RetrievalMode -string escrow
+CUR=$(get_pw)
+[ -n "$CUR" ] && dscl . -authonly "$ACCT" "$CUR" >/dev/null 2>&1 && pass "back in escrow mode with a working password" || fail "escrow mode after device mode"
+"$LAPS" -expireIn 2h30m >/dev/null 2>&1
+python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); n=D.datetime.now(r.tzinfo); assert d["rotateReason"]=="expireIn" and 2.4*3600 < (r-n).total_seconds() <= 2.5*3600, d' "$("$LAPS" -status)" \
+    && pass "-expireIn 2h30m sets the deadline in escrow mode" || fail "-expireIn: $("$LAPS" -status)"
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
+[ -z "$(jget "$("$LAPS" -status)" rotatesAt)" ] && pass "rotation clears the deadline" || fail "deadline left after rotation"
+echo "::endgroup::"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### -------------------------- ###
 ### | Admin group protection | ###
 ### -------------------------- ###

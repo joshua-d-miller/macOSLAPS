@@ -28,7 +28,8 @@
                                   (-firstPass never stages); run lock; build
                                   number in -version; deprecation notice for
                                   /usr/local/laps; admin group check on every
-                                  rotation run.
+                                  rotation run; -reveal, -expireIn and the end
+                                  of a grace period.
 
                                   New header and section style.
 ===============================================================================
@@ -73,7 +74,14 @@ struct Constants {
 // ------------------------- //
 // Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein"]
+/// The argument right after `flag` in its original case, unless it is another flag.
+func argumentValue(after flag: String) -> String? {
+    let raw = CommandLine.arguments
+    guard let i = raw.firstIndex(where: { $0.lowercased() == flag }), i + 1 < raw.count,
+          !knownArguments.contains(raw[i + 1].lowercased()) else { return nil }
+    return raw[i + 1]
+}
 /// Version with build number, e.g. 4.0.0.868, so testers can tell builds apart
 /// and version comparisons (sort -V, is-at-least) order builds correctly.
 func fullVersion() -> String {
@@ -292,7 +300,7 @@ func macOSLAPS() {
         exit(0)
     }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.
-    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help"].contains($0) }).isEmpty {
+    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal"].contains($0) }).isEmpty {
         laps_log.useStandardError = true
     }
     // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
@@ -324,6 +332,10 @@ func macOSLAPS() {
         switch argument {
         case "-getpassword":
             verify_root()
+            if Reveal.deviceMode {
+                laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal <code>, or the app).", .error)
+                exit(1)
+            }
             if Constants.method == "Local" {
                 let (current_password, keychain_item_check) = KeychainService.loadPassword(service: KeychainNames.current)
                 if current_password == nil && keychain_item_check == nil {
@@ -377,6 +389,20 @@ func macOSLAPS() {
         case "-escrow":
             verify_root()
             Escrow.run()
+        case "-reveal":
+            verify_root()
+            guard let code = argumentValue(after: "-reveal") else {
+                laps_log.print("-reveal needs the reveal code: macOSLAPS -reveal <code>", .error)
+                exit(64)
+            }
+            Reveal.runCommand(code: code)
+        case "-expirein":
+            verify_root()
+            guard let time = argumentValue(after: "-expirein") else {
+                laps_log.print("-expireIn needs a time: macOSLAPS -expireIn 4h", .error)
+                exit(64)
+            }
+            Reveal.expireIn(time)
         case "-initialize":
             Constants.initialize = true
             
@@ -413,6 +439,15 @@ func macOSLAPS() {
                                     verify that password and store it WITHOUT rotating.
                                     The first rotation then happens after
                                     DaysTillExpiration (#88).
+
+                  -reveal <code>    RetrievalMode device: shows the password for a
+                                    one-time reveal code (escrowed with -escrow),
+                                    starts the RevealGracePeriod countdown and
+                                    replaces the code.
+
+                  -expireIn <time>  The password changes after <time> (4h, 30m,
+                                    2h30m, 0 = next run), e.g. after a technician
+                                    used it.
 
                   -uninstall        Removes macOSLAPS (app, LaunchDaemon, symlink,
                                     receipts). The stored password is kept so a
@@ -460,6 +495,12 @@ func macOSLAPS() {
     RunLock.acquire()
     RunState.begin()
     AdminGroup.check()
+    // A reveal or -expireIn deadline that has passed forces this run to rotate.
+    Reveal.endOfGraceIfDue()
+    if Reveal.deviceMode {
+        _ = Reveal.currentCode()
+        Reveal.warnIfNobodyHoldsCode()
+    }
     if Constants.initialize {
         initializeWithoutRotating()
     }

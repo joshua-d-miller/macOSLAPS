@@ -33,7 +33,9 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    New file: plaintext JSON or CMS escrow, fails
                         claude    closed when EscrowCertificates is set but
-                                  unusable, reports a staged pending password.
+                                  unusable, reports a staged pending password;
+                                  in device mode the reveal code instead of the
+                                  password.
 
                                   New header and section style.
 ===============================================================================
@@ -205,6 +207,19 @@ enum Escrow {
         }
     }
 
+    /// Device mode: the reveal code instead of the password. The password never leaves the Mac.
+    struct DevicePayload: Codable {
+        let v: Int
+        let mode: String
+        let account: String
+        let revealCode: String
+        let codeSet: String?
+        let expires: String?
+        let rotatesAt: String?
+        let verified: Bool
+        let host: String
+    }
+
     /// `-escrow`: print the payload (plain JSON or CMS PEM) and exit.
     static func run() -> Never {
         let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
@@ -219,13 +234,24 @@ enum Escrow {
         }
         let createdDate = (created == nil || created == "Not Found") ? nil : created
         let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
-        let staged = Staging.pending()
-        let payload = Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(createdDate),
-                              expires: isoDate(expires), verified: verified, host: computerName(),
-                              pending: staged?.password, pendingSet: isoDate(staged?.created))
+        let staged = Reveal.deviceMode ? nil : Staging.pending()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        guard let json = try? encoder.encode(payload) else {
+        let encoded : Data?
+        if Reveal.deviceMode {
+            guard let code = Reveal.currentCode() else {
+                printEscrowError("no reveal code could be created")
+                exit(1)
+            }
+            encoded = try? encoder.encode(DevicePayload(v: 1, mode: "device", account: Constants.local_admin,
+                revealCode: code, codeSet: RunState.value("revealCodeSet"), expires: isoDate(expires),
+                rotatesAt: RunState.value("rotatesAt"), verified: verified, host: computerName()))
+        } else {
+            encoded = try? encoder.encode(Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(createdDate),
+                expires: isoDate(expires), verified: verified, host: computerName(),
+                pending: staged?.password, pendingSet: isoDate(staged?.created)))
+        }
+        guard let json = encoded else {
             laps_log.print("Unable to encode the escrow payload.", .error)
             exit(1)
         }

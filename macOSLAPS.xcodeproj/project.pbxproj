@@ -15,6 +15,7 @@
 		A1C0FFEE0000000000000005 /* Staging.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000006 /* Staging.swift */; };
 		A1C0FFEE0000000000000101 /* Migration.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000102 /* Migration.swift */; };
 		A1C0FFEE0000000000000103 /* AdminGroup.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000104 /* AdminGroup.swift */; };
+		A1C0FFEE0000000000000105 /* Reveal.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000106 /* Reveal.swift */; };
 		E5289A0A25E404C6005DE9EC /* KeychainService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0225E404C6005DE9EC /* KeychainService.swift */; };
 		E5289A0B25E404C6005DE9EC /* TimeConversion.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0325E404C6005DE9EC /* TimeConversion.swift */; };
 		E5289A0D25E404C6005DE9EC /* Shell.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0525E404C6005DE9EC /* Shell.swift */; };
@@ -47,6 +48,7 @@
 		A1C0FFEE0000000000000006 /* Staging.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Staging.swift; sourceTree = "<group>"; };
 		A1C0FFEE0000000000000102 /* Migration.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Migration.swift; sourceTree = "<group>"; };
 		A1C0FFEE0000000000000104 /* AdminGroup.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AdminGroup.swift; sourceTree = "<group>"; };
+		A1C0FFEE0000000000000106 /* Reveal.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Reveal.swift; sourceTree = "<group>"; };
 		E5289A0225E404C6005DE9EC /* KeychainService.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		E5289A0325E404C6005DE9EC /* TimeConversion.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = TimeConversion.swift; sourceTree = "<group>"; };
 		E5289A0525E404C6005DE9EC /* Shell.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Shell.swift; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				A1C0FFEE0000000000000006 /* Staging.swift */,
 				A1C0FFEE0000000000000102 /* Migration.swift */,
 				A1C0FFEE0000000000000104 /* AdminGroup.swift */,
+				A1C0FFEE0000000000000106 /* Reveal.swift */,
 				A1C0FFEE0000000000000004 /* Escrow.swift */,
 				A1C0FFEE0000000000000002 /* Reporting.swift */,
 				E5289A0325E404C6005DE9EC /* TimeConversion.swift */,
@@ -206,6 +209,7 @@
 				A1C0FFEE0000000000000005 /* Staging.swift in Sources */,
 				A1C0FFEE0000000000000101 /* Migration.swift in Sources */,
 				A1C0FFEE0000000000000103 /* AdminGroup.swift in Sources */,
+				A1C0FFEE0000000000000105 /* Reveal.swift in Sources */,
 				A1C0FFEE0000000000000003 /* Escrow.swift in Sources */,
 				A1C0FFEE0000000000000001 /* Reporting.swift in Sources */,
 				E5289A0D25E404C6005DE9EC /* Shell.swift in Sources */,

@@ -20,8 +20,9 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    New file: -status (account, secureToken,
                         claude    FileVault, stored password, escrow, staging,
-                                  migration, admin group), InventoryHook, state
-                                  between runs with cached failed checks.
+                                  migration, admin group, reveal),
+                                  InventoryHook, state between runs with cached
+                                  failed checks; a rotation clears a deadline.
 
                                   New header and section style.
 ===============================================================================
@@ -82,6 +83,16 @@ struct StatusReport: Codable {
     var unapprovedAdmins: [String]
     var elevationTool: String?
     var demotedAdmins: [String]?
+    /// Reveal / deadline: mode, when the current code was made, wrong tries, lockout,
+    /// whether an MDM (or AD) holds the code, the last reveal, and when the password changes.
+    var retrievalMode: String
+    var revealCodeSet: String?
+    var revealFailures: Int?
+    var revealLocked: Bool?
+    var revealCodeCollected: Bool?
+    var revealedAt: String?
+    var rotatesAt: String?
+    var rotateReason: String?
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -187,7 +198,15 @@ enum Status {
             adminGroupPolicy: AdminGroup.policy,
             unapprovedAdmins: AdminGroup.unapproved(),
             elevationTool: AdminGroup.elevationTool(),
-            demotedAdmins: { let d = RunState.arrayValue("demotedAdmins"); return d.isEmpty ? nil : d }())
+            demotedAdmins: { let d = RunState.arrayValue("demotedAdmins"); return d.isEmpty ? nil : d }(),
+            retrievalMode: Reveal.deviceMode ? "device" : "escrow",
+            revealCodeSet: Reveal.deviceMode ? RunState.value("revealCodeSet") : nil,
+            revealFailures: Reveal.deviceMode ? Reveal.failures : nil,
+            revealLocked: Reveal.deviceMode ? Reveal.locked : nil,
+            revealCodeCollected: Reveal.deviceMode ? Reveal.codeCollected : nil,
+            revealedAt: RunState.value("revealedAt"),
+            rotatesAt: RunState.value("rotatesAt"),
+            rotateReason: RunState.value("rotateReason"))
     }
 
     static func run(verbose: Bool) -> Never {
@@ -249,6 +268,17 @@ enum Status {
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
+        if report.retrievalMode == "device" {
+            print("ℹ️  Retrieval: device mode (reveal codes); code made \(report.revealCodeSet ?? "not yet")")
+            line(report.revealCodeCollected, "An MDM (or AD) holds the current reveal code",
+                 "Run macOSLAPS -escrow from your MDM's inventory (or set ADRevealCode), or nobody can reveal the password.")
+            if report.revealLocked == true {
+                line(false, "Reveals are locked after \(report.revealFailures ?? 0) wrong codes", "Run macOSLAPS -resetPassword: the rotation issues a new code.")
+            }
+        }
+        if let at = report.rotatesAt {
+            print("ℹ️  The password changes at \(at) (\(report.rotateReason ?? "scheduled"))\(report.revealedAt.map { "; revealed \($0)" } ?? "")")
+        }
         if report.unapprovedAdmins.isEmpty {
             line(true, "Only approved accounts are admins (AdminGroupPolicy \(report.adminGroupPolicy))")
         } else {
@@ -427,6 +457,7 @@ enum RunState {
     /// result: rotated, not-due, initialized, failed.
     static func record(_ result: String, message: String? = nil) {
         recorded = true
+        if result == "rotated" { Reveal.afterRotation() }
         update { d in
             d["lastRun"] = iso.string(from: Date())
             d["lastResult"] = result

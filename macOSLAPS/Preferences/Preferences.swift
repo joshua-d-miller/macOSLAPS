@@ -23,8 +23,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-11   joshua    New domain com.joshua-d-miller.macoslaps, per
                         claude    key over the legacy one; type coercion;
-                                  -showconfig; ApprovedAdmins and
-                                  AdminGroupPolicy.
+                                  -showconfig; ApprovedAdmins, AdminGroupPolicy
+                                  and the reveal settings.
 
                                   New header and section style.
 ===============================================================================
@@ -65,6 +65,10 @@ var defaultpreferences : [ String : Any ] = [
     "EscrowCertificates"     :       [Any](),
     "ApprovedAdmins"         :       [String](),
     "AdminGroupPolicy"       :       "auto",
+    "RetrievalMode"          :       "escrow",
+    "RevealGracePeriod"      :       4,
+    "RevealAction"           :       "rotateAndLogout",
+    "ADRevealCode"           :       false,
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,

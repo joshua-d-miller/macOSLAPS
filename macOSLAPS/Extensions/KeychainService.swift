@@ -26,10 +26,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New keychain names under the 4.0 identity;
-                        claude    password and creation date stored in one
-                                  call; unreadable items fail closed; helpers
-                                  for migration (attributes, deleting as root).
+ 4.0.0     2026-11-11   joshua    New keychain names under the 4.0 identity
+                        claude    (and the reveal code); password and creation
+                                  date stored in one call; unreadable items
+                                  fail closed; helpers for migration
+                                  (attributes, deleting as root).
 
                                   New header and section style.
 ===============================================================================
@@ -48,6 +49,8 @@ import Security
 enum KeychainNames {
     static let current = "com.joshua-d-miller.macoslaps"
     static let pending = "com.joshua-d-miller.macoslaps.pending"
+    /// Device mode: the current one-time reveal code (Reveal.swift).
+    static let reveal = "com.joshua-d-miller.macoslaps.reveal"
     static let legacyCurrent = "macOSLAPS"
     static let legacyPending = "macOSLAPS-pending"
 }

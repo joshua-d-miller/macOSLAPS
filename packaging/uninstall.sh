@@ -90,7 +90,7 @@ if [ "$PURGE" -eq 1 ]; then
         [ -n "$export_name" ] && /usr/bin/security delete-generic-password -s "$export_name" "$SYSKC" >/dev/null 2>&1
         /bin/rm -f /var/root/.GeneratedLAPSServiceName
     fi
-    for service in com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps.pending macOSLAPS macOSLAPS-pending; do
+    for service in com.joshua-d-miller.macoslaps com.joshua-d-miller.macoslaps.pending com.joshua-d-miller.macoslaps.reveal macOSLAPS macOSLAPS-pending; do
         while /usr/bin/security delete-generic-password -s "$service" "$SYSKC" >/dev/null 2>&1; do
             say "deleted keychain item $service"
         done
