@@ -88,7 +88,7 @@ expect(MDMAccountsParser.parse(withDate)?.first?.shortName == "ladmin", "falls b
 expect(MDMAccountsParser.parse(sample("( { shortName = ladmin; } )")) == nil, "an entry without a GUID makes the list unreadable")
 expect(MDMAccountsParser.parse(sample("( \"ladmin\" )")) == nil, "an entry that isn't a dictionary makes the list unreadable")
 expect(MDMAccountsParser.parse(sample("( { GUID = \"(x)\"; shortName = \"a)b\"; } )")) == [AutoSetupAdmin(guid: "(x)", shortName: "a)b")], "parentheses inside quotes")
-// Real output from a Penn State Mac with a Jamf PreStage admin (2026-11-12, via Joshua),
+// Real output from a university Mac with a Jamf PreStage admin (2026-11-12, via Joshua),
 // once with straight quotes as mdmclient prints them and once as pasted (curly quotes).
 let psu = """
 Daemon response: {
