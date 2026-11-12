@@ -157,6 +157,7 @@ defaults write "$DOMAIN" RemovePassChars -string "$EXCLUDED"
 defaults read "$DOMAIN"
 echo "::endgroup::"
 
+jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
 get_pw() {
     "$LAPS" -getPassword >&2 || return 1
     local export_name
@@ -300,12 +301,23 @@ else
     pass "unknown token status with an out-of-date stored password refuses"
 fi
 dscl . -authonly "$ACCT" "$FIRST" >/dev/null 2>&1 && pass "account untouched (unknown token, out-of-date keychain)" || fail "account changed (unknown token, out-of-date keychain)"
-# 3. Confirmed no token (real sysadminctl on the runner) and an out-of-date stored password: recover with a reset.
+# 3. Confirmed no token (real sysadminctl on the runner) and an out-of-date stored password:
+#    something else changed the account, so macOSLAPS stops instead of resetting it (step 31).
 if "$LAPS" -resetPassword >/dev/null 2>&1; then
-    RESET_PW=$(get_pw)
-    dscl . -authonly "$ACCT" "$RESET_PW" >/dev/null 2>&1 && pass "no token + out-of-date keychain recovers with a reset" || fail "reset password does not work"
+    fail "an outside password change was overwritten by a reset"
 else
-    fail "no token + out-of-date keychain did not recover"
+    pass "outside change: rotation refused"
+fi
+dscl . -authonly "$ACCT" "$FIRST" >/dev/null 2>&1 && pass "outside change: account left alone" || fail "outside change: account was changed"
+[ -n "$(jget "$("$LAPS" -status)" externalChange)" ] && pass "-status reports externalChange" || fail "-status has no externalChange: $("$LAPS" -status)"
+"$LAPS" -resetPassword >/dev/null 2>&1 && fail "rotation resumed by itself after an outside change" || pass "stays stopped on the next run"
+"$LAPS" -status -v 2>/dev/null | grep -q "changed outside macOSLAPS" && pass "-status -v explains the outside change" || fail "-status -v missing the outside-change line"
+if "$LAPS" -firstPass "$FIRST" -resetPassword >/dev/null 2>&1; then
+    RESET_PW=$(get_pw)
+    dscl . -authonly "$ACCT" "$RESET_PW" >/dev/null 2>&1 && [ -z "$(jget "$("$LAPS" -status)" externalChange)" ] \
+        && pass "-firstPass <current> takes the account back and clears externalChange" || fail "after -firstPass: $("$LAPS" -status)"
+else
+    fail "-firstPass <current> -resetPassword did not take the account back"
 fi
 security find-generic-password -s "$KCSVC" "$SYSKC" 2>/dev/null | grep -q '"icmt"<blob>="Created: 20' \
     && pass "a newly created keychain item has its creation date" || fail "new keychain item is missing its Created: comment"
@@ -681,7 +693,6 @@ fi
 ### deadline rotates; five wrong codes lock reveals until the next          ###
 ### rotation.                                                               ###
 echo "::group::Device mode (reveal codes)"
-jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
 code_now() { jget "$("$LAPS" -escrow 2>/dev/null)" revealCode; }
 reveal_pw() { "$LAPS" -reveal "$1" 2>/dev/null | sed -n 's/^Password: //p'; }
 BEFORE=$(get_pw)
@@ -741,7 +752,6 @@ echo "::group::Privileged service"
 STD=lapsstd
 sysadminctl -addUser "$STD" -fullName "LAPS Standard" -password 'Std-Pass-2468' >/dev/null 2>&1
 asuser() { sudo -u "$STD" "$@"; }
-jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
 OUT=$(asuser "$LAPS" -status 2>&1)
 [ "$(jget "$OUT" account 2>/dev/null)" = "$ACCT" ] && pass "standard user gets -status through the service" || fail "-status as a standard user: $OUT"
 defaults write "$DOMAIN" RetrievalMode -string device

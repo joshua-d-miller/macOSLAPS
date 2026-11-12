@@ -31,7 +31,8 @@
                                   rotation run; -reveal, -expireIn and the end
                                   of a grace period; -service, -rotateNow,
                                   -agent and the app window when opened from
-                                  Finder.
+                                  Finder; a rotation run stops after an outside
+                                  password change.
 
                                   New header and section style.
 ===============================================================================
@@ -528,6 +529,7 @@ func macOSLAPS() {
     }
     RunLock.acquire()
     RunState.begin()
+    Ownership.exitIfStopped()
     AdminGroup.check()
     // A reveal or -expireIn deadline that has passed forces this run to rotate.
     Reveal.endOfGraceIfDue()

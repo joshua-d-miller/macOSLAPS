@@ -26,7 +26,7 @@
                                   a deadline change publishes deadline.plist
                                   for the menu bar agent; device mode warns
                                   without a FileVault recovery key escrow
-                                  profile.
+                                  profile; externalChange.
 
                                   New header and section style.
 ===============================================================================
@@ -89,6 +89,10 @@ struct StatusReport: Codable {
     var demotedAdmins: [String]?
     /// Reveal / deadline: mode, when the current code was made, wrong tries, lockout,
     /// whether an MDM (or AD) holds the code, the last reveal, and when the password changes.
+    /// Set when the stored password stopped working because something else changed it;
+    /// macOSLAPS stops rotating until -firstPass / -initialize.
+    var externalChange: String?
+    var externalChangeReason: String?
     var retrievalMode: String
     var revealCodeSet: String?
     var revealFailures: Int?
@@ -203,6 +207,8 @@ enum Status {
             unapprovedAdmins: AdminGroup.unapproved(),
             elevationTool: AdminGroup.elevationTool(),
             demotedAdmins: { let d = RunState.arrayValue("demotedAdmins"); return d.isEmpty ? nil : d }(),
+            externalChange: RunState.value("externalChange"),
+            externalChangeReason: RunState.value("externalChangeReason"),
             retrievalMode: Reveal.deviceMode ? "device" : "escrow",
             revealCodeSet: Reveal.deviceMode ? RunState.value("revealCodeSet") : nil,
             revealFailures: Reveal.deviceMode ? Reveal.failures : nil,
@@ -272,6 +278,10 @@ enum Status {
         }
         print("ℹ️  Escrow: \(report.escrow)" + (report.escrowCertificates.isEmpty ? "" : " to \(report.escrowCertificates.count) certificate(s): \(report.escrowCertificates.joined(separator: ", "))"))
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
+        if let since = report.externalChange {
+            line(false, "The password was changed outside macOSLAPS (noticed \(since)); rotation is stopped",
+                 "Find out what changed it (another LAPS tool or the MDM?). To manage the account again: macOSLAPS -firstPass <current password> -resetPassword.")
+        }
         if report.retrievalMode == "device" {
             print("ℹ️  Retrieval: device mode (reveal codes); code made \(report.revealCodeSet ?? "not yet")")
             if report.fileVault == true {
@@ -468,6 +478,9 @@ enum RunState {
     static func record(_ result: String, message: String? = nil) {
         recorded = true
         if result == "rotated" { Reveal.afterRotation() }
+        if result == "rotated" || result == "initialized" {
+            update { d in Ownership.stateKeys.forEach { d.removeValue(forKey: $0) } }
+        }
         update { d in
             d["lastRun"] = iso.string(from: Date())
             d["lastResult"] = result

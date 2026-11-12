@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Changes the local admin's password. Rotation is done in a fixed order
@@ -19,9 +19,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    Fixed rotation order with revert; secureToken
+ 4.0.0     2026-11-12   joshua    Fixed rotation order with revert; secureToken
                         claude    fail-closed; stop signals held off between
-                                  change and store; staged rotation.
+                                  change and store; staged rotation; an outside
+                                  password change stops rotation instead of a
+                                  reset.
 
                                   New header and section style.
 ===============================================================================
@@ -45,6 +47,33 @@ enum CriticalSection {
     private static let signals = [SIGTERM, SIGINT, SIGHUP]
     static func begin() { for s in signals { signal(s, SIG_IGN) } }
     static func end() { for s in signals { signal(s, SIG_DFL) } }
+}
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------------- //
+// | Account ownership | //
+// --------------------- //
+// When the stored password stops working, something else changed the        //
+// account: stop instead of fighting it.                                     //
+enum Ownership {
+    /// When macOSLAPS noticed the outside change, or nil.
+    static var stoppedSince : String? { RunState.value("externalChange") }
+
+    /// Records the outside change and stops. The account is left as it is.
+    static func stop(reason: String) -> Never {
+        RunState.set(["externalChange": RunState.iso.string(from: Date()), "externalChangeReason": reason])
+        laps_log.print("Not rotating: \(reason). Something other than macOSLAPS changed the password, so macOSLAPS leaves the account alone and stops rotating it. To take it back, run macOSLAPS -firstPass <current password> -resetPassword (or -initialize).", .error)
+        exit(1)
+    }
+
+    /// At the start of a rotation run: stay stopped unless IT supplied the current password.
+    static func exitIfStopped() {
+        guard let since = stoppedSince, !Constants.use_firstpass, !Constants.initialize else { return }
+        laps_log.print("Not rotating: the password of \(Constants.local_admin) was changed outside macOSLAPS (noticed \(since)). Run macOSLAPS -firstPass <current password> -resetPassword (or -initialize) to manage it again.", .error)
+        exit(1)
+    }
+
+    static let stateKeys = ["externalChange", "externalChangeReason"]
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -102,6 +131,13 @@ class LocalTools: NSObject {
             do {
                 try record.changePassword(old, toPassword: newPassword)
             } catch {
+                // The stored password no longer works: something else changed the account.
+                // Never fight it (another tool or the MDM may own the account now): stop
+                // rotating until IT runs -firstPass <current password> or -initialize.
+                if source == "the password stored in the keychain",
+                   (try? record.verifyPassword(old)) == nil {
+                    Ownership.stop(reason: "the stored password no longer works for \(Constants.local_admin) (\(describe(error)))")
+                }
                 guard !needs_old_password else {
                     laps_log.print("Unable to change the password for \(Constants.local_admin) using \(source) (\(describe(error))). Make sure \(source) is the account's current password.", .error)
                     exit(1)
