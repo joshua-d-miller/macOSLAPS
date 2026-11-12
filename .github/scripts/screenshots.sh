@@ -82,7 +82,8 @@ key_code() { ui "tell application \"System Events\" to key code $1"; }
 ax_find() {  # $1 pid, $2 role, $3 index or name, $4 action (focus/press)
     ui "tell application \"System Events\" to tell (first process whose unix id is $1)
         set hits to {}
-        repeat with e in (entire contents of window 1)
+        set everything to (get entire contents of window 1)
+        repeat with e in everything
             if role of e is \"$2\" then set end of hits to e
         end repeat
         if \"$3\" is in \"0123456789\" then
@@ -141,7 +142,13 @@ PROC="(first process whose unix id is $APP_PID)"
 ui "tell application \"System Events\" to set frontmost of $PROC to true"
 echo "Frontmost: $(as_gui osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)"
 echo "Window elements: $(as_gui osascript -e "tell application \"System Events\" to get {role, description} of every UI element of window 1 of $PROC" 2>&1)"
-echo "Window controls: $(as_gui osascript -e "tell application \"System Events\" to get {role, name, description} of entire contents of window 1 of $PROC" 2>&1)"
+echo "Window controls: $(as_gui osascript -e "tell application \"System Events\" to tell $PROC
+    set out to {}
+    repeat with e in (get entire contents of window 1)
+        set end of out to (role of e as text) & \":\" & (name of e as text)
+    end repeat
+    return out
+end tell" 2>&1)"
 ax_find "$APP_PID" AXTextField 1 focus; sleep 0.5
 keys "$CODE"; sleep 0.5
 ax_find "$APP_PID" AXTextField 2 focus; sleep 0.5
