@@ -174,13 +174,13 @@ shot 02-window-code-entered "$WIN"
 ### | The app: reveal | ###
 ### ------------------- ###
 ### Return presses Reveal Password; macOSLAPS must record the reveal.       ###
-ax_find "$APP_PID" AXButton "Reveal" press; sleep 6
+ax_find "$APP_PID" AXButton 1 press; sleep 6   # Reveal Password
 shot 03-window-revealed "$WIN"
 python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any(sys.argv[1] in x and "TICKET-4021" in x for x in h), h' "$GUI_USER" \
     && pass "revealed through the window by $GUI_USER with the ticket" || fail "the window did not reveal the password (revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1))"
 ST=$("$LAPS" -status)
 [ -n "$(jget "$ST" rotatesAt)" ] && pass "the grace period started" || fail "no deadline after the reveal"
-ax_find "$APP_PID" AXButton "Phonetic" press
+ax_find "$APP_PID" AXButton 2 press   # Copy, Show Phonetic, Done
 sleep 2
 shot 04-window-phonetic "$WIN"
 
