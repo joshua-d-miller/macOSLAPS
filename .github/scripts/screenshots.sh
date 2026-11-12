@@ -91,7 +91,17 @@ ax_find() {  # $1 pid, $2 role, $3 index or name, $4 action (focus/press)
         else
             set t to missing value
             repeat with e in hits
-                if (name of e as text) contains \"$3\" or (description of e as text) contains \"$3\" then set t to e
+                set label to \"\"
+                try
+                    set label to (value of attribute \"AXTitle\" of e as text)
+                end try
+                try
+                    set label to label & \" \" & (value of attribute \"AXDescription\" of e as text)
+                end try
+                try
+                    set label to label & \" \" & (value of attribute \"AXIdentifier\" of e as text)
+                end try
+                if label contains \"$3\" then set t to e
             end repeat
         end if
         if \"$4\" is \"focus\" then
@@ -145,7 +155,11 @@ echo "Window elements: $(as_gui osascript -e "tell application \"System Events\"
 echo "Window controls: $(as_gui osascript -e "tell application \"System Events\" to tell $PROC
     set out to {}
     repeat with e in (get entire contents of window 1)
-        set end of out to (role of e as text) & \":\" & (name of e as text)
+        set label to \"\"
+        try
+            set label to (value of attribute \"AXTitle\" of e as text)
+        end try
+        set end of out to (role of e as text) & \":\" & label
     end repeat
     return out
 end tell" 2>&1)"
