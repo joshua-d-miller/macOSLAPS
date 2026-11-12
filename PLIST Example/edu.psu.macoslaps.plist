@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  LEGACY: the macOSLAPS 3.x settings example (preference domain
+  edu.psu.macoslaps, from the project's Penn State days). 4.x still reads
+  this domain but logs a deprecation warning. For new profiles use
+  com.joshua-d-miller.macoslaps.plist in this folder.
+-->
 <plist version="1.0">
 <dict>
     <key>DaysTillExpiration</key>

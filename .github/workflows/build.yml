@@ -54,6 +54,8 @@ jobs:
           done
       - name: Header and comment style
         run: bash .github/scripts/check-style.sh
+      - name: Penn State names only where still needed
+        run: bash .github/scripts/check-legacy-names.sh
       - name: Every app string is in Localizable.strings
         run: |
           plutil -lint macOSLAPS/Resources/en.lproj/Localizable.strings

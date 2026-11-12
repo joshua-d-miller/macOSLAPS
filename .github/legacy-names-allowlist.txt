@@ -1,0 +1,22 @@
+# Files allowed to mention edu.psu, psu.edu or Penn State, and why.
+# check-legacy-names.sh fails on any other file, and on an entry here that
+# no longer needs to be listed.
+.github/release-notes/4.0.0.md                      # explains the identifier move
+.github/scripts/smoke-test.sh                       # tests the legacy preference domain
+.github/scripts/upgrade-3x-test.sh                  # upgrade from 3.0.4
+.github/scripts/upgrade-test.sh                     # upgrade from 845
+.github/workflows/build.yml                         # signs the migration helper; copyright credit
+MDM Scripts/macoslaps4-mdm-install-script.sh        # removes old installs; legacy settings
+MDM Scripts/macoslaps4-mdm-password-and-expiration.sh  # reads the legacy settings domain
+MDM Scripts/macoslaps4-mdm-password-simple.sh       # reads the legacy settings domain
+PLIST Example/com.joshua-d-miller.macoslaps.plist   # says the legacy domain still works
+PLIST Example/edu.psu.macoslaps.plist               # the legacy example itself
+README.md                                           # history and credit to Penn State
+macOSLAPS-legacy/main.swift                         # the helper signed edu.psu.macOSLAPS
+macOSLAPS/Extensions/KeychainService.swift          # names of the old keychain items
+macOSLAPS/Extensions/Migration.swift                # migration from 3.x / 845
+macOSLAPS/Preferences/Preferences.swift             # legacy preference domain
+packaging/app-scripts/postinstall                   # forgets the old receipt
+packaging/daemon-scripts/postinstall                # forgets the old receipt
+packaging/daemon-scripts/preinstall                 # removes the old LaunchDaemon
+packaging/uninstall.sh                              # removes old installs

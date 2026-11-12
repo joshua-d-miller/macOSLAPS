@@ -4,7 +4,7 @@
   macOSLAPS 4.0 example settings. Deliver as a configuration profile with
   PayloadType com.joshua-d-miller.macoslaps (edu.psu.macoslaps still works in 4.x).
   Every key is optional; unset keys use the defaults shown.
-  Run "sudo /usr/local/laps/macOSLAPS -showConfig" to see what a Mac actually uses.
+  Run "sudo macOSLAPS -showConfig" to see what a Mac actually uses.
 -->
 <plist version="1.0">
 <dict>

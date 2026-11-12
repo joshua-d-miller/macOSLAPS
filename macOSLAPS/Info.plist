@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>edu.psu.macOSLAPS</string>
+	<string>com.joshua-d-miller.macoslaps</string>
 	<key>CFBundleName</key>
 	<string>macOSLAPS</string>
 	<key>CFBundleShortVersionString</key>

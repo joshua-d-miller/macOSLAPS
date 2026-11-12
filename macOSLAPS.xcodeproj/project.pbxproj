@@ -380,7 +380,7 @@
 					__info_plist,
 					"$(INFOPLIST_FILE)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macoslaps";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
@@ -411,7 +411,7 @@
 					__info_plist,
 					"$(INFOPLIST_FILE)",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = edu.psu.macOSLAPS;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.joshua-d-miller.macoslaps";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_VERSION = 5.0;
