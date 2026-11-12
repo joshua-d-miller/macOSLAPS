@@ -239,6 +239,7 @@ jobs:
           cp "$BIN" "$APP/Contents/MacOS/macOSLAPS"
           install -m 755 packaging/uninstall.sh "$APP/Contents/Resources/uninstall.sh"
           ditto macOSLAPS/Resources/en.lproj "$APP/Contents/Resources/en.lproj"
+          install -m 644 macOSLAPS/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
           if [ "$SIGNED" = "true" ]; then
             cp build/helper/macOSLAPS-legacy "$APP/Contents/Helpers/macOSLAPS-legacy"
             sign=(--sign "$APP_ID" --timestamp)
@@ -260,6 +261,7 @@ jobs:
               "CFBundleVersion": build,
               "LSMinimumSystemVersion": minos,
               "CFBundleDevelopmentRegion": "en",
+              "CFBundleIconFile": "AppIcon",
               "LSUIElement": True,
               "NSHumanReadableCopyright": "Copyright Joshua D. Miller. Originally created at Penn State.",
           }, open(path, "wb"))

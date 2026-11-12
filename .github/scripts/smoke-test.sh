@@ -91,6 +91,8 @@ RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
 launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && pass "service LaunchDaemon loaded" || fail "service LaunchDaemon not loaded"
 REQ="/Library/Application Support/macOSLAPS/Requests"
 [ "$(stat -f '%Su:%Sg %Mp%Lp' "$REQ")" = "root:wheel 1733" ] && pass "request folder root:wheel 1733" || fail "request folder: $(stat -f '%Su:%Sg %Mp%Lp' "$REQ" 2>&1)"
+[ -s "$APP/Contents/Resources/AppIcon.icns" ] && [ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP/Contents/Info.plist" 2>/dev/null)" = "AppIcon" ] \
+    && pass "app icon installed and named in Info.plist" || fail "app icon missing"
 plutil -lint "$APP/Contents/Resources/en.lproj/Localizable.strings" >/dev/null 2>&1 && pass "app strings in Resources/en.lproj" || fail "Localizable.strings missing from the app"
 AGP=/Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist
 [ "$(stat -f '%Su:%Sg %Lp' "$AGP" 2>/dev/null)" = "root:wheel 644" ] && plutil -lint "$AGP" >/dev/null && pass "menu bar LaunchAgent installed root:wheel 644" || fail "LaunchAgent: $(ls -l "$AGP" 2>&1)"
