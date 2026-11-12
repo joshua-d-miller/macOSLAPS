@@ -422,7 +422,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel, macos-26, xcode-27]
+        os: [macos-15, macos-15-intel, macos-26, macos-26-intel, xcode-27]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -448,7 +448,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, xcode-27]
+        os: [macos-15, macos-26, macos-26-intel, xcode-27]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -471,7 +471,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, xcode-27]
+        os: [macos-15, macos-26, macos-26-intel, xcode-27]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -487,6 +487,32 @@ jobs:
           pkgutil --check-signature "$RUNNER_TEMP/macOSLAPS-3.0.4.pkg" | head -4
       - name: Upgrade test from 3.0.4
         run: sudo bash .github/scripts/upgrade-3x-test.sh "$RUNNER_TEMP/macOSLAPS-3.0.4.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
+
+  # Device mode the way a technician uses it, on runners with a signed-in screen:
+  # the app opened, the code typed, the password revealed, the menu bar countdown.
+  # Also a UI test: it fails unless the reveal through the window was recorded.
+  screenshots:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-26, xcode-27]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v5
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Drive the app and capture it
+        run: sudo bash .github/scripts/screenshots.sh "artifact/dist/${{ needs.build.outputs.pkg }}" "$RUNNER_TEMP/screenshots"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: screenshots-${{ matrix.os }}
+          path: ${{ runner.temp }}/screenshots
+          retention-days: 14
 
   # The CMS escrow must open with the tool Windows admins already have.
   windows-decrypt:
