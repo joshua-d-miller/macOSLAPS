@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Reads the settings. macOSLAPS is moving from the original
@@ -21,10 +21,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New domain com.joshua-d-miller.macoslaps, per
+ 4.0.0     2026-11-12   joshua    New domain com.joshua-d-miller.macoslaps, per
                         claude    key over the legacy one; type coercion;
                                   -showconfig; ApprovedAdmins, AdminGroupPolicy
-                                  and the reveal settings.
+                                  and the reveal settings; reads the domains
+                                  through CFPreferences.
 
                                   New header and section style.
 ===============================================================================
@@ -125,11 +126,25 @@ enum PreferenceSource: String {
 /// So anything set in the new domain wins, and the legacy domain only fills in keys the
 /// new one doesn't set. Admins can move one key at a time; -showConfig shows where each
 /// key came from.
+/// One preference domain read through CFPreferences. UserDefaults(suiteName:) won't
+/// open a suite named like the app's own bundle identifier, which
+/// com.joshua-d-miller.macoslaps now is; CFPreferences reads any domain the same way.
+struct PreferenceDomain {
+    let id : CFString
+    init(_ domain: String) { id = domain as CFString }
+    func object(forKey key: String) -> Any? {
+        CFPreferencesCopyAppValue(key as CFString, id) as Any?
+    }
+    func objectIsForced(forKey key: String) -> Bool {
+        CFPreferencesAppValueIsForced(key as CFString, id)
+    }
+}
+
 final class PreferenceStore {
     static let shared = PreferenceStore()
 
     private struct Layer {
-        let store : UserDefaults
+        let store : PreferenceDomain
         let domain : String
         let managed : Bool
         let source : PreferenceSource
@@ -143,12 +158,12 @@ final class PreferenceStore {
 
     private init() {
         var list : [Layer] = []
-        let newStore = UserDefaults(suiteName: preferenceDomain)
-        let legacyStore = UserDefaults(suiteName: legacyPreferenceDomain)
-        if let n = newStore    { list.append(Layer(store: n, domain: preferenceDomain, managed: true, source: .managedNew)) }
-        if let l = legacyStore { list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: true, source: .managedLegacy)) }
-        if let n = newStore    { list.append(Layer(store: n, domain: preferenceDomain, managed: false, source: .unmanagedNew)) }
-        if let l = legacyStore { list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: false, source: .unmanagedLegacy)) }
+        let n = PreferenceDomain(preferenceDomain)
+        let l = PreferenceDomain(legacyPreferenceDomain)
+        list.append(Layer(store: n, domain: preferenceDomain, managed: true, source: .managedNew))
+        list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: true, source: .managedLegacy))
+        list.append(Layer(store: n, domain: preferenceDomain, managed: false, source: .unmanagedNew))
+        list.append(Layer(store: l, domain: legacyPreferenceDomain, managed: false, source: .unmanagedLegacy))
         layers = list
 
         let knownKeys = Array(defaultpreferences.keys) + Array(preferenceKeyAliases.keys)
