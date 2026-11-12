@@ -74,7 +74,7 @@ struct Constants {
 // ------------------------- //
 // Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow"]
 /// The argument right after `flag` in its original case, unless it is another flag.
 func argumentValue(after flag: String) -> String? {
     let raw = CommandLine.arguments
@@ -119,6 +119,17 @@ enum RunLock {
         flock(descriptor, LOCK_UN)
         close(descriptor)
         descriptor = -1
+    }
+    /// Like acquire, but returns false instead of exiting (for the long-running service).
+    static func tryAcquire(wait: TimeInterval) -> Bool {
+        if descriptor < 0 { descriptor = open("/var/run/macOSLAPS.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600) }
+        guard descriptor >= 0 else { return true }
+        let deadline = Date().addingTimeInterval(wait)
+        while flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+            if Date() > deadline { return false }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        return true
     }
     static func acquire(wait: TimeInterval = 120) {
         descriptor = open("/var/run/macOSLAPS.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
@@ -300,7 +311,7 @@ func macOSLAPS() {
         exit(0)
     }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.
-    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal"].contains($0) }).isEmpty {
+    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
         laps_log.useStandardError = true
     }
     // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
@@ -315,6 +326,20 @@ func macOSLAPS() {
         verify_root()
         uninstall(purge: args.contains("-purge"))
     }
+    // The privileged service (second LaunchDaemon) and the commands a standard user may run
+    // through it. The check LaunchDaemon handles migration, so the service skips it.
+    if args.contains("-service") {
+        verify_root()
+        Service.run()
+    }
+    if NSUserName() != "root" {
+        if args.contains("-reveal"), let code = argumentValue(after: "-reveal") {
+            Service.clientReveal(code: code, reason: argumentValue(after: "-reason") ?? "")
+        }
+        if args.contains("-status") && !args.contains("-v") { Service.clientStatus() }
+        if args.contains("-rotatenow") { Service.rotateNow() }
+    }
+    if args.contains("-rotatenow") { Service.rotateNow() }
     if NSUserName() == "root" && args.isDisjoint(with: ["-showconfig", "-help"]) {
         let reporting = args.contains("-status")
         let recovering = args.contains("-firstpass") || args.contains("-initialize")
@@ -440,10 +465,14 @@ func macOSLAPS() {
                                     The first rotation then happens after
                                     DaysTillExpiration (#88).
 
-                  -reveal <code>    RetrievalMode device: shows the password for a
-                                    one-time reveal code (escrowed with -escrow),
-                                    starts the RevealGracePeriod countdown and
-                                    replaces the code.
+                  -reveal <code>    RetrievalMode device: shows the password for the
+                                    reveal code (escrowed with -escrow) and starts
+                                    the RevealGracePeriod countdown. Works without
+                                    root through the macOSLAPS service. Add
+                                    -reason "<ticket>" to record why.
+
+                  -rotateNow        Ends an active reveal or -expireIn grace period
+                                    now (any user; the menu bar uses this).
 
                   -expireIn <time>  The password changes after <time> (4h, 30m,
                                     2h30m, 0 = next run), e.g. after a technician
@@ -535,6 +564,7 @@ func macOSLAPS() {
             let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
             laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(actual_exp_date)", .info)
             RunState.record("not-due")
+            Reveal.waitForDeadlineIfSoon()
             exit(0)
         }
     case "Local":
@@ -561,6 +591,7 @@ func macOSLAPS() {
         else {
             laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: exp_date!))", .info)
             RunState.record("not-due")
+            Reveal.waitForDeadlineIfSoon()
             exit(0)
         }
     default:

@@ -83,6 +83,9 @@ RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
 [ "$(cat /etc/paths.d/laps 2>/dev/null)" = "$APP/Contents/MacOS" ] && pass "/etc/paths.d/laps points into the app" || fail "/etc/paths.d/laps: $(cat /etc/paths.d/laps 2>/dev/null)"
 [ "$(env -i /bin/bash -c 'eval "$(/usr/libexec/path_helper -s)"; command -v macOSLAPS')" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "macOSLAPS on PATH is the app" || fail "macOSLAPS on PATH: $(env -i /bin/bash -c 'eval "$(/usr/libexec/path_helper -s)"; command -v macOSLAPS')"
 [ "$(stat -f '%Su:%Sg %Lp' "$PLIST")" = "root:wheel 644" ] && pass "LaunchDaemon owner and mode" || fail "LaunchDaemon owner/mode: $(stat -f '%Su:%Sg %Lp' "$PLIST")"
+launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && pass "service LaunchDaemon loaded" || fail "service LaunchDaemon not loaded"
+REQ="/Library/Application Support/macOSLAPS/Requests"
+[ "$(stat -f '%Su:%Sg %Lp' "$REQ")" = "root:wheel 1733" ] && pass "request folder root:wheel 1733" || fail "request folder: $(stat -f '%Su:%Sg %Lp' "$REQ" 2>&1)"
 [ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
 [ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
 [ "$(readlink "$LAPS")" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "$LAPS is a symlink into the app" || fail "$LAPS -> $(readlink "$LAPS")"
@@ -721,6 +724,61 @@ python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.dateti
 echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ---------------------- ###
+### | Privileged service | ###
+### ---------------------- ###
+### A standard user reaches the root service over XPC (status, reveal,      ###
+### rotate now); a copy of macOSLAPS without its signature is turned away;  ###
+### a request file only ends an active grace period; the check run waits    ###
+### for a near deadline and rotates on time.                                ###
+echo "::group::Privileged service"
+STD=lapsstd
+sysadminctl -addUser "$STD" -fullName "LAPS Standard" -password 'Std-Pass-2468' >/dev/null 2>&1
+asuser() { sudo -u "$STD" "$@"; }
+jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
+OUT=$(asuser "$LAPS" -status 2>&1)
+[ "$(jget "$OUT" account 2>/dev/null)" = "$ACCT" ] && pass "standard user gets -status through the service" || fail "-status as a standard user: $OUT"
+defaults write "$DOMAIN" RetrievalMode -string device
+"$LAPS" >/dev/null 2>&1
+CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
+EXPECT=$("$LAPS" -reveal "$CODE" 2>/dev/null | sed -n 's/^Password: //p')
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1      # rotate: clean deadline, new code
+CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
+asuser "$LAPS" -reveal WRONG-WRONG-WRONG-WRNG >/dev/null 2>&1 && fail "wrong code accepted through the service" || pass "wrong code refused through the service"
+OUT=$(asuser "$LAPS" -reveal "$CODE" -reason "TICKET-42" 2>/dev/null)
+PW=$(sed -n 's/^Password: //p' <<< "$OUT")
+[ -n "$PW" ] && dscl . -authonly "$ACCT" "$PW" >/dev/null 2>&1 && grep -q "^Works until: " <<< "$OUT" && pass "standard user reveals through the service" || fail "reveal as a standard user"
+python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any("lapsstd" in x and "TICKET-42" in x for x in h), h' \
+    && pass "the reveal is recorded with the user and the reason" || fail "revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1)"
+cp "$APP/Contents/MacOS/macOSLAPS" /tmp/laps-unsigned && codesign --force --sign - /tmp/laps-unsigned >/dev/null 2>&1 && chmod 755 /tmp/laps-unsigned
+asuser /tmp/laps-unsigned -reveal "$CODE" >/dev/null 2>&1 && fail "the service answered an unsigned copy" || pass "the service refuses a copy without the macOSLAPS signature"
+rm -f /tmp/laps-unsigned
+asuser "$LAPS" -rotateNow >/dev/null 2>&1 && [ -n "$(jget "$("$LAPS" -status)" rotatesAt)" ] \
+    && python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["rotatesAt"]); assert (r-D.datetime.now(r.tzinfo)).total_seconds() <= 1, d' "$("$LAPS" -status)" \
+    && pass "-rotateNow as a standard user ends the grace period" || fail "-rotateNow through the service"
+"$LAPS" >/dev/null 2>&1
+dscl . -authonly "$ACCT" "$PW" >/dev/null 2>&1 && fail "the revealed password still works after rotate now" || pass "rotate now: the next run rotated"
+defaults write "$DOMAIN" RetrievalMode -string escrow
+# A request file with no deadline does nothing; with one it ends the grace period.
+asuser touch "$REQ/rotate-now"; sleep 6
+[ -z "$(ls -A "$REQ")" ] && [ -z "$(jget "$("$LAPS" -status)" rotatesAt)" ] && pass "request file without a deadline: removed, nothing changed" || fail "request file without a deadline: $(ls -A "$REQ") / $("$LAPS" -status)"
+"$LAPS" -expireIn 2h >/dev/null 2>&1
+asuser touch "$REQ/rotate-now"; sleep 6
+BEFORE=$(get_pw)
+"$LAPS" >/dev/null 2>&1
+AFTER=$(get_pw)
+[ "$AFTER" != "$BEFORE" ] && [ -z "$(jget "$("$LAPS" -status)" rotatesAt)" ] && pass "request file during a grace period: rotated" || fail "request file with a deadline"
+# The check run waits for a deadline that comes before its next scheduled run.
+"$LAPS" -expireIn 15s >/dev/null 2>&1
+BEFORE=$(get_pw); START=$(date +%s)
+"$LAPS" >/dev/null 2>&1
+TOOK=$(( $(date +%s) - START )); AFTER=$(get_pw)
+[ "$TOOK" -ge 13 ] && [ "$TOOK" -le 90 ] && [ "$AFTER" != "$BEFORE" ] && dscl . -authonly "$ACCT" "$AFTER" >/dev/null 2>&1 \
+    && pass "the check run waited ${TOOK}s for the deadline and rotated" || fail "deadline timer (took ${TOOK}s)"
+sysadminctl -deleteUser "$STD" >/dev/null 2>&1
+echo "::endgroup::"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### -------------------------- ###
 ### | Admin group protection | ###
 ### -------------------------- ###
@@ -781,6 +839,8 @@ cp "$APP/Contents/Resources/uninstall.sh" /tmp/laps-uninstall.sh
 [ ! -e "$APP" ] && [ ! -e "$LAPS" ] && [ ! -L "$LAPS" ] && [ ! -e /etc/paths.d/laps ] && [ ! -e "$PLIST" ] \
     && pass "app, symlink, paths.d and LaunchDaemon removed" || fail "files left after -uninstall: $(ls -d "$APP" "$LAPS" /etc/paths.d/laps "$PLIST" 2>/dev/null | tr '\n' ' ')"
 launchctl print system/$LABEL >/dev/null 2>&1 && fail "LaunchDaemon still loaded after -uninstall" || pass "LaunchDaemon unloaded"
+launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && fail "service still loaded after -uninstall" || pass "service unloaded"
+[ ! -e /Library/LaunchDaemons/com.joshua-d-miller.macoslaps-service.plist ] && [ ! -e "$REQ" ] && pass "service plist and request folder removed" || fail "service files left after -uninstall"
 [ -z "$(pkgutil --pkgs | grep -i laps)" ] && pass "receipts forgotten" || fail "receipts left: $(pkgutil --pkgs | grep -i laps | tr '\n' ' ')"
 security find-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1 && pass "stored password kept without -purge" || fail "-uninstall deleted the stored password"
 dscl . -authonly "$ACCT" "$KEPT" >/dev/null 2>&1 && pass "account untouched by -uninstall" || fail "account changed by -uninstall"

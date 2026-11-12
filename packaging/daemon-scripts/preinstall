@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Richard Purves, Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      LaunchDaemon package preinstall: unloads and removes the existing
@@ -20,16 +20,16 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    Removes both the old edu.psu.macoslaps-check
-                        claude    and the new
-                                  com.joshua-d-miller.macoslaps-check daemon.
+ 4.0.0     2026-11-12   joshua    Removes the old edu.psu.macoslaps-check and
+                        claude    the new check and service daemons before
+                                  installing.
 
                                   New header and section style.
 ===============================================================================
 HEADER
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
 removed=0
-for label in com.joshua-d-miller.macoslaps-check edu.psu.macoslaps-check; do
+for label in com.joshua-d-miller.macoslaps-check com.joshua-d-miller.macoslaps-service edu.psu.macoslaps-check; do
     plist="/Library/LaunchDaemons/$label.plist"
     /bin/launchctl bootout "system/$label" 2>/dev/null && removed=1
     if [ -f "$plist" ]; then

@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Richard Purves, Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      LaunchDaemon package postinstall: forgets the receipt from 3.x /
@@ -20,20 +20,28 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New label
+ 4.0.0     2026-11-12   joshua    New label
                         claude    com.joshua-d-miller.macoslaps-check;
                                   RunAtLoad instead of kickstart -k (which
-                                  could stop a run in progress).
+                                  could stop a run in progress); loads the
+                                  service daemon and makes its request folder.
 
                                   New header and section style.
 ===============================================================================
 HEADER
-LAPS_DAEMON="/Library/LaunchDaemons/com.joshua-d-miller.macoslaps-check.plist"
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
 
 /usr/sbin/pkgutil --forget edu.psu.macOSLAPS-check >/dev/null 2>&1
-/bin/chmod 644 "$LAPS_DAEMON"
-/usr/sbin/chown root:wheel "$LAPS_DAEMON"
-/bin/launchctl bootout system/com.joshua-d-miller.macoslaps-check 2>/dev/null
-/bin/launchctl bootstrap system "$LAPS_DAEMON"
+REQUESTS="/Library/Application Support/macOSLAPS/Requests"
+/bin/mkdir -p "$REQUESTS"
+/usr/sbin/chown root:wheel "$REQUESTS"
+/bin/chmod 1733 "$REQUESTS"
+# The service first (on demand only), then the check daemon (RunAtLoad starts a run).
+for label in com.joshua-d-miller.macoslaps-service com.joshua-d-miller.macoslaps-check; do
+    plist="/Library/LaunchDaemons/$label.plist"
+    /bin/chmod 644 "$plist"
+    /usr/sbin/chown root:wheel "$plist"
+    /bin/launchctl bootout "system/$label" 2>/dev/null
+    /bin/launchctl bootstrap system "$plist"
+done
 exit 0

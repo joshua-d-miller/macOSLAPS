@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Removes macOSLAPS: the app, the /usr/local/laps symlink, the
@@ -28,9 +28,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file.
-                        claude
-                                  New header and section style.
+ 4.0.0     2026-11-12   joshua    New file. Also removes the service daemon
+                        claude    and its request folder.
 ===============================================================================
 HEADER
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
@@ -55,7 +54,7 @@ say() { echo "macOSLAPS uninstall: $*"; }
 ### ------------------------------- ###
 ### | LaunchDaemon, app and files | ###
 ### ------------------------------- ###
-for label in com.joshua-d-miller.macoslaps-check edu.psu.macoslaps-check; do
+for label in com.joshua-d-miller.macoslaps-check com.joshua-d-miller.macoslaps-service edu.psu.macoslaps-check; do
     /bin/launchctl bootout "system/$label" 2>/dev/null && say "stopped $label"
     plist="/Library/LaunchDaemons/$label.plist"
     [ -e "$plist" ] && /bin/rm -f "$plist" && say "removed $plist"
@@ -71,6 +70,8 @@ if [ -d /Applications/macOSLAPS.app ]; then
     /bin/rm -rf /Applications/macOSLAPS.app && say "removed /Applications/macOSLAPS.app"
 fi
 /bin/rm -f /var/run/macOSLAPS.lock
+[ -d "/Library/Application Support/macOSLAPS/Requests" ] && /bin/rm -rf "/Library/Application Support/macOSLAPS/Requests" && say "removed the request folder"
+/bin/rmdir "/Library/Application Support/macOSLAPS" 2>/dev/null
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------ ###

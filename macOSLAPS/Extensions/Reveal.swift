@@ -10,11 +10,11 @@
  Purpose:
      Device mode (RetrievalMode device): the MDM gets a reveal code
      instead of the password, so the password never leaves the Mac.
-     Someone with the code reveals the password on the Mac (macOSLAPS
-     -reveal, or the app) to elevate; the same code works again until the
+     Someone with the code reveals the password on the Mac (the app, or
+     macOSLAPS -reveal) to elevate; the same code works again until the
      rotation. After RevealGracePeriod the admin is logged out (if it has
-     a session) and the password rotates with a new code. -expireIn sets
-     the same deadline in escrow mode.
+     a session) and the password rotates with a new code, exactly at the
+     deadline. -expireIn sets the same deadline in escrow mode.
 
  Settings:
      RetrievalMode      escrow (default) | device
@@ -23,8 +23,8 @@
      ADRevealCode       device mode with AD: write the code to AD (false)
 
  Used by:
-     main.swift (-reveal, -expireIn, the rotation run), Escrow.swift,
-     ADPasswordTools.swift, Reporting.swift (-status, RunState)
+     main.swift (-reveal, -expireIn, the rotation run), Service.swift,
+     Escrow.swift, ADPasswordTools.swift, Reporting.swift (-status, RunState)
 ===============================================================================
  CHANGELOG
 ===============================================================================
@@ -33,7 +33,10 @@
  4.0.0     2026-11-12   joshua    New file. A code reveals the password until
                         claude    the next rotation (Joshua: re-elevating
                                   during the grace period needs no new code);
-                                  the rotation issues a new one.
+                                  the rotation issues a new one. The check run
+                                  waits for a near deadline so the rotation
+                                  happens on time; -reason records why a
+                                  password was revealed.
 ===============================================================================
 */
 
@@ -122,9 +125,9 @@ enum Reveal {
 // | Deadline | //
 // ------------ //
 // After a reveal (or -expireIn) the password works until rotatesAt. The     //
-// next run after that logs the admin out (RevealAction rotateAndLogout) and //
-// rotates; a rotation clears the deadline and, in device mode, issues a new //
-// code.                                                                     //
+// check run waits for a deadline that comes before its next scheduled run,  //
+// then logs the admin out (RevealAction rotateAndLogout) and rotates; a     //
+// rotation clears the deadline and, in device mode, issues a new code.      //
     static var rotatesAt : Date? { RunState.value("rotatesAt").flatMap(RunState.iso.date(from:)) }
     static var deadlinePassed : Bool { rotatesAt.map { $0 <= Date() } ?? false }
 
@@ -134,6 +137,26 @@ enum Reveal {
         laps_log.print("The password for \(Constants.local_admin) was due to change at \(RunState.value("rotatesAt") ?? "?"). Rotating now.", .info)
         if action == "rotateAndLogout" { logOutManagedAdmin() }
         Constants.pw_reset = true
+    }
+
+    /// The check run, when not due: if the deadline falls before the next scheduled run,
+    /// stay, sleep until it (rechecking the wall clock, so sleep and wake are fine), then
+    /// start over as a fresh run, which rotates. Releases the run lock while waiting.
+    static func waitForDeadlineIfSoon(window: TimeInterval = 95 * 60) {
+        guard let first = rotatesAt, first > Date(), first.timeIntervalSinceNow < window else { return }
+        laps_log.print("Waiting until \(Constants.dateFormatter.string(from: first)) to change the password for \(Constants.local_admin).", .info)
+        RunLock.release()
+        while true {
+            guard let deadline = rotatesAt else { return }   // rotated by another run
+            let left = deadline.timeIntervalSinceNow
+            if left <= 0 { break }
+            Thread.sleep(forTimeInterval: min(30, left))
+        }
+        let path = AppBundle.launchPath ?? CommandLine.arguments[0]
+        var argv : [UnsafeMutablePointer<CChar>?] = CommandLine.arguments.map { strdup($0) }
+        argv.append(nil)
+        execv(path, argv)
+        laps_log.print("Could not restart macOSLAPS at the deadline (errno \(errno)); the next run rotates.", .error)
     }
 
     /// After every successful rotation (RunState.record("rotated")).
@@ -206,8 +229,7 @@ enum Reveal {
             let deadline = Date().addingTimeInterval(TimeInterval(graceHours) * 3600)
             until = rotatesAt.map { min($0, deadline) } ?? deadline   // a second reveal never extends it
         }
-        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal",
-                                      "revealFailures": 0]
+        var values : [String: Any] = ["revealedAt": RunState.iso.string(from: Date()), "rotateReason": "reveal"]
         if let u = until { values["rotatesAt"] = RunState.iso.string(from: u) }
         RunState.set(values)
         appendHistory("revealed \(who)")
@@ -230,11 +252,14 @@ enum Reveal {
 
     static func runCommand(code: String) -> Never {
         RunLock.acquire()
-        switch perform(code: code, who: "\(consoleUser()) (command line)") {
+        let reason = argumentValue(after: "-reason") ?? ""
+        switch perform(code: code, who: "\(consoleUser()) (command line)" + (reason.isEmpty ? "" : " (reason: \(reason.prefix(200)))")) {
         case .failure(let failure):
             laps_log.print(failure.description, .error)
             exit(1)
         case .success(let result):
+            RunLock.release()
+            Service.kickCheck()   // arms the deadline timer when the deadline is near
             print("Local Admin Account: \(Constants.local_admin)")
             print("Password: \(result.password)")
             if let until = result.worksUntil {
@@ -281,6 +306,7 @@ enum Reveal {
         RunState.set(["rotatesAt": RunState.iso.string(from: deadline), "rotateReason": "expireIn"])
         laps_log.print("The password for \(Constants.local_admin) changes at \(Constants.dateFormatter.string(from: deadline)) or on the first run after it.", .info)
         print("The password for \(Constants.local_admin) changes at \(Constants.dateFormatter.string(from: deadline)).")
+        Service.kickCheck()
         exit(0)
     }
 

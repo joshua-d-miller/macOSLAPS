@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      Builds the three macOSLAPS installer packages:
@@ -34,9 +34,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    Builds from the app bundle; new receipts and
+ 4.0.0     2026-11-12   joshua    Builds from the app bundle; new receipts and
                         claude    label; app not relocatable; paths.d points
-                                  into the app.
+                                  into the app; the service daemon and its
+                                  request folder.
 
                                   New header and section style.
 ===============================================================================
@@ -90,13 +91,20 @@ pkgbuild --root "$root" --component-plist "$WORK/components.plist" --identifier 
 ### --------------------------- ###
 ### | Component: LaunchDaemon | ###
 ### --------------------------- ###
-### The daemon plist and its install scripts.                               ###
+### The check and service daemons, the request folder and the install      ###
+### scripts.                                                                ###
 root="$WORK/root-daemon"
 mkdir -p "$root/Library/LaunchDaemons"
-DAEMON=com.joshua-d-miller.macoslaps-check.plist
-cp "$REPO/LaunchDaemon/$DAEMON" "$root/Library/LaunchDaemons/"
-chmod 644 "$root/Library/LaunchDaemons/$DAEMON"
-plutil -lint "$root/Library/LaunchDaemons/$DAEMON" >&2
+for DAEMON in com.joshua-d-miller.macoslaps-check.plist com.joshua-d-miller.macoslaps-service.plist; do
+    cp "$REPO/LaunchDaemon/$DAEMON" "$root/Library/LaunchDaemons/"
+    chmod 644 "$root/Library/LaunchDaemons/$DAEMON"
+    plutil -lint "$root/Library/LaunchDaemons/$DAEMON" >&2
+done
+# The service's request folder: users may drop a file (rotate now) but not list or
+# delete others' files (1733, like /tmp without listing).
+mkdir -p "$root/Library/Application Support/macOSLAPS/Requests"
+chmod 755 "$root/Library/Application Support/macOSLAPS"
+chmod 1733 "$root/Library/Application Support/macOSLAPS/Requests"
 chmod 755 "$HERE/app-scripts/postinstall" "$HERE/daemon-scripts/preinstall" "$HERE/daemon-scripts/postinstall"
 pkgbuild --root "$root" --identifier com.joshua-d-miller.macoslaps-check --version "$VERSION" \
     --scripts "$HERE/daemon-scripts" --install-location / --ownership recommended \
