@@ -1,0 +1,283 @@
+{
+  "title": "macOSLAPS (com.joshua-d-miller.macoslaps)",
+  "description": "macOSLAPS 4.x settings. Upload as a Jamf Pro Application & Custom Settings schema for the preference domain com.joshua-d-miller.macoslaps. Unset keys use the built-in defaults.",
+  "properties": {
+    "LocalAdminAccount": {
+      "title": "Local admin account",
+      "description": "Short name of the local admin account macOSLAPS manages.",
+      "property_order": 5,
+      "type": "string",
+      "default": "admin"
+    },
+    "Method": {
+      "title": "Method",
+      "description": "Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.",
+      "property_order": 10,
+      "type": "string",
+      "default": "AD",
+      "enum": [
+        "Local",
+        "AD"
+      ]
+    },
+    "DaysTillExpiration": {
+      "title": "Days until expiration",
+      "description": "Days between rotations.",
+      "property_order": 15,
+      "type": "integer",
+      "default": 60,
+      "minimum": 1
+    },
+    "FirstPass": {
+      "title": "First password",
+      "description": "The account's current password, used once for the first rotation (needed for an account with a secureToken). Never printed by -showConfig.",
+      "property_order": 20,
+      "type": "string",
+      "options": {
+        "inputAttributes": {
+          "type": "password"
+        }
+      }
+    },
+    "ADSchema": {
+      "title": "Active Directory schema",
+      "description": "legacy: ms-Mcs-AdmPwd. windowsLAPS: msLAPS-Password (ADUC LAPS tab, Get-LapsADPassword). both: write both. windowsLAPS and both are experimental.",
+      "property_order": 25,
+      "type": "string",
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "windowsLAPS",
+        "both"
+      ]
+    },
+    "PreferredDC": {
+      "title": "Preferred domain controller",
+      "description": "Domain controller to use with Method AD.",
+      "property_order": 30,
+      "type": "string",
+      "default": ""
+    },
+    "PasswordStyle": {
+      "title": "Password style",
+      "description": "random, or readable (letters and digits without look-alikes, grouped by 4, for reading over the phone). passphrase falls back to readable for now.",
+      "property_order": 35,
+      "type": "string",
+      "default": "random",
+      "enum": [
+        "random",
+        "readable",
+        "passphrase"
+      ]
+    },
+    "PasswordLength": {
+      "title": "Password length",
+      "description": "Generated characters. Separators are extra.",
+      "property_order": 40,
+      "type": "integer",
+      "default": 12,
+      "minimum": 1
+    },
+    "PasswordGrouping": {
+      "title": "Group size",
+      "description": "Insert a separator every N characters (0: none).",
+      "property_order": 45,
+      "type": "integer",
+      "default": 0,
+      "minimum": 0
+    },
+    "PasswordSeparator": {
+      "title": "Group separator",
+      "description": "Character between groups.",
+      "property_order": 50,
+      "type": "string",
+      "default": "-"
+    },
+    "RemovePassChars": {
+      "title": "Characters to exclude",
+      "description": "Characters never used in a password.",
+      "property_order": 55,
+      "type": "string",
+      "default": "'"
+    },
+    "ExclusionSets": {
+      "title": "Excluded character sets",
+      "description": "Whole sets never used in a password.",
+      "property_order": 60,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "symbols",
+          "letters",
+          "numbers"
+        ]
+      },
+      "default": []
+    },
+    "PasswordRequirements": {
+      "title": "Minimum characters of each kind",
+      "description": "Every password has at least this many of each kind.",
+      "property_order": 65,
+      "type": "object",
+      "default": {
+        "Lowercase": 0,
+        "Uppercase": 0,
+        "Number": 0,
+        "Symbol": 0
+      },
+      "properties": {
+        "Lowercase": {
+          "type": "integer",
+          "title": "Lowercase",
+          "minimum": 0,
+          "default": 0
+        },
+        "Uppercase": {
+          "type": "integer",
+          "title": "Uppercase",
+          "minimum": 0,
+          "default": 0
+        },
+        "Number": {
+          "type": "integer",
+          "title": "Number",
+          "minimum": 0,
+          "default": 0
+        },
+        "Symbol": {
+          "type": "integer",
+          "title": "Symbol",
+          "minimum": 0,
+          "default": 0
+        }
+      }
+    },
+    "RemoveKeychain": {
+      "title": "Remove the admin's login keychain",
+      "description": "Delete the admin's login keychain after a rotation, since it would still use the old password.",
+      "property_order": 70,
+      "type": "boolean",
+      "default": true
+    },
+    "EscrowCertificates": {
+      "title": "Escrow certificates",
+      "description": "RSA certificates (PEM text or base64 DER, one per item). -escrow encrypts its output to them with CMS (AES-256). If set but none is usable, -escrow prints no password.",
+      "property_order": 75,
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "StagedRotation": {
+      "title": "Staged rotation",
+      "description": "auto: stage the next password when -escrow ran on this Mac in the last 14 days. on: always. off: rotate immediately.",
+      "property_order": 80,
+      "type": "string",
+      "default": "auto",
+      "enum": [
+        "auto",
+        "on",
+        "off"
+      ]
+    },
+    "EscrowConfirmations": {
+      "title": "Exports before a staged password is used",
+      "description": "-escrow exports needed before a staged password is applied.",
+      "property_order": 85,
+      "type": "integer",
+      "default": 2,
+      "minimum": 1
+    },
+    "InventoryHook": {
+      "title": "Inventory hook",
+      "description": "jamf runs jamf recon after a rotation; custom runs InventoryHookCommand.",
+      "property_order": 90,
+      "type": "string",
+      "default": "",
+      "enum": [
+        "",
+        "jamf",
+        "custom"
+      ]
+    },
+    "InventoryHookCommand": {
+      "title": "Custom inventory command",
+      "description": "The program and its arguments, one per item.",
+      "property_order": 95,
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "InventoryHookConfirms": {
+      "title": "Custom hook confirms collection",
+      "description": "True if the custom command collects inventory, so it confirms a staged password.",
+      "property_order": 100,
+      "type": "boolean",
+      "default": false
+    },
+    "ApprovedAdmins": {
+      "title": "Approved admins",
+      "description": "Accounts allowed to stay in the admin group besides the managed admin and root: short names, or group:<name> for a group's members.",
+      "property_order": 105,
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "AdminGroupPolicy": {
+      "title": "Admin group policy",
+      "description": "auto: remove unapproved admins unless an elevation tool is installed (then report only). report: only list them. enforce: remove them even with an elevation tool.",
+      "property_order": 110,
+      "type": "string",
+      "default": "auto",
+      "enum": [
+        "auto",
+        "report",
+        "enforce"
+      ]
+    },
+    "RetrievalMode": {
+      "title": "Retrieval mode",
+      "description": "escrow: the MDM collects the password (-escrow). device: the MDM collects a reveal code and the password is revealed on the Mac.",
+      "property_order": 115,
+      "type": "string",
+      "default": "escrow",
+      "enum": [
+        "escrow",
+        "device"
+      ]
+    },
+    "RevealGracePeriod": {
+      "title": "Grace period after a reveal (hours)",
+      "description": "Device mode: hours the revealed password keeps working before it rotates (0: no rotation after a reveal).",
+      "property_order": 120,
+      "type": "integer",
+      "default": 4,
+      "minimum": 0,
+      "maximum": 24
+    },
+    "RevealAction": {
+      "title": "At the end of the grace period",
+      "description": "rotateAndLogout logs the admin out first if it has a session; rotate only rotates.",
+      "property_order": 125,
+      "type": "string",
+      "default": "rotateAndLogout",
+      "enum": [
+        "rotateAndLogout",
+        "rotate"
+      ]
+    },
+    "ADRevealCode": {
+      "title": "Write the reveal code to AD",
+      "description": "Device mode with Method AD: store the reveal code in Active Directory instead of the password.",
+      "property_order": 130,
+      "type": "boolean",
+      "default": false
+    }
+  }
+}

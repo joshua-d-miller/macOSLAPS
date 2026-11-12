@@ -54,6 +54,29 @@ jobs:
           done
       - name: Header and comment style
         run: bash .github/scripts/check-style.sh
+      - name: Every setting is in the profile manifests and the example
+        run: |
+          plutil -lint "Profile Manifests"/*.plist
+          python3 - <<'PY'
+          import json, plistlib, re
+          src = open("macOSLAPS/Preferences/Preferences.swift").read()
+          start = src.index("var defaultpreferences")
+          keys = set(re.findall(r'^    "(\w+)"\s*:', src[start:src.index("\n    ]\n", start)], re.M))
+          files = {
+              "Profile Manifests/com.joshua-d-miller.macoslaps.json":
+                  set(json.load(open("Profile Manifests/com.joshua-d-miller.macoslaps.json"))["properties"]),
+              "Profile Manifests/com.joshua-d-miller.macoslaps.plist":
+                  {k["pfm_name"] for k in plistlib.load(open("Profile Manifests/com.joshua-d-miller.macoslaps.plist", "rb"))["pfm_subkeys"]},
+              "PLIST Example/com.joshua-d-miller.macoslaps.plist":
+                  set(plistlib.load(open("PLIST Example/com.joshua-d-miller.macoslaps.plist", "rb"))),
+          }
+          bad = 0
+          for path, have in files.items():
+              for k in sorted(keys - have):
+                  print(f"::error file={path}::missing setting {k}"); bad += 1
+          print(f"{len(keys)} settings checked in {len(files)} files")
+          raise SystemExit(1 if bad else 0)
+          PY
       - name: Penn State names only where still needed
         run: bash .github/scripts/check-legacy-names.sh
       - name: Every app string is in Localizable.strings

@@ -3,7 +3,9 @@
 <!--
   macOSLAPS 4.0 example settings. Deliver as a configuration profile with
   PayloadType com.joshua-d-miller.macoslaps (edu.psu.macoslaps still works in 4.x).
-  Every key is optional; unset keys use the defaults shown.
+  Every key is optional. The values below are examples, not the built-in
+  defaults; "Profile Manifests/" in the repository lists every key with its
+  default.
   Run "sudo macOSLAPS -showConfig" to see what a Mac actually uses.
 -->
 <plist version="1.0">
@@ -70,5 +72,23 @@
 	<array/>                          <!-- e.g. /usr/local/bin/some-agent, refresh -->
 	<key>InventoryHookConfirms</key>
 	<false/>                          <!-- custom hook: true if it collects inventory (confirms staged passwords) -->
+
+	<!-- Admin group protection: only the managed admin, root and these may stay admin -->
+	<key>ApprovedAdmins</key>
+	<array>
+		<string>group:helpdesk</string>  <!-- short names, or group:<name> -->
+	</array>
+	<key>AdminGroupPolicy</key>
+	<string>auto</string>             <!-- auto, report or enforce -->
+
+	<!-- Device mode: the MDM gets a reveal code; the password is revealed on the Mac -->
+	<key>RetrievalMode</key>
+	<string>escrow</string>           <!-- escrow or device -->
+	<key>RevealGracePeriod</key>
+	<integer>4</integer>              <!-- hours the password works after a reveal, 0-24 -->
+	<key>RevealAction</key>
+	<string>rotateAndLogout</string>  <!-- rotateAndLogout or rotate -->
+	<key>ADRevealCode</key>
+	<false/>                          <!-- Method AD in device mode: write the code to AD -->
 </dict>
 </plist>

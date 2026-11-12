@@ -1,0 +1,594 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>pfm_domain</key>
+	<string>com.joshua-d-miller.macoslaps</string>
+	<key>pfm_title</key>
+	<string>macOSLAPS</string>
+	<key>pfm_description</key>
+	<string>Local admin password rotation for macOS (macOSLAPS 4.x).</string>
+	<key>pfm_documentation_url</key>
+	<string>https://github.com/joshua-d-miller/macOSLAPS</string>
+	<key>pfm_format_version</key>
+	<integer>1</integer>
+	<key>pfm_version</key>
+	<integer>1</integer>
+	<key>pfm_platforms</key>
+	<array>
+		<string>macOS</string>
+	</array>
+	<key>pfm_macos_min</key>
+	<string>13.0</string>
+	<key>pfm_last_modified</key>
+	<date>2026-11-12T00:00:00Z</date>
+	<key>pfm_targets</key>
+	<array>
+		<string>system</string>
+	</array>
+	<key>pfm_unique</key>
+	<true/>
+	<key>pfm_subkeys</key>
+	<array>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadDescription</string>
+			<key>pfm_title</key>
+			<string>Payload Description</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_default</key>
+			<string>Settings for macOSLAPS.</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadDisplayName</string>
+			<key>pfm_title</key>
+			<string>Payload Display Name</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_default</key>
+			<string>macOSLAPS</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadIdentifier</string>
+			<key>pfm_title</key>
+			<string>Payload Identifier</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_default</key>
+			<string>com.joshua-d-miller.macoslaps</string>
+			<key>pfm_require</key>
+			<string>always</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadType</string>
+			<key>pfm_title</key>
+			<string>Payload Type</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_default</key>
+			<string>com.joshua-d-miller.macoslaps</string>
+			<key>pfm_require</key>
+			<string>always</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadUUID</string>
+			<key>pfm_title</key>
+			<string>Payload UUID</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_require</key>
+			<string>always</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadVersion</string>
+			<key>pfm_title</key>
+			<string>Payload Version</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_description</key>
+			<string></string>
+			<key>pfm_default</key>
+			<integer>1</integer>
+			<key>pfm_require</key>
+			<string>always</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PayloadOrganization</string>
+			<key>pfm_title</key>
+			<string>Payload Organization</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_description</key>
+			<string></string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>LocalAdminAccount</string>
+			<key>pfm_title</key>
+			<string>Local admin account</string>
+			<key>pfm_description</key>
+			<string>Short name of the local admin account macOSLAPS manages.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>admin</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>Method</string>
+			<key>pfm_title</key>
+			<string>Method</string>
+			<key>pfm_description</key>
+			<string>Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>AD</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>Local</string>
+				<string>AD</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>DaysTillExpiration</string>
+			<key>pfm_title</key>
+			<string>Days until expiration</string>
+			<key>pfm_description</key>
+			<string>Days between rotations.</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_default</key>
+			<integer>60</integer>
+			<key>pfm_range_min</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>FirstPass</string>
+			<key>pfm_title</key>
+			<string>First password</string>
+			<key>pfm_description</key>
+			<string>The account's current password, used once for the first rotation (needed for an account with a secureToken). Never printed by -showConfig.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_sensitive</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>ADSchema</string>
+			<key>pfm_title</key>
+			<string>Active Directory schema</string>
+			<key>pfm_description</key>
+			<string>legacy: ms-Mcs-AdmPwd. windowsLAPS: msLAPS-Password (ADUC LAPS tab, Get-LapsADPassword). both: write both. windowsLAPS and both are experimental.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>legacy</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>legacy</string>
+				<string>windowsLAPS</string>
+				<string>both</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PreferredDC</string>
+			<key>pfm_title</key>
+			<string>Preferred domain controller</string>
+			<key>pfm_description</key>
+			<string>Domain controller to use with Method AD.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string></string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PasswordStyle</string>
+			<key>pfm_title</key>
+			<string>Password style</string>
+			<key>pfm_description</key>
+			<string>random, or readable (letters and digits without look-alikes, grouped by 4, for reading over the phone). passphrase falls back to readable for now.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>random</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>random</string>
+				<string>readable</string>
+				<string>passphrase</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PasswordLength</string>
+			<key>pfm_title</key>
+			<string>Password length</string>
+			<key>pfm_description</key>
+			<string>Generated characters. Separators are extra.</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_default</key>
+			<integer>12</integer>
+			<key>pfm_range_min</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PasswordGrouping</string>
+			<key>pfm_title</key>
+			<string>Group size</string>
+			<key>pfm_description</key>
+			<string>Insert a separator every N characters (0: none).</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_default</key>
+			<integer>0</integer>
+			<key>pfm_range_min</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PasswordSeparator</string>
+			<key>pfm_title</key>
+			<string>Group separator</string>
+			<key>pfm_description</key>
+			<string>Character between groups.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>-</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>RemovePassChars</string>
+			<key>pfm_title</key>
+			<string>Characters to exclude</string>
+			<key>pfm_description</key>
+			<string>Characters never used in a password.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>'</string>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>ExclusionSets</string>
+			<key>pfm_title</key>
+			<string>Excluded character sets</string>
+			<key>pfm_description</key>
+			<string>Whole sets never used in a password.</string>
+			<key>pfm_type</key>
+			<string>array</string>
+			<key>pfm_default</key>
+			<array/>
+			<key>pfm_subkeys</key>
+			<array>
+				<dict>
+					<key>pfm_type</key>
+					<string>string</string>
+					<key>pfm_title</key>
+					<string>Excluded character sets</string>
+					<key>pfm_range_list</key>
+					<array>
+						<string>symbols</string>
+						<string>letters</string>
+						<string>numbers</string>
+					</array>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>PasswordRequirements</string>
+			<key>pfm_title</key>
+			<string>Minimum characters of each kind</string>
+			<key>pfm_description</key>
+			<string>Every password has at least this many of each kind.</string>
+			<key>pfm_type</key>
+			<string>dictionary</string>
+			<key>pfm_default</key>
+			<dict>
+				<key>Lowercase</key>
+				<integer>0</integer>
+				<key>Uppercase</key>
+				<integer>0</integer>
+				<key>Number</key>
+				<integer>0</integer>
+				<key>Symbol</key>
+				<integer>0</integer>
+			</dict>
+			<key>pfm_subkeys</key>
+			<array>
+				<dict>
+					<key>pfm_name</key>
+					<string>Lowercase</string>
+					<key>pfm_title</key>
+					<string>Lowercase</string>
+					<key>pfm_type</key>
+					<string>integer</string>
+					<key>pfm_range_min</key>
+					<integer>0</integer>
+					<key>pfm_default</key>
+					<integer>0</integer>
+				</dict>
+				<dict>
+					<key>pfm_name</key>
+					<string>Uppercase</string>
+					<key>pfm_title</key>
+					<string>Uppercase</string>
+					<key>pfm_type</key>
+					<string>integer</string>
+					<key>pfm_range_min</key>
+					<integer>0</integer>
+					<key>pfm_default</key>
+					<integer>0</integer>
+				</dict>
+				<dict>
+					<key>pfm_name</key>
+					<string>Number</string>
+					<key>pfm_title</key>
+					<string>Number</string>
+					<key>pfm_type</key>
+					<string>integer</string>
+					<key>pfm_range_min</key>
+					<integer>0</integer>
+					<key>pfm_default</key>
+					<integer>0</integer>
+				</dict>
+				<dict>
+					<key>pfm_name</key>
+					<string>Symbol</string>
+					<key>pfm_title</key>
+					<string>Symbol</string>
+					<key>pfm_type</key>
+					<string>integer</string>
+					<key>pfm_range_min</key>
+					<integer>0</integer>
+					<key>pfm_default</key>
+					<integer>0</integer>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>RemoveKeychain</string>
+			<key>pfm_title</key>
+			<string>Remove the admin's login keychain</string>
+			<key>pfm_description</key>
+			<string>Delete the admin's login keychain after a rotation, since it would still use the old password.</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+			<key>pfm_default</key>
+			<true/>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>EscrowCertificates</string>
+			<key>pfm_title</key>
+			<string>Escrow certificates</string>
+			<key>pfm_description</key>
+			<string>RSA certificates (PEM text or base64 DER, one per item). -escrow encrypts its output to them with CMS (AES-256). If set but none is usable, -escrow prints no password.</string>
+			<key>pfm_type</key>
+			<string>array</string>
+			<key>pfm_default</key>
+			<array/>
+			<key>pfm_subkeys</key>
+			<array>
+				<dict>
+					<key>pfm_type</key>
+					<string>string</string>
+					<key>pfm_title</key>
+					<string>Escrow certificates</string>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>StagedRotation</string>
+			<key>pfm_title</key>
+			<string>Staged rotation</string>
+			<key>pfm_description</key>
+			<string>auto: stage the next password when -escrow ran on this Mac in the last 14 days. on: always. off: rotate immediately.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>auto</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>auto</string>
+				<string>on</string>
+				<string>off</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>EscrowConfirmations</string>
+			<key>pfm_title</key>
+			<string>Exports before a staged password is used</string>
+			<key>pfm_description</key>
+			<string>-escrow exports needed before a staged password is applied.</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_default</key>
+			<integer>2</integer>
+			<key>pfm_range_min</key>
+			<integer>1</integer>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>InventoryHook</string>
+			<key>pfm_title</key>
+			<string>Inventory hook</string>
+			<key>pfm_description</key>
+			<string>jamf runs jamf recon after a rotation; custom runs InventoryHookCommand.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string></string>
+			<key>pfm_range_list</key>
+			<array>
+				<string></string>
+				<string>jamf</string>
+				<string>custom</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>InventoryHookCommand</string>
+			<key>pfm_title</key>
+			<string>Custom inventory command</string>
+			<key>pfm_description</key>
+			<string>The program and its arguments, one per item.</string>
+			<key>pfm_type</key>
+			<string>array</string>
+			<key>pfm_default</key>
+			<array/>
+			<key>pfm_subkeys</key>
+			<array>
+				<dict>
+					<key>pfm_type</key>
+					<string>string</string>
+					<key>pfm_title</key>
+					<string>Custom inventory command</string>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>InventoryHookConfirms</string>
+			<key>pfm_title</key>
+			<string>Custom hook confirms collection</string>
+			<key>pfm_description</key>
+			<string>True if the custom command collects inventory, so it confirms a staged password.</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+			<key>pfm_default</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>ApprovedAdmins</string>
+			<key>pfm_title</key>
+			<string>Approved admins</string>
+			<key>pfm_description</key>
+			<string>Accounts allowed to stay in the admin group besides the managed admin and root: short names, or group:&lt;name&gt; for a group's members.</string>
+			<key>pfm_type</key>
+			<string>array</string>
+			<key>pfm_default</key>
+			<array/>
+			<key>pfm_subkeys</key>
+			<array>
+				<dict>
+					<key>pfm_type</key>
+					<string>string</string>
+					<key>pfm_title</key>
+					<string>Approved admins</string>
+				</dict>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>AdminGroupPolicy</string>
+			<key>pfm_title</key>
+			<string>Admin group policy</string>
+			<key>pfm_description</key>
+			<string>auto: remove unapproved admins unless an elevation tool is installed (then report only). report: only list them. enforce: remove them even with an elevation tool.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>auto</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>auto</string>
+				<string>report</string>
+				<string>enforce</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>RetrievalMode</string>
+			<key>pfm_title</key>
+			<string>Retrieval mode</string>
+			<key>pfm_description</key>
+			<string>escrow: the MDM collects the password (-escrow). device: the MDM collects a reveal code and the password is revealed on the Mac.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>escrow</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>escrow</string>
+				<string>device</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>RevealGracePeriod</string>
+			<key>pfm_title</key>
+			<string>Grace period after a reveal (hours)</string>
+			<key>pfm_description</key>
+			<string>Device mode: hours the revealed password keeps working before it rotates (0: no rotation after a reveal).</string>
+			<key>pfm_type</key>
+			<string>integer</string>
+			<key>pfm_default</key>
+			<integer>4</integer>
+			<key>pfm_range_min</key>
+			<integer>0</integer>
+			<key>pfm_range_max</key>
+			<integer>24</integer>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>RevealAction</string>
+			<key>pfm_title</key>
+			<string>At the end of the grace period</string>
+			<key>pfm_description</key>
+			<string>rotateAndLogout logs the admin out first if it has a session; rotate only rotates.</string>
+			<key>pfm_type</key>
+			<string>string</string>
+			<key>pfm_default</key>
+			<string>rotateAndLogout</string>
+			<key>pfm_range_list</key>
+			<array>
+				<string>rotateAndLogout</string>
+				<string>rotate</string>
+			</array>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>ADRevealCode</string>
+			<key>pfm_title</key>
+			<string>Write the reveal code to AD</string>
+			<key>pfm_description</key>
+			<string>Device mode with Method AD: store the reveal code in Active Directory instead of the password.</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+			<key>pfm_default</key>
+			<false/>
+		</dict>
+	</array>
+</dict>
+</plist>
