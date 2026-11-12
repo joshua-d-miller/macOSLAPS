@@ -24,7 +24,9 @@
                                   InventoryHook, state between runs with cached
                                   failed checks; a rotation clears a deadline;
                                   a deadline change publishes deadline.plist
-                                  for the menu bar agent.
+                                  for the menu bar agent; device mode warns
+                                  without a FileVault recovery key escrow
+                                  profile.
 
                                   New header and section style.
 ===============================================================================
@@ -272,6 +274,10 @@ enum Status {
         print("ℹ️  Inventory hook: \(report.inventoryHook)")
         if report.retrievalMode == "device" {
             print("ℹ️  Retrieval: device mode (reveal codes); code made \(report.revealCodeSet ?? "not yet")")
+            if report.fileVault == true {
+                line(report.recoveryKeyEscrowProfile, "Device mode: a FileVault recovery key escrow profile is installed",
+                     "A reveal code can't unlock FileVault or the login window, and the MDM doesn't hold the password. Escrow the personal recovery key, or use RetrievalMode escrow.")
+            }
             line(report.revealCodeCollected, "An MDM (or AD) holds the current reveal code",
                  "Run macOSLAPS -escrow from your MDM's inventory (or set ADRevealCode), or nobody can reveal the password.")
             if report.revealLocked == true {

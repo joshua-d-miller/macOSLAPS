@@ -54,6 +54,19 @@ jobs:
           done
       - name: Header and comment style
         run: bash .github/scripts/check-style.sh
+      - name: Every app string is in Localizable.strings
+        run: |
+          plutil -lint macOSLAPS/Resources/en.lproj/Localizable.strings
+          python3 - <<'PY'
+          import re, subprocess, json
+          src = open("macOSLAPS/Extensions/AppUI.swift").read()
+          used = set(re.findall(r'\bt\("((?:[^"\\]|\\.)*)"', src))
+          have = set(json.loads(subprocess.check_output(["plutil", "-convert", "json", "-o", "-",
+              "macOSLAPS/Resources/en.lproj/Localizable.strings"])))
+          missing = sorted(used - have)
+          for k in missing: print(f"::error file=macOSLAPS/Resources/en.lproj/Localizable.strings::missing key: {k}")
+          raise SystemExit(1 if missing else 0)
+          PY
       - name: Compile and run shell helper tests
         run: |
           swiftc macOSLAPS/Extensions/Shell.swift Tests/ShellTests/main.swift -o shell-tests
@@ -196,6 +209,7 @@ jobs:
           rm -rf build/app; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
           cp "$BIN" "$APP/Contents/MacOS/macOSLAPS"
           install -m 755 packaging/uninstall.sh "$APP/Contents/Resources/uninstall.sh"
+          ditto macOSLAPS/Resources/en.lproj "$APP/Contents/Resources/en.lproj"
           if [ "$SIGNED" = "true" ]; then
             cp build/helper/macOSLAPS-legacy "$APP/Contents/Helpers/macOSLAPS-legacy"
             sign=(--sign "$APP_ID" --timestamp)
@@ -216,6 +230,7 @@ jobs:
               "CFBundleShortVersionString": short,
               "CFBundleVersion": build,
               "LSMinimumSystemVersion": minos,
+              "CFBundleDevelopmentRegion": "en",
               "LSUIElement": True,
               "NSHumanReadableCopyright": "Copyright Joshua D. Miller. Originally created at Penn State.",
           }, open(path, "wb"))

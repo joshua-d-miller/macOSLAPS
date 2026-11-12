@@ -1,0 +1,40 @@
+/*
+===============================================================================
+ macOSLAPS | Resources | Localizable.strings (English)
+===============================================================================
+ Every string the app window and menu bar agent show. To translate, copy
+ this file to <language>.lproj/Localizable.strings and change the values,
+ never the keys. Keep each %@ and %d in the same order. CI checks that
+ every AppUI.t("...") key appears here.
+===============================================================================
+*/
+
+"%@ will be logged out at that time." = "%@ will be logged out at that time.";
+"%d h %d min" = "%d h %d min";
+"%d min" = "%d min";
+"Copied. The clipboard is cleared in 60 seconds." = "Copied. The clipboard is cleared in 60 seconds.";
+"Copy" = "Copy";
+"Done — Rotate Now" = "Done — Rotate Now";
+"Enter the reveal code from your MDM to show the password." = "Enter the reveal code from your MDM to show the password.";
+"Hide Phonetic" = "Hide Phonetic";
+"Local Admin Account: %@" = "Local Admin Account: %@";
+"Local Admin Account: %@. Password works for %@." = "Local Admin Account: %@. Password works for %@.";
+"Local Admin Account: %@. The password changes in %@." = "Local Admin Account: %@. The password changes in %@.";
+"Local Admin Account: %@. The password has changed." = "Local Admin Account: %@. The password has changed.";
+"Next scheduled change: %@" = "Next scheduled change: %@";
+"Open macOSLAPS…" = "Open macOSLAPS…";
+"Password works until %@ (%@)" = "Password works until %@ (%@)";
+"Password: %@" = "Password: %@";
+"Reason or ticket" = "Reason or ticket";
+"Reason or ticket (optional)" = "Reason or ticket (optional)";
+"Reveal Password" = "Reveal Password";
+"Reveal code" = "Reveal code";
+"Reveals are locked after too many wrong codes. Contact IT." = "Reveals are locked after too many wrong codes. Contact IT.";
+"Show Phonetic" = "Show Phonetic";
+"The local admin password for %@ was revealed at %@. It changes at %@." = "The local admin password for %@ was revealed at %@. It changes at %@.";
+"The macOSLAPS service did not answer." = "The macOSLAPS service did not answer.";
+"The password for %@ changes now." = "The password for %@ changes now.";
+"The stored password does not work. Contact IT." = "The stored password does not work. Contact IT.";
+"The stored password works." = "The stored password works.";
+"This password did not work for %@ just now." = "This password did not work for %@ just now.";
+"macOSLAPS" = "macOSLAPS";
