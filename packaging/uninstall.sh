@@ -28,8 +28,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-12   joshua    New file. Also removes the service daemon
-                        claude    and its request folder.
+ 4.0.0     2026-11-12   joshua    New file. Also removes the service daemon,
+                        claude    its request folder, the deadline file and
+                                  the menu bar LaunchAgent.
 ===============================================================================
 HEADER
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
@@ -60,6 +61,12 @@ for label in com.joshua-d-miller.macoslaps-check com.joshua-d-miller.macoslaps-s
     [ -e "$plist" ] && /bin/rm -f "$plist" && say "removed $plist"
 done
 
+console_uid=$(/usr/bin/stat -f %u /dev/console 2>/dev/null)
+if [ -n "$console_uid" ] && [ "$console_uid" != 0 ]; then
+    /bin/launchctl bootout "gui/$console_uid/com.joshua-d-miller.macoslaps.agent" 2>/dev/null && say "stopped the menu bar agent"
+fi
+[ -e /Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist ] && /bin/rm -f /Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist && say "removed the menu bar LaunchAgent"
+
 # The symlink (4.0) or binary (3.x / 845) at the old path, and the directory if empty.
 if [ -L /usr/local/laps/macOSLAPS ] || [ -e /usr/local/laps/macOSLAPS ]; then
     /bin/rm -f /usr/local/laps/macOSLAPS && say "removed /usr/local/laps/macOSLAPS"
@@ -71,6 +78,7 @@ if [ -d /Applications/macOSLAPS.app ]; then
 fi
 /bin/rm -f /var/run/macOSLAPS.lock
 [ -d "/Library/Application Support/macOSLAPS/Requests" ] && /bin/rm -rf "/Library/Application Support/macOSLAPS/Requests" && say "removed the request folder"
+/bin/rm -f "/Library/Application Support/macOSLAPS/deadline.plist"
 /bin/rmdir "/Library/Application Support/macOSLAPS" 2>/dev/null
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #

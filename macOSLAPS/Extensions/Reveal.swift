@@ -36,7 +36,8 @@
                                   the rotation issues a new one. The check run
                                   waits for a near deadline so the rotation
                                   happens on time; -reason records why a
-                                  password was revealed.
+                                  password was revealed; deadline.plist tells
+                                  the menu bar agent when it rotates.
 ===============================================================================
 */
 
@@ -157,6 +158,26 @@ enum Reveal {
         argv.append(nil)
         execv(path, argv)
         laps_log.print("Could not restart macOSLAPS at the deadline (errno \(errno)); the next run rotates.", .error)
+    }
+
+    /// Non-secret, world-readable copy of the deadline for the menu bar agent (which runs as
+    /// the user and can't read the root-only state): account, rotatesAt, action, reason,
+    /// revealedAt. Removed when there is no deadline. Called whenever rotatesAt changes.
+    static let deadlineFile = "/Library/Application Support/macOSLAPS/deadline.plist"
+    static func publishDeadline() {
+        guard getuid() == 0 else { return }
+        let fm = FileManager.default
+        guard let at = RunState.value("rotatesAt") else {
+            try? fm.removeItem(atPath: deadlineFile)
+            return
+        }
+        var info : [String: Any] = ["account": Constants.local_admin, "rotatesAt": at, "action": action,
+                                    "reason": RunState.value("rotateReason") ?? "scheduled"]
+        if let revealed = RunState.value("revealedAt") { info["revealedAt"] = revealed }
+        guard let data = try? PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0) else { return }
+        try? fm.createDirectory(atPath: (deadlineFile as NSString).deletingLastPathComponent,
+                                withIntermediateDirectories: true, attributes: [.posixPermissions: 0o755])
+        fm.createFile(atPath: deadlineFile, contents: data, attributes: [.posixPermissions: 0o644])
     }
 
     /// After every successful rotation (RunState.record("rotated")).

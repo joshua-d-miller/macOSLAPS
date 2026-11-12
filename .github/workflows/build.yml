@@ -45,7 +45,7 @@ jobs:
           ./generator-tests
       - name: Lint the example settings, LaunchDaemon plists and install scripts
         run: |
-          plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist
+          plutil -lint "PLIST Example"/*.plist LaunchDaemon/*.plist LaunchAgent/*.plist
           for f in packaging/*.sh packaging/*-scripts/*; do bash -n "$f" || exit 1; done
           # zsh scripts: *.zsh and anything else with a zsh shebang (the MDM scripts are .sh)
           git ls-files | while read -r f; do

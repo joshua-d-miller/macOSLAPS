@@ -21,10 +21,8 @@
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-12   joshua    Removes the old edu.psu.macoslaps-check and
-                        claude    the new check and service daemons before
-                                  installing.
-
-                                  New header and section style.
+                        claude    the new check and service daemons and the
+                                  menu bar agent before installing.
 ===============================================================================
 HEADER
 [ "$3" = "/" ] || [ -z "$3" ] || exit 0
@@ -37,6 +35,12 @@ for label in com.joshua-d-miller.macoslaps-check com.joshua-d-miller.macoslaps-s
         removed=1
     fi
 done
+# The menu bar agent in the logged-in user's session.
+console_uid=$(/usr/bin/stat -f %u /dev/console 2>/dev/null)
+if [ -n "$console_uid" ] && [ "$console_uid" != 0 ]; then
+    /bin/launchctl bootout "gui/$console_uid/com.joshua-d-miller.macoslaps.agent" 2>/dev/null
+fi
+/bin/rm -f /Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist
 # Let launchd settle before the new plist is bootstrapped.
 [ "$removed" = 1 ] && sleep 3
 exit 0

@@ -36,8 +36,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-12   joshua    Builds from the app bundle; new receipts and
                         claude    label; app not relocatable; paths.d points
-                                  into the app; the service daemon and its
-                                  request folder.
+                                  into the app; the service daemon, its request
+                                  folder and the menu bar LaunchAgent.
 
                                   New header and section style.
 ===============================================================================
@@ -91,8 +91,8 @@ pkgbuild --root "$root" --component-plist "$WORK/components.plist" --identifier 
 ### --------------------------- ###
 ### | Component: LaunchDaemon | ###
 ### --------------------------- ###
-### The check and service daemons, the request folder and the install      ###
-### scripts.                                                                ###
+### The check and service daemons, the menu bar LaunchAgent, the request   ###
+### folder and the install scripts.                                         ###
 root="$WORK/root-daemon"
 mkdir -p "$root/Library/LaunchDaemons"
 for DAEMON in com.joshua-d-miller.macoslaps-check.plist com.joshua-d-miller.macoslaps-service.plist; do
@@ -100,6 +100,11 @@ for DAEMON in com.joshua-d-miller.macoslaps-check.plist com.joshua-d-miller.maco
     chmod 644 "$root/Library/LaunchDaemons/$DAEMON"
     plutil -lint "$root/Library/LaunchDaemons/$DAEMON" >&2
 done
+mkdir -p "$root/Library/LaunchAgents"
+AGENT=com.joshua-d-miller.macoslaps.agent.plist
+cp "$REPO/LaunchAgent/$AGENT" "$root/Library/LaunchAgents/"
+chmod 644 "$root/Library/LaunchAgents/$AGENT"
+plutil -lint "$root/Library/LaunchAgents/$AGENT" >&2
 # The service's request folder: users may drop a file (rotate now) but not list or
 # delete others' files (1733, like /tmp without listing).
 mkdir -p "$root/Library/Application Support/macOSLAPS/Requests"

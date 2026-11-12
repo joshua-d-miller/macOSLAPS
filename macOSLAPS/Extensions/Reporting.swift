@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      -status prints one line of JSON for an MDM inventory attribute or
@@ -18,11 +18,13 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    New file: -status (account, secureToken,
+ 4.0.0     2026-11-12   joshua    New file: -status (account, secureToken,
                         claude    FileVault, stored password, escrow, staging,
                                   migration, admin group, reveal),
                                   InventoryHook, state between runs with cached
-                                  failed checks; a rotation clears a deadline.
+                                  failed checks; a rotation clears a deadline;
+                                  a deadline change publishes deadline.plist
+                                  for the menu bar agent.
 
                                   New header and section style.
 ===============================================================================
@@ -434,6 +436,8 @@ enum RunState {
             for (k, v) in values { d[k] = v }
             for k in remove { d.removeValue(forKey: k) }
         }
+        // The menu bar agent follows the deadline through a world-readable copy.
+        if values["rotatesAt"] != nil || remove.contains("rotatesAt") { Reveal.publishDeadline() }
     }
 
     // MARK: Last run

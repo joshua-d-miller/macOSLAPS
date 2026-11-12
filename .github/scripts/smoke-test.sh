@@ -24,10 +24,12 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    Tests for every 4.0 feature: app layout, new
+ 4.0.0     2026-11-12   joshua    Tests for every 4.0 feature: app layout, new
                         claude    label and receipts, Login Items attribution,
                                   migration status, staging, -firstPass never
-                                  staging, uninstall.
+                                  staging, uninstall, device mode, the
+                                  privileged service, admin group protection,
+                                  deadline.plist and the menu bar LaunchAgent.
 
                                   New header and section style.
 ===============================================================================
@@ -86,6 +88,8 @@ RECEIPTS=$(pkgutil --pkgs | grep -iE 'laps' | sort | tr '\n' ' ')
 launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && pass "service LaunchDaemon loaded" || fail "service LaunchDaemon not loaded"
 REQ="/Library/Application Support/macOSLAPS/Requests"
 [ "$(stat -f '%Su:%Sg %Mp%Lp' "$REQ")" = "root:wheel 1733" ] && pass "request folder root:wheel 1733" || fail "request folder: $(stat -f '%Su:%Sg %Mp%Lp' "$REQ" 2>&1)"
+AGP=/Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist
+[ "$(stat -f '%Su:%Sg %Lp' "$AGP" 2>/dev/null)" = "root:wheel 644" ] && plutil -lint "$AGP" >/dev/null && pass "menu bar LaunchAgent installed root:wheel 644" || fail "LaunchAgent: $(ls -l "$AGP" 2>&1)"
 [ "$(stat -L -f '%Su:%Sg %Lp' "$LAPS")" = "root:wheel 755" ] && pass "binary owner and mode" || fail "binary owner/mode: $(stat -L -f '%Su:%Sg %Lp' "$LAPS")"
 [ -x "$APP/Contents/MacOS/macOSLAPS" ] && [ -x "$APP/Contents/Helpers/macOSLAPS-legacy" ] && pass "app installed in /Applications with its helper" || fail "macOSLAPS.app or its helper missing"
 [ "$(readlink "$LAPS")" = "$APP/Contents/MacOS/macOSLAPS" ] && pass "$LAPS is a symlink into the app" || fail "$LAPS -> $(readlink "$LAPS")"
@@ -768,6 +772,15 @@ BEFORE=$(get_pw)
 "$LAPS" >/dev/null 2>&1
 AFTER=$(get_pw)
 [ "$AFTER" != "$BEFORE" ] && [ -z "$(jget "$("$LAPS" -status)" rotatesAt)" ] && pass "request file during a grace period: rotated" || fail "request file with a deadline"
+# The deadline file the menu bar agent reads: world-readable, gone after rotation.
+DL="/Library/Application Support/macOSLAPS/deadline.plist"
+"$LAPS" -expireIn 2h >/dev/null 2>&1
+[ "$(stat -f %Lp "$DL" 2>/dev/null)" = 644 ] && python3 -c 'import plistlib,sys; d=plistlib.load(open(sys.argv[1],"rb")); assert d["account"]==sys.argv[2] and d["rotatesAt"], d' "$DL" "$ACCT" \
+    && pass "deadline.plist published (644, account, rotatesAt)" || fail "deadline.plist: $(ls -l "$DL" 2>&1)"
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
+[ ! -e "$DL" ] && pass "deadline.plist removed after rotation" || fail "deadline.plist left after rotation"
+STARTA=$(date +%s); sudo -u "$STD" "$LAPS" -agent >/dev/null 2>&1
+[ $(( $(date +%s) - STARTA )) -le 10 ] && pass "-agent exits when there is no deadline" || fail "-agent kept running with no deadline"
 # The check run waits for a deadline that comes before its next scheduled run.
 "$LAPS" -expireIn 15s >/dev/null 2>&1
 BEFORE=$(get_pw); START=$(date +%s)
@@ -841,6 +854,7 @@ cp "$APP/Contents/Resources/uninstall.sh" /tmp/laps-uninstall.sh
 launchctl print system/$LABEL >/dev/null 2>&1 && fail "LaunchDaemon still loaded after -uninstall" || pass "LaunchDaemon unloaded"
 launchctl print system/com.joshua-d-miller.macoslaps-service >/dev/null 2>&1 && fail "service still loaded after -uninstall" || pass "service unloaded"
 [ ! -e /Library/LaunchDaemons/com.joshua-d-miller.macoslaps-service.plist ] && [ ! -e "$REQ" ] && pass "service plist and request folder removed" || fail "service files left after -uninstall"
+[ ! -e /Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist ] && pass "menu bar LaunchAgent removed" || fail "LaunchAgent plist left after -uninstall"
 [ -z "$(pkgutil --pkgs | grep -i laps)" ] && pass "receipts forgotten" || fail "receipts left: $(pkgutil --pkgs | grep -i laps | tr '\n' ' ')"
 security find-generic-password -s "$KCSVC" "$SYSKC" >/dev/null 2>&1 && pass "stored password kept without -purge" || fail "-uninstall deleted the stored password"
 dscl . -authonly "$ACCT" "$KEPT" >/dev/null 2>&1 && pass "account untouched by -uninstall" || fail "account changed by -uninstall"

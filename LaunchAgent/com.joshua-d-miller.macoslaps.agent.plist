@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.joshua-d-miller.macoslaps.agent</string>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>com.joshua-d-miller.macoslaps</string>
+  </array>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Applications/macOSLAPS.app/Contents/MacOS/macOSLAPS</string>
+    <string>-agent</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>WatchPaths</key>
+  <array>
+    <string>/Library/Application Support/macOSLAPS</string>
+  </array>
+  <key>LimitLoadToSessionType</key>
+  <string>Aqua</string>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+</dict>
+</plist>

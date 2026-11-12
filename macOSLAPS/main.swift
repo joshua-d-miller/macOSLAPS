@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-11
+ Updated:   2026-11-12
 
  Purpose:
      The macOSLAPS command. Reads the arguments, moves a password stored
@@ -21,7 +21,7 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-11   joshua    App bundle and new identity
+ 4.0.0     2026-11-12   joshua    App bundle and new identity
                         claude    (com.joshua-d-miller.macoslaps) with
                                   migration from 3.x / 845; -status, -escrow,
                                   -initialize, -uninstall; staged rotation
@@ -29,7 +29,9 @@
                                   number in -version; deprecation notice for
                                   /usr/local/laps; admin group check on every
                                   rotation run; -reveal, -expireIn and the end
-                                  of a grace period.
+                                  of a grace period; -service, -rotateNow,
+                                  -agent and the app window when opened from
+                                  Finder.
 
                                   New header and section style.
 ===============================================================================
@@ -74,7 +76,7 @@ struct Constants {
 // ------------------------- //
 // Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow", "-agent"]
 /// The argument right after `flag` in its original case, unless it is another flag.
 func argumentValue(after flag: String) -> String? {
     let raw = CommandLine.arguments
@@ -310,6 +312,9 @@ func macOSLAPS() {
         print(fullVersion())
         exit(0)
     }
+    // The app: the menu bar agent (LaunchAgent), or the window when opened from Finder.
+    if Constants.arguments.contains("-agent") { Agent.run() }
+    if AppUI.openedAsApp { AppUI.run(WindowDelegate(), accessory: false) }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.
     if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
         laps_log.useStandardError = true

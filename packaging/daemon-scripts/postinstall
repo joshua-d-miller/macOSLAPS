@@ -24,7 +24,9 @@
                         claude    com.joshua-d-miller.macoslaps-check;
                                   RunAtLoad instead of kickstart -k (which
                                   could stop a run in progress); loads the
-                                  service daemon and makes its request folder.
+                                  service daemon and makes its request folder;
+                                  starts the menu bar agent for the logged-in
+                                  user.
 
                                   New header and section style.
 ===============================================================================
@@ -44,4 +46,12 @@ for label in com.joshua-d-miller.macoslaps-service com.joshua-d-miller.macoslaps
     /bin/launchctl bootout "system/$label" 2>/dev/null
     /bin/launchctl bootstrap system "$plist"
 done
+# The menu bar agent: start it for the logged-in user now; launchd loads it at every login.
+AGENT=/Library/LaunchAgents/com.joshua-d-miller.macoslaps.agent.plist
+/bin/chmod 644 "$AGENT"
+/usr/sbin/chown root:wheel "$AGENT"
+console_uid=$(/usr/bin/stat -f %u /dev/console 2>/dev/null)
+if [ -n "$console_uid" ] && [ "$console_uid" != 0 ]; then
+    /bin/launchctl bootstrap "gui/$console_uid" "$AGENT" 2>/dev/null
+fi
 exit 0
