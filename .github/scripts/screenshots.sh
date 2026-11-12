@@ -78,6 +78,28 @@ window_of() { as_gui /tmp/wininfo | awk -F'\t' -v p="$1" -v l="$2" '$3==p && $2=
 ui() { as_gui osascript -e "$1" 2>&1 | sed 's/^/  osascript: /'; }
 keys() { ui "tell application \"System Events\" to keystroke \"$1\""; }
 key_code() { ui "tell application \"System Events\" to key code $1"; }
+# SwiftUI nests controls in groups, so search the whole window by role.
+ax_find() {  # $1 pid, $2 role, $3 index or name, $4 action (focus/press)
+    ui "tell application \"System Events\" to tell (first process whose unix id is $1)
+        set hits to {}
+        repeat with e in (entire contents of window 1)
+            if role of e is \"$2\" then set end of hits to e
+        end repeat
+        if \"$3\" is in \"0123456789\" then
+            set t to item ($3 as integer) of hits
+        else
+            set t to missing value
+            repeat with e in hits
+                if (name of e as text) contains \"$3\" or (description of e as text) contains \"$3\" then set t to e
+            end repeat
+        end if
+        if \"$4\" is \"focus\" then
+            set focused of t to true
+        else
+            perform action \"AXPress\" of t
+        end if
+    end tell"
+}
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### --------------------- ###
@@ -119,11 +141,10 @@ PROC="(first process whose unix id is $APP_PID)"
 ui "tell application \"System Events\" to set frontmost of $PROC to true"
 echo "Frontmost: $(as_gui osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)"
 echo "Window elements: $(as_gui osascript -e "tell application \"System Events\" to get {role, description} of every UI element of window 1 of $PROC" 2>&1)"
-# Put the cursor in the code field (the first text field) before typing.
-ui "tell application \"System Events\" to click text field 1 of window 1 of $PROC"
-sleep 0.5
+echo "Window controls: $(as_gui osascript -e "tell application \"System Events\" to get {role, name, description} of entire contents of window 1 of $PROC" 2>&1)"
+ax_find "$APP_PID" AXTextField 1 focus; sleep 0.5
 keys "$CODE"; sleep 0.5
-key_code 48; sleep 0.3     # Tab to the reason field
+ax_find "$APP_PID" AXTextField 2 focus; sleep 0.5
 keys "TICKET-4021"; sleep 1
 shot 02-window-code-entered "$WIN"
 
@@ -132,13 +153,13 @@ shot 02-window-code-entered "$WIN"
 ### | The app: reveal | ###
 ### ------------------- ###
 ### Return presses Reveal Password; macOSLAPS must record the reveal.       ###
-key_code 36; sleep 6        # Return
+ax_find "$APP_PID" AXButton "Reveal" press; sleep 6
 shot 03-window-revealed "$WIN"
 python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any(sys.argv[1] in x and "TICKET-4021" in x for x in h), h' "$GUI_USER" \
     && pass "revealed through the window by $GUI_USER with the ticket" || fail "the window did not reveal the password (revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1))"
 ST=$("$LAPS" -status)
 [ -n "$(jget "$ST" rotatesAt)" ] && pass "the grace period started" || fail "no deadline after the reveal"
-ui "tell application \"System Events\" to click (first button whose name contains \"Phonetic\") of window 1 of $PROC"
+ax_find "$APP_PID" AXButton "Phonetic" press
 sleep 2
 shot 04-window-phonetic "$WIN"
 
@@ -152,7 +173,7 @@ AGENT_PID=$(pgrep -u "$GUI_UID" -f "macOSLAPS -agent" | head -1)
 [ -n "$AGENT_PID" ] && pass "the menu bar agent is running" || fail "the menu bar agent is not running"
 ITEM=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>0 {print $1; exit}')
 [ -n "$ITEM" ] && shot 05-menubar-item "$ITEM" || echo "::warning::no menu bar item window"
-ui "tell application \"System Events\" to click menu bar item 1 of menu bar 2 of (first process whose unix id is $AGENT_PID)"
+[ -n "$AGENT_PID" ] && ui "tell application \"System Events\" to click menu bar item 1 of menu bar 2 of (first process whose unix id is $AGENT_PID)"
 sleep 2
 MENU=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>=101 {print $1; exit}')
 [ -n "$MENU" ] && shot 06-menubar-menu "$MENU" || echo "::warning::no menu window"
