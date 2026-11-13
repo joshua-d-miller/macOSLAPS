@@ -16,7 +16,7 @@ name: Build & Test
 
 on:
   push:
-    branches: [master]
+    branches: [main, master]  # master until the default branch is renamed
     tags: ['v*']
   release:
     # Publish a (pre)release on GitHub with a new tag such as 4.0.0(846); this
