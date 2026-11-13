@@ -39,6 +39,7 @@ nav = [
     "legacy.md",
     "credits.md",
   ] },
+  { "Blog" = "https://joshua-d-miller.com/" },
 ]
 
 [project.theme]
@@ -61,19 +62,23 @@ features = [
   "toc.follow",
 ]
 
+[project.theme.font]
+text = "Lato"
+code = "JetBrains Mono"
+
 [[project.theme.palette]]
 media = "(prefers-color-scheme: light)"
 scheme = "default"
-primary = "blue"
-accent = "amber"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/moon"
 toggle.name = "Switch to dark mode"
 
 [[project.theme.palette]]
 media = "(prefers-color-scheme: dark)"
 scheme = "slate"
-primary = "blue"
-accent = "amber"
+primary = "custom"
+accent = "custom"
 toggle.icon = "lucide/sun"
 toggle.name = "Switch to light mode"
 

@@ -1,10 +1,96 @@
+/* The look of joshua-d-miller.com: navy #263959, Lato for text, PT Serif
+   for headings. Link colors keep at least 4.5:1 contrast (WCAG AA) in
+   light and dark mode. */
+@import url("https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&display=swap");
+
+:root,
+[data-md-color-scheme="default"] {
+  --md-primary-fg-color: #263959;
+  --md-primary-fg-color--light: #3a5280;
+  --md-primary-fg-color--dark: #1a2840;
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: #2f5d9e;
+  --md-typeset-a-color: #2f5d9e;
+}
+
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #263959;
+  --md-primary-fg-color--light: #3a5280;
+  --md-primary-fg-color--dark: #1a2840;
+  --md-accent-fg-color: #b7cdee;
+  --md-typeset-a-color: #9dbbe8;
+}
+
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3,
+.md-header__topic {
+  font-family: "PT Serif", Georgia, serif;
+}
+.md-typeset h1 {
+  color: var(--md-primary-fg-color);
+  font-weight: 700;
+}
+[data-md-color-scheme="slate"] .md-typeset h1 {
+  color: var(--md-default-fg-color);
+}
+
+/* Links stay recognizable without color alone. */
+.md-typeset a:not(.md-button) {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
 /* Keep setting names and commands on one line in reference tables. */
 .md-typeset table:not([class]) td:first-child code {
   white-space: nowrap;
 }
+
 /* Screenshots: a soft border so white windows stand out on white pages. */
 .md-typeset img[src*="reveal-"],
 .md-typeset img[src*="icon-in-finder"] {
   border: 1px solid var(--md-default-fg-color--lightest);
   border-radius: 8px;
+}
+
+/* The navy header and tabs of joshua-d-miller.com. White on #263959 is
+   about 12:1. */
+.md-header,
+.md-tabs {
+  background-color: var(--md-primary-fg-color);
+  color: #ffffff;
+}
+.md-header .md-header__button,
+.md-header .md-header__title,
+.md-header .md-source,
+.md-tabs .md-tabs__link {
+  color: #ffffff;
+}
+.md-tabs .md-tabs__link {
+  opacity: 0.8;
+}
+.md-tabs .md-tabs__item--active .md-tabs__link,
+.md-tabs .md-tabs__link:hover,
+.md-tabs .md-tabs__link:focus-visible {
+  opacity: 1;
+}
+.md-tabs .md-tabs__item--active {
+  box-shadow: inset 0 -3px 0 #ffffff;
+}
+.md-header .md-search__form {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+.md-header .md-search__input,
+.md-header .md-search__input::placeholder,
+.md-header .md-search__icon {
+  color: #ffffff;
+}
+.md-header :focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+.md-header .md-search,
+.md-header .md-search * {
+  color: #ffffff;
 }
