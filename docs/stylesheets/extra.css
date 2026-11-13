@@ -1,0 +1,10 @@
+/* Keep setting names and commands on one line in reference tables. */
+.md-typeset table:not([class]) td:first-child code {
+  white-space: nowrap;
+}
+/* Screenshots: a soft border so white windows stand out on white pages. */
+.md-typeset img[src*="reveal-"],
+.md-typeset img[src*="icon-in-finder"] {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 8px;
+}

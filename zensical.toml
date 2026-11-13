@@ -1,0 +1,99 @@
+# macOSLAPS documentation site, built with Zensical (zensical.org) from
+# docs/ and published to GitHub Pages by .github/workflows/docs.yml.
+# Preview locally: pip install zensical && zensical serve
+
+[project]
+site_name = "macOSLAPS"
+site_description = "Rotates a local admin password on your Macs and keeps it where IT can get it."
+site_url = "https://joshua-d-miller.com/macOSLAPS/"
+site_author = "Joshua D. Miller"
+repo_url = "https://github.com/joshua-d-miller/macOSLAPS"
+repo_name = "joshua-d-miller/macOSLAPS"
+copyright = "macOSLAPS is MIT licensed. Created at The Pennsylvania State University; maintained by Joshua D. Miller."
+
+extra_css = ["stylesheets/extra.css"]
+
+nav = [
+  { "Home" = "index.md" },
+  { "Get started" = [
+    "getting-started.md",
+    "upgrading.md",
+  ] },
+  { "Getting the password" = [
+    "retrieval/index.md",
+    "retrieval/escrow.md",
+    "retrieval/encrypted-escrow.md",
+    "retrieval/device-mode.md",
+    "retrieval/active-directory.md",
+  ] },
+  { "Managing Macs" = [
+    "mdm.md",
+    "admin-group.md",
+    "secure-token.md",
+    "settings.md",
+    "command-line.md",
+  ] },
+  { "Help" = [
+    "troubleshooting.md",
+    "testing.md",
+    "legacy.md",
+    "credits.md",
+  ] },
+]
+
+[project.theme]
+language = "en"
+logo = "images/icon.png"
+favicon = "images/favicon.png"
+features = [
+  "content.code.copy",
+  "content.tabs.link",
+  "content.tooltips",
+  "navigation.footer",
+  "navigation.indexes",
+  "navigation.instant",
+  "navigation.path",
+  "navigation.sections",
+  "navigation.tabs",
+  "navigation.top",
+  "navigation.tracking",
+  "search.highlight",
+  "toc.follow",
+]
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: light)"
+scheme = "default"
+primary = "blue"
+accent = "amber"
+toggle.icon = "lucide/moon"
+toggle.name = "Switch to dark mode"
+
+[[project.theme.palette]]
+media = "(prefers-color-scheme: dark)"
+scheme = "slate"
+primary = "blue"
+accent = "amber"
+toggle.icon = "lucide/sun"
+toggle.name = "Switch to light mode"
+
+
+[project.markdown_extensions]
+abbr = {}
+admonition = {}
+attr_list = {}
+def_list = {}
+footnotes = {}
+md_in_html = {}
+tables = {}
+toc.permalink = true
+pymdownx.details = {}
+pymdownx.highlight.anchor_linenums = true
+pymdownx.inlinehilite = {}
+pymdownx.keys = {}
+pymdownx.snippets = {}
+pymdownx.superfences.custom_fences = [
+  { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
+]
+pymdownx.tabbed.alternate_style = true
+pymdownx.tasklist.custom_checkbox = true

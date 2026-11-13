@@ -14,3 +14,5 @@ xcuserdata/
 .DS_Store
 .Trashes
 *.swp
+site/
+.cache/
