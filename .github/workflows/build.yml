@@ -46,7 +46,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Compile and run password generator tests
         run: |
           swiftc -O macOSLAPS/Extensions/PasswordPolicy.swift Tests/GeneratorTests/main.swift -o generator-tests
@@ -121,7 +121,7 @@ jobs:
       version: ${{ steps.binary.outputs.version }}
       signed: ${{ steps.sign.outputs.signed }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Show toolchain
         run: xcodebuild -version && swift --version
@@ -408,12 +408,12 @@ jobs:
       - name: Checksums
         run: cd dist && shasum -a 256 *.pkg | tee SHA256SUMS.txt
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: macOSLAPS-app-${{ steps.binary.outputs.version }}
           path: dist-app/*.zip
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: macOSLAPS-${{ steps.binary.outputs.version }}
           path: |
@@ -434,8 +434,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
@@ -443,7 +443,7 @@ jobs:
         run: sudo installer -pkg "artifact/dist/${{ needs.build.outputs.pkg }}" -target /
       - name: Run smoke test
         run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" bash .github/scripts/smoke-test.sh
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: matrix.os == 'macos-26'
         with:
           name: cms-escrow-sample
@@ -460,8 +460,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
@@ -483,8 +483,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
@@ -508,14 +508,14 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact
       - name: Drive the app and capture it
         run: sudo bash .github/scripts/screenshots.sh "artifact/dist/${{ needs.build.outputs.pkg }}" "$RUNNER_TEMP/screenshots"
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: screenshots-${{ matrix.os }}
@@ -528,8 +528,8 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: cms-escrow-sample
           path: cms
@@ -548,8 +548,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
         with:
           name: macOSLAPS-${{ needs.build.outputs.version }}
           path: artifact

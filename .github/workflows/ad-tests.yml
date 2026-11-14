@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Provision Samba AD DC with LAPS schemas
         env:
           ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
