@@ -1,96 +1,228 @@
-/* The look of joshua-d-miller.com: navy #263959, Lato for text, PT Serif
-   for headings. Link colors keep at least 4.5:1 contrast (WCAG AA) in
-   light and dark mode. */
-@import url("https://fonts.googleapis.com/css2?family=PT+Serif:wght@400;700&display=swap");
+/* ==========================================================================
+   macOSLAPS docs: the look of joshua-d-miller.com
+   Colors, type, radii and focus styles come from the blog's
+   assets/css/site.css (joshua-d-miller.github.io), so the docs read as part
+   of the same site. Every text/background pair meets WCAG 2.2 AA (4.5:1)
+   in both themes. If the blog's colors change, change them here too.
+   ========================================================================== */
 
-:root,
+:root {
+  --site-font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --site-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --site-radius: 10px;
+  --md-text-font-family: var(--site-font);
+  --md-code-font-family: var(--site-mono);
+}
+
+/* Light (the blog's :root) */
 [data-md-color-scheme="default"] {
-  --md-primary-fg-color: #263959;
-  --md-primary-fg-color--light: #3a5280;
-  --md-primary-fg-color--dark: #1a2840;
-  --md-primary-bg-color: #ffffff;
-  --md-accent-fg-color: #2f5d9e;
-  --md-typeset-a-color: #2f5d9e;
+  --site-bg: #f7f7f5;
+  --site-surface: #ffffff;
+  --site-surface-2: #eef0f2;
+  --site-text: #1b1f24;
+  --site-muted: #545c66;
+  --site-border: #d5dae0;
+  --site-accent: #0a58b8;
+  --site-accent-hover: #073f86;
+  --site-focus: #0a58b8;
+  --site-code-bg: #f3f4f6;
+  --site-shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 1px 3px rgb(16 24 40 / 8%);
 }
 
+/* Dark (the blog's dark values) */
 [data-md-color-scheme="slate"] {
-  --md-primary-fg-color: #263959;
-  --md-primary-fg-color--light: #3a5280;
-  --md-primary-fg-color--dark: #1a2840;
-  --md-accent-fg-color: #b7cdee;
-  --md-typeset-a-color: #9dbbe8;
+  --site-bg: #0e1116;
+  --site-surface: #161b22;
+  --site-surface-2: #1f2630;
+  --site-text: #e6edf3;
+  --site-muted: #a2adba;
+  --site-border: #313945;
+  --site-accent: #7ab8ff;
+  --site-accent-hover: #a8d0ff;
+  --site-focus: #7ab8ff;
+  --site-code-bg: #0b0e13;
+  --site-shadow: none;
 }
 
-.md-typeset h1,
-.md-typeset h2,
-.md-typeset h3,
-.md-header__topic {
-  font-family: "PT Serif", Georgia, serif;
+[data-md-color-scheme="default"],
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--site-bg);
+  --md-default-fg-color: var(--site-text);
+  --md-default-fg-color--light: var(--site-muted);
+  --md-default-fg-color--lighter: var(--site-muted);
+  --md-default-fg-color--lightest: var(--site-border);
+  --md-typeset-color: var(--site-text);
+  --md-primary-fg-color: var(--site-accent);
+  --md-primary-fg-color--light: var(--site-accent);
+  --md-primary-fg-color--dark: var(--site-accent-hover);
+  --md-primary-bg-color: var(--site-surface);
+  --md-accent-fg-color: var(--site-accent-hover);
+  --md-typeset-a-color: var(--site-accent);
+  --md-code-bg-color: var(--site-code-bg);
+  --md-code-fg-color: var(--site-text);
+  --md-typeset-table-color: var(--site-border);
 }
-.md-typeset h1 {
-  color: var(--md-primary-fg-color);
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+/* The blog's 17px body text (Zensical's rem is 20px). */
+.md-typeset {
+  font-size: 0.85rem;
+  line-height: 1.65;
+}
+
+/* ---------- Header: no colored bar, like the blog ---------- */
+.md-header {
+  background-color: var(--site-bg);
+  color: var(--site-text);
+  box-shadow: none;
+  border-bottom: 1px solid var(--site-border);
+}
+.md-header .md-header__title,
+.md-header .md-header__button,
+.md-header .md-source {
+  color: var(--site-text);
+}
+.md-header__topic:first-child {
   font-weight: 700;
 }
-[data-md-color-scheme="slate"] .md-typeset h1 {
-  color: var(--md-default-fg-color);
-}
-
-/* Links stay recognizable without color alone. */
-.md-typeset a:not(.md-button) {
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 2px;
-}
-
-/* Keep setting names and commands on one line in reference tables. */
-.md-typeset table:not([class]) td:first-child code {
-  white-space: nowrap;
-}
-
-/* Screenshots: a soft border so white windows stand out on white pages. */
-.md-typeset img[src*="reveal-"],
-.md-typeset img[src*="icon-in-finder"] {
-  border: 1px solid var(--md-default-fg-color--lightest);
+.md-header .md-logo img {
   border-radius: 8px;
 }
 
-/* The navy header and tabs of joshua-d-miller.com. White on #263959 is
-   about 12:1. */
-.md-header,
-.md-tabs {
-  background-color: var(--md-primary-fg-color);
-  color: #ffffff;
+/* ---------- Sidebar navigation like the blog's ---------- */
+.md-nav__item a.md-nav__link {
+  border-radius: 8px;
+  padding: 0.2rem 0.6rem;
+  margin-left: -0.6rem;
+  color: var(--site-text);
 }
-.md-header .md-header__button,
-.md-header .md-header__title,
-.md-header .md-source,
-.md-tabs .md-tabs__link {
-  color: #ffffff;
+.md-nav__item a.md-nav__link:hover,
+.md-nav__item a.md-nav__link:focus-visible {
+  background: var(--site-surface-2);
+  color: var(--site-text);
 }
-.md-tabs .md-tabs__link {
-  opacity: 0.8;
+.md-nav__item a.md-nav__link--active {
+  background: var(--site-surface-2);
+  color: var(--site-accent);
+  font-weight: 650;
 }
-.md-tabs .md-tabs__item--active .md-tabs__link,
-.md-tabs .md-tabs__link:hover,
-.md-tabs .md-tabs__link:focus-visible {
-  opacity: 1;
+/* Section headings (plain or linking to an overview page): small caps
+   labels like the blog's "PROJECTS" and "ELSEWHERE". */
+.md-nav__item--section > label.md-nav__link,
+.md-nav__item--section > .md-nav__container,
+.md-nav__item--section > .md-nav__container > a.md-nav__link,
+.md-nav__title {
+  margin-left: 0;
+  padding-left: 0;
+  background: none;
+  color: var(--site-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
-.md-tabs .md-tabs__item--active {
-  box-shadow: inset 0 -3px 0 #ffffff;
+.md-nav__item--section > .md-nav__container > a.md-nav__link:hover {
+  background: none;
+  color: var(--site-accent);
+  text-decoration: underline;
 }
-.md-header .md-search__form {
-  background-color: rgba(255, 255, 255, 0.15);
+
+/* ---------- Content ---------- */
+.md-typeset {
+  color: var(--site-text);
 }
-.md-header .md-search__input,
-.md-header .md-search__input::placeholder,
-.md-header .md-search__icon {
-  color: #ffffff;
+.md-typeset h1,
+.md-typeset h2,
+.md-typeset h3 {
+  color: var(--site-text);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
 }
-.md-header :focus-visible {
-  outline: 2px solid #ffffff;
+.md-typeset a {
+  color: var(--site-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+.md-typeset a:hover {
+  color: var(--site-accent-hover);
+  text-decoration-thickness: 2px;
+}
+.md-typeset .headerlink {
+  text-decoration: none;
+}
+:focus-visible {
+  outline: 3px solid var(--site-focus);
   outline-offset: 2px;
+  border-radius: 4px;
 }
-.md-header .md-search,
-.md-header .md-search * {
-  color: #ffffff;
+
+/* Cards: tables, code, admonitions and screenshots sit on white surfaces
+   with the blog's border and radius. */
+.md-typeset table:not([class]) {
+  background: var(--site-surface);
+  border: 1px solid var(--site-border);
+  border-radius: var(--site-radius);
+  box-shadow: var(--site-shadow);
+}
+.md-typeset table:not([class]) th {
+  background: var(--site-surface-2);
+  color: var(--site-text);
+}
+.md-typeset table:not([class]) td:first-child code {
+  white-space: nowrap;
+}
+.md-typeset pre > code,
+.md-typeset .highlight {
+  border-radius: var(--site-radius);
+}
+.md-typeset .highlight pre,
+.md-typeset pre {
+  border: 1px solid var(--site-border);
+  border-radius: var(--site-radius);
+}
+.md-typeset :not(pre) > code {
+  border: 1px solid var(--site-border);
+  border-radius: 6px;
+  padding: 0 0.3em;
+}
+.md-typeset .admonition,
+.md-typeset details {
+  border-radius: var(--site-radius);
+  border-width: 1px;
+  box-shadow: var(--site-shadow);
+}
+.md-typeset img[src*="reveal-"],
+.md-typeset img[src*="icon-in-finder"] {
+  border: 1px solid var(--site-border);
+  border-radius: var(--site-radius);
+  box-shadow: var(--site-shadow);
+  background: var(--site-surface);
+}
+
+/* The search box like the blog's: a bordered field on the page color. */
+.md-search__form {
+  background: var(--site-surface);
+  border: 1px solid var(--site-border);
+  border-radius: 8px;
+  color: var(--site-text);
+}
+.md-search__input,
+.md-search__input::placeholder,
+.md-search__icon {
+  color: var(--site-muted);
+}
+
+.md-footer,
+.md-footer-meta {
+  background: var(--site-bg);
+  color: var(--site-muted);
+  border-top: 1px solid var(--site-border);
+}
+.md-footer a,
+.md-footer-meta a {
+  color: var(--site-text);
 }

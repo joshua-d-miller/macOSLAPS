@@ -5,16 +5,16 @@ name: Docs
 #
 # Every run checks that docs/settings.md matches the profile manifest and
 # that the site builds without warnings (broken links, missing anchors).
-# Pushes to main (master until the default branch is renamed) and the 4.0
-# branch publish; pull requests only check.
+# Pushes to main and the 4.0 branch publish; pull requests only check.
 #
 # One-time setup in the repository: Settings → Pages → Source: GitHub
 # Actions. While 4.0 is on ci/github-actions-build, also allow that branch
-# under Settings → Environments → github-pages → Deployment branches.
+# and main under Settings → Environments → github-pages → Deployment
+# branches.
 
 on:
   push:
-    branches: [main, master, ci/github-actions-build]  # master until the rename
+    branches: [main, ci/github-actions-build]
     paths:
       - 'docs/**'
       - 'zensical.toml'

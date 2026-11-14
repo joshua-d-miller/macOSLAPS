@@ -8,8 +8,16 @@ name: AD Tests
 
 on:
   push:
-    branches: [main, master]  # master until the default branch is renamed
+    branches: [main]
   pull_request:
+    paths-ignore:
+      # Documentation only: built by docs.yml, and skipping it here keeps
+      # test build numbers (845 + run number) from piling up.
+      - 'docs/**'
+      - 'zensical.toml'
+      - '**.md'
+      - '.github/workflows/docs.yml'
+      - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
 
 permissions:
