@@ -19,4 +19,4 @@ Most of it still applies to 4.0: the configuration keys are unchanged, and 4.0 s
 | 12 or earlier | [3.0.4](https://github.com/joshua-d-miller/macOSLAPS/releases/tag/3.0.4%28781%29) (see its release notes for the oldest macOS it supports), or 4.0.0 (845) on macOS 12 |
 | Very old macOS | [macOSLAPS-Legacy](https://github.com/joshua-d-miller/macOSLAPS-Legacy) |
 
-The 3.0.4 and 4.0.0 (845) packages will be re-signed before Apple retires the signing authority they use, on February 1, 2027. Their contents won't change, but their SHA-256 checksums will.
+The 3.0.4 and 4.0.0 (845) packages were re-signed with Apple's current Developer ID certificate on November 14, 2026, so they keep installing after the old signing authority retires on February 1, 2027. Their contents are unchanged, but their SHA-256 checksums changed.

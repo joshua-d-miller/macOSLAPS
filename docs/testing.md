@@ -90,4 +90,4 @@ Every build runs these on GitHub's macOS runners. A build can only be published 
 - **Entra ID** has no supported way for non-Windows devices to store LAPS passwords. With Intune, use custom attributes with `-escrow` (ideally encrypted), or device mode.
 - **`PasswordStyle passphrase`** falls back to `readable` for now.
 - **`-getPassword`** is deprecated and will be removed in 5.0. Use `-escrow`.
-- **The 3.0.4 and 4.0.0 (845) pkgs will be re-signed** before Apple retires the old signing authority on Feb 1, 2027 (contents unchanged, notarized). Their SHA-256 checksums will change.
+- **The 3.0.4 and 4.0.0 (845) pkgs were re-signed** on Nov 14, 2026, ahead of Apple retiring the old signing authority on Feb 1, 2027. Their contents are unchanged and they're notarized, but their SHA-256 checksums changed.
