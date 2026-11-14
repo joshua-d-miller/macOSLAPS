@@ -1,8 +1,10 @@
-![](https://img.shields.io/github/v/release/joshua-d-miller/macOSLAPS)&nbsp;![](https://img.shields.io/github/downloads/joshua-d-miller/macOSLAPS/latest/total)&nbsp;![](https://img.shields.io/badge/macOS-13%2B-success)&nbsp;![](https://img.shields.io/github/license/joshua-d-miller/macOSLAPS)&nbsp;[![](https://img.shields.io/badge/docs-joshua--d--miller.com%2FmacOSLAPS-blue)](https://joshua-d-miller.com/macOSLAPS/)
+[![](https://img.shields.io/github/v/release/joshua-d-miller/macOSLAPS?include_prereleases&label=release)](https://github.com/joshua-d-miller/macOSLAPS/releases)&nbsp;![](https://img.shields.io/github/downloads/joshua-d-miller/macOSLAPS/total)&nbsp;![](https://img.shields.io/badge/macOS-13%2B-success)&nbsp;![](https://img.shields.io/github/license/joshua-d-miller/macOSLAPS)&nbsp;[![](https://img.shields.io/badge/docs-joshua--d--miller.com%2FmacOSLAPS-blue)](https://joshua-d-miller.com/macOSLAPS/)
 
 <img src="docs/images/icon.png" alt="macOSLAPS icon" width="96" align="right">
 
 ### macOSLAPS (Local Administrator Password Solution)
+> **macOSLAPS 4.0 is in prerelease:** download [4.0.0.950](https://github.com/joshua-d-miller/macOSLAPS/releases/tag/4.0.0.950) and read [Upgrading from 3.x](https://joshua-d-miller.com/macOSLAPS/upgrading/) first. This README and the [documentation](https://joshua-d-miller.com/macOSLAPS/) describe 4.0. The latest stable release is [3.0.4](https://github.com/joshua-d-miller/macOSLAPS/releases/tag/3.0.4%28781%29), documented on the [wiki](https://github.com/joshua-d-miller/macOSLAPS/wiki).
+
 macOSLAPS rotates the password of a local administrator account on your Macs to a random value, on a schedule, and keeps it where IT can get it:
 - **Escrow:** your MDM collects the password with `macOSLAPS -escrow`, in plain text or encrypted to your admins' certificates (CMS).
 - **Device mode:** your MDM collects a reveal code instead. A technician enters it on the Mac, in macOSLAPS.app with no admin rights needed, to see the password, which changes again a few hours later.
