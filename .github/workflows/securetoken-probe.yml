@@ -1,0 +1,82 @@
+name: secureToken probe
+
+# Throwaway investigation (branch probe/securetoken): can a hosted macOS runner
+# give a test account a real secureToken, and can we check that its password
+# unlocks the data volume (what FileVault uses) without a reboot?
+# Passwords are masked; nothing here is kept.
+
+on:
+  push:
+    branches: [probe/securetoken]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26, xcode-27]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - name: Probe
+        run: |
+          set -u
+          echo "== $(sw_vers -productVersion) $(uname -m), user $(whoami)"
+          DATA=$(diskutil info /System/Volumes/Data | awk -F: '/Device Node/{gsub(/ /,"",$2); print $2}')
+          echo "Data volume: $DATA"
+          echo "== FileVault:"; sudo fdesetup status; sudo fdesetup list 2>&1 | sed 's/,.*//'
+          echo "== Bootstrap token:"; sudo profiles status -type bootstraptoken 2>&1 | sed 's/^/  /'
+          echo "== Volume crypto users:"; sudo diskutil apfs listUsers / 2>&1 | grep -E 'Type|Cryptographic user|^\+--' | sed 's/^/  /'
+          echo "== secureToken status:"
+          for u in runner admin; do id "$u" >/dev/null 2>&1 && echo "  $u: $(sudo sysadminctl -secureTokenStatus "$u" 2>&1 | sed 's/.*Secure token is //')"; done
+          echo "== Auto-login password (/etc/kcpassword):"
+          if sudo test -f /etc/kcpassword; then
+            PW=$(sudo cat /etc/kcpassword | python3 -c '
+          import sys
+          k=[0x7D,0x89,0x52,0x23,0xD2,0xBC,0xDD,0xEA,0xA3,0xB9,0x1F]
+          d=sys.stdin.buffer.read()
+          s=bytes(b ^ k[i % len(k)] for i,b in enumerate(d))
+          print(s.split(b"\x00")[0].decode("utf-8","replace"))')
+            echo "::add-mask::$PW"
+            dscl . -authonly runner "$PW" >/dev/null 2>&1 && echo "  decoded, and it authenticates runner" || echo "  decoded, but it does NOT authenticate runner"
+          else
+            echo "  none"; PW=""
+          fi
+          echo "PW_KNOWN=$([ -n "$PW" ] && dscl . -authonly runner "$PW" >/dev/null 2>&1 && echo yes || echo no)" >> "$GITHUB_ENV"
+          [ -n "$PW" ] && printf '%s' "$PW" | sudo tee /tmp/runnerpw >/dev/null && sudo chmod 600 /tmp/runnerpw
+
+      - name: Try a real secureToken for a test account
+        run: |
+          set -u
+          T='Token-Test-1234!'; echo "::add-mask::$T"
+          sudo sysadminctl -addUser lapstoken -fullName "Token Test" -password "$T" -admin >/dev/null 2>&1
+          echo "lapstoken after creation: $(sudo sysadminctl -secureTokenStatus lapstoken 2>&1 | sed 's/.*Secure token is //')"
+          if [ "$PW_KNOWN" = yes ]; then
+            RP=$(sudo cat /tmp/runnerpw)
+            out=$(sudo sysadminctl -secureTokenOn lapstoken -password "$T" -adminUser runner -adminPassword "$RP" 2>&1)
+            echo "secureTokenOn via runner: $(echo "$out" | tail -1 | sed "s/$RP/***/g")"
+          else
+            out=$(sudo sysadminctl -secureTokenOn lapstoken -password "$T" -adminUser lapstoken -adminPassword "$T" 2>&1)
+            echo "secureTokenOn without a holder: $(echo "$out" | tail -1)"
+          fi
+          echo "lapstoken now: $(sudo sysadminctl -secureTokenStatus lapstoken 2>&1 | sed 's/.*Secure token is //')"
+          UUID=$(dscl . -read /Users/lapstoken GeneratedUID | awk '{print $2}')
+          DATA=$(diskutil info /System/Volumes/Data | awk -F: '/Device Node/{gsub(/ /,"",$2); print $2}')
+          echo "Crypto user: $(sudo diskutil apfs listUsers / 2>&1 | grep -c "$UUID") entries for lapstoken"
+
+          echo "== Change the password the way macOSLAPS does (old password known)"
+          N='Rotated-Pass-5678!'; echo "::add-mask::$N"
+          dscl . -passwd /Users/lapstoken "$T" "$N" && echo "  changed"
+          echo "  token after change: $(sudo sysadminctl -secureTokenStatus lapstoken 2>&1 | sed 's/.*Secure token is //')"
+          dscl . -authonly lapstoken "$N" >/dev/null 2>&1 && echo "  new password authenticates" || echo "  new password does NOT authenticate"
+
+          echo "== Does the volume accept the password? (-verify, no unlock)"
+          for label in new:"$N" old:"$T"; do
+            name=${label%%:*}; pw=${label#*:}
+            r=$(sudo diskutil apfs unlockVolume "$DATA" -user "$UUID" -passphrase "$pw" -verify 2>&1 | tail -1)
+            echo "  $name password: $r"
+          done
+          sudo rm -f /tmp/runnerpw
