@@ -558,11 +558,14 @@ jobs:
         run: |
           # The action always passes --accept-routes; the runner needs no routes.
           sudo tailscale set --accept-routes=false
-          export DC_HOST_IP=$(tailscale ip -4) DC_HOSTNAME=dc1 DC_INTERFACES="lo tailscale0"
+          # Samba skips the /32 IPv4 address on tailscale0 unless it's listed
+          # with a network, so name it explicitly (100.64.0.0/10 is Tailscale's).
+          export DC_HOST_IP=$(tailscale ip -4) DC_HOSTNAME=dc1
+          export DC_INTERFACES="lo $DC_HOST_IP/10"
           echo "DC Tailscale address: $DC_HOST_IP"
           sudo -E bash .github/scripts/samba/provision-dc.sh
-          echo "Listening:"; sudo ss -ltnup | grep -E ':(53|88|389|445|464|636|3268) ' || true
-          tailscale status
+          echo "Listening on the Tailscale address:"
+          sudo ss -ltnu | grep -F "$DC_HOST_IP" | awk '{print "  " $1, $5}' | sort -u
       - name: Wait for the Mac
         if: env.HAS_TS == 'true'
         env:
@@ -603,12 +606,22 @@ jobs:
         run: |
           # The action always passes --accept-routes; the runner needs no routes.
           sudo tailscale set --accept-routes=false
+          # On macOS the action also points system DNS at 100.100.100.100 when the
+          # tailnet uses MagicDNS. Put it back: only laps.test goes to the DC.
+          sudo networksetup -setdnsservers Ethernet Empty
+          sudo networksetup -setsearchdomains Ethernet Empty
+          # Only the two CI machines are ever printed, never other tailnet devices.
+          ci_peers() { tailscale status --json | python3 -c 'import json,sys
+          d=json.load(sys.stdin)
+          for p in (d.get("Peer") or {}).values():
+              if p.get("HostName","").startswith("laps-"):
+                  print(" ", p["HostName"], (p.get("TailscaleIPs") or ["?"])[0], "online" if p.get("Online") else "offline", p.get("CurAddr") or p.get("Relay") or "")'; }
           for i in $(seq 1 60); do
             ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
             if [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null; then break; fi
             if [ $((i % 6)) -eq 1 ]; then
               echo "--- $(date -u +%T) DC address: ${ip:-unknown}"
-              tailscale status | head -5
+              ci_peers
               [ -n "$ip" ] && { tailscale ping -c 1 --timeout 5s "$ip" || true; nc -v -z -G 3 "$ip" 389 || true; }
             fi
             ip=""; sleep 10
