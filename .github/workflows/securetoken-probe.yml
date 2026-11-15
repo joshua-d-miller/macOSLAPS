@@ -73,10 +73,53 @@ jobs:
           echo "  token after change: $(sudo sysadminctl -secureTokenStatus lapstoken 2>&1 | sed 's/.*Secure token is //')"
           dscl . -authonly lapstoken "$N" >/dev/null 2>&1 && echo "  new password authenticates" || echo "  new password does NOT authenticate"
 
-          echo "== Does the volume accept the password? (-verify, no unlock)"
-          for label in new:"$N" old:"$T"; do
-            name=${label%%:*}; pw=${label#*:}
-            r=$(sudo diskutil apfs unlockVolume "$DATA" -user "$UUID" -passphrase "$pw" -verify 2>&1 | tail -1)
-            echo "  $name password: $r"
+          RP=$(sudo cat /tmp/runnerpw)
+          RUUID=$(dscl . -read /Users/runner GeneratedUID | awk '{print $2}')
+          SYS=$(diskutil info / | awk -F: '/Device Node/{gsub(/ /,"",$2); print $2}')
+          echo "System volume: $SYS"
+          echo "== Crypto users per volume"
+          for v in / /System/Volumes/Data "$DATA"; do
+            echo "  $v: $(sudo diskutil apfs listUsers "$v" 2>&1 | grep -c -- '+--') users"
           done
-          sudo rm -f /tmp/runnerpw
+          verify() {  # $1 label, $2 volume, $3 uuid, $4 password
+            r=$(sudo diskutil apfs unlockVolume "$2" -user "$3" -passphrase "$4" -verify 2>&1 | tail -1)
+            echo "  $1 on $2: $r"
+          }
+          echo "== -verify with FileVault off (runner's password is the control)"
+          verify "runner (control)" "$DATA" "$RUUID" "$RP"
+          verify "runner (control)" "$SYS" "$RUUID" "$RP"
+          verify "lapstoken new" "$DATA" "$UUID" "$N"
+          verify "lapstoken old" "$DATA" "$UUID" "$T"
+
+          echo "== Turn FileVault on (runner + lapstoken)"
+          cat > /tmp/fv.plist <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>Username</key><string>runner</string>
+            <key>Password</key><string>$RP</string>
+            <key>AdditionalUsers</key><array><dict>
+              <key>Username</key><string>lapstoken</string>
+              <key>Password</key><string>$N</string>
+            </dict></array>
+          </dict></plist>
+          PLIST
+          sudo fdesetup enable -inputplist < /tmp/fv.plist -outputplist > /tmp/fvout.plist 2>/tmp/fverr; rc=$?
+          rm -f /tmp/fv.plist
+          echo "  fdesetup enable exit $rc: $(tail -1 /tmp/fverr)"
+          sudo fdesetup status | sed 's/^/  /'
+          sudo fdesetup list 2>&1 | sed 's/,.*//; s/^/  enabled user: /'
+          sleep 5
+          echo "== -verify with FileVault on"
+          verify "runner (control)" "$DATA" "$RUUID" "$RP"
+          verify "lapstoken current" "$DATA" "$UUID" "$N"
+          verify "lapstoken old" "$DATA" "$UUID" "$T"
+
+          echo "== Rotate again with FileVault on"
+          M='Third-Pass-9012!'; echo "::add-mask::$M"
+          dscl . -passwd /Users/lapstoken "$N" "$M" && echo "  changed"
+          echo "  token: $(sudo sysadminctl -secureTokenStatus lapstoken 2>&1 | sed 's/.*Secure token is //')"
+          verify "lapstoken newest" "$DATA" "$UUID" "$M"
+          verify "lapstoken previous" "$DATA" "$UUID" "$N"
+          sudo fdesetup list 2>&1 | sed 's/,.*//; s/^/  still enabled: /'
+          sudo rm -f /tmp/runnerpw /tmp/fvout.plist /tmp/fverr
