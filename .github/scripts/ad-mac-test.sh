@@ -69,7 +69,8 @@ finish() {
     "$COMPUTER" "$BASEDN" "$mark" > /tmp/mark.ldif
   ldapmodify -Q -Y GSSAPI -H "ldap://$DC_FQDN" -f /tmp/mark.ldif >/dev/null 2>&1 \
     || echo "::warning::could not mark the computer object $mark"
-  dsconfigad -remove -force -username Administrator -password "$ADMINPASS" >/dev/null 2>&1 || true
+  # No dsconfigad -remove: it deletes the computer object, mark included, and the
+  # runner is discarded after the job anyway.
   kdestroy -A >/dev/null 2>&1 || true
 }
 
