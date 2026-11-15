@@ -551,11 +551,13 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           hostname: ${{ env.TS_DC }}
-          # Don't use the tailnet's DNS or routes: the runner only needs the Mac.
-          args: --accept-dns=false --accept-routes=false
+          # Don't use the tailnet's DNS: the runner only needs the Mac.
+          args: --accept-dns=false
       - name: Provision the domain on the Tailscale address
         if: env.HAS_TS == 'true'
         run: |
+          # The action always passes --accept-routes; the runner needs no routes.
+          sudo tailscale set --accept-routes=false
           export DC_HOST_IP=$(tailscale ip -4) DC_HOSTNAME=dc1 DC_INTERFACES="lo tailscale0"
           echo "DC Tailscale address: $DC_HOST_IP"
           sudo -E bash .github/scripts/samba/provision-dc.sh
@@ -593,10 +595,12 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
           hostname: ${{ env.TS_MAC }}
-          args: --accept-dns=false --accept-routes=false
+          args: --accept-dns=false
       - name: Wait for the domain controller
         if: env.HAS_TS == 'true'
         run: |
+          # The action always passes --accept-routes; the runner needs no routes.
+          sudo tailscale set --accept-routes=false
           for i in $(seq 1 90); do
             ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null) && [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null && break
             ip=""; sleep 10
