@@ -2,6 +2,7 @@ name: Build & Test
 
 # Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
 # smoke-tests the pkgs on macOS 15 (arm64 + Intel) / 26, upgrades over the previous release,
+# runs macOSLAPS against a Samba AD domain over Tailscale (when the secrets are set),
 # opens the CMS escrow on Windows, and attaches everything to a published release.
 #
 # Signing is optional. With no secrets set, the build is ad-hoc signed and the pkg
@@ -521,6 +522,91 @@ jobs:
           name: screenshots-${{ matrix.os }}
           path: ${{ runner.temp }}/screenshots
           retention-days: 14
+
+  # AD stage 2: a Samba domain controller (Linux) and a Mac join an isolated
+  # Tailscale network for this run only (ephemeral devices tagged tag:ci, which
+  # may reach only each other), the Mac binds to the domain and macOSLAPS runs
+  # with Method AD against every ADSchema. Skipped without the TS_OAUTH_*
+  # secrets (forks). The two jobs run side by side: the DC waits until the Mac
+  # marks its computer object done, or leaves the tailnet.
+  ad-dc:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HAS_TS: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
+      ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+      TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Skip without Tailscale
+        if: env.HAS_TS != 'true'
+        run: 'echo "::notice::AD stage 2 skipped: no TS_OAUTH_CLIENT_ID secret"'
+      - uses: actions/checkout@v7
+        if: env.HAS_TS == 'true'
+      - uses: tailscale/github-action@v4
+        if: env.HAS_TS == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: ${{ env.TS_DC }}
+          # Don't use the tailnet's DNS or routes: the runner only needs the Mac.
+          args: --accept-dns=false --accept-routes=false
+      - name: Provision the domain on the Tailscale address
+        if: env.HAS_TS == 'true'
+        run: |
+          export DC_HOST_IP=$(tailscale ip -4) DC_HOSTNAME=dc1 DC_INTERFACES="lo tailscale0"
+          echo "DC Tailscale address: $DC_HOST_IP"
+          sudo -E bash .github/scripts/samba/provision-dc.sh
+      - name: Wait for the Mac
+        if: env.HAS_TS == 'true'
+        env:
+          MAC_HOST: ${{ env.TS_MAC }}
+        run: sudo -E bash .github/scripts/samba/wait-for-mac.sh
+
+  ad-mac:
+    needs: build
+    runs-on: macos-26
+    timeout-minutes: 60
+    env:
+      HAS_TS: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
+      ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+      TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+      COMPUTER: CIMAC${{ github.run_number }}
+    steps:
+      - name: Skip without Tailscale
+        if: env.HAS_TS != 'true'
+        run: 'echo "::notice::AD stage 2 skipped: no TS_OAUTH_CLIENT_ID secret"'
+      - uses: actions/checkout@v7
+        if: env.HAS_TS == 'true'
+      - uses: actions/download-artifact@v8
+        if: env.HAS_TS == 'true'
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - uses: tailscale/github-action@v4
+        if: env.HAS_TS == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: ${{ env.TS_MAC }}
+          args: --accept-dns=false --accept-routes=false
+      - name: Wait for the domain controller
+        if: env.HAS_TS == 'true'
+        run: |
+          for i in $(seq 1 90); do
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null) && [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null && break
+            ip=""; sleep 10
+          done
+          [ -n "$ip" ] || { echo "::error::$TS_DC never answered on LDAP"; exit 1; }
+          echo "Domain controller: $ip"
+          echo "DC_IP=$ip" >> "$GITHUB_ENV"
+      - name: Bind to AD and run macOSLAPS with Method AD
+        if: env.HAS_TS == 'true'
+        run: sudo -E bash .github/scripts/ad-mac-test.sh "artifact/dist/${{ needs.build.outputs.pkg }}"
 
   # The CMS escrow must open with the tool Windows admins already have.
   windows-decrypt:

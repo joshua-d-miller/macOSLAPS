@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-09
- Updated:   2026-11-11
+ Updated:   2026-11-14
 
  Purpose:
      Provisions a throwaway Samba AD domain controller for CI with both
@@ -19,7 +19,10 @@
 
  Usage:
      Environment: REALM (default LAPS.TEST), DOMAIN (LAPS),
-     ADMINPASS (required)
+     ADMINPASS (required). Stage 2 (a Mac joins over Tailscale) also
+     sets DC_HOSTNAME (e.g. dc1), DC_HOST_IP (the Tailscale address) and
+     DC_INTERFACES (e.g. "lo tailscale0"), so the domain's DNS records
+     point at the address the Mac can reach.
 ===============================================================================
  CHANGELOG
 ===============================================================================
@@ -28,6 +31,8 @@
  4.0.0     2026-11-11   joshua    New file.
                         claude
                                   New header and section style.
+                        joshua    DC_HOSTNAME, DC_HOST_IP and DC_INTERFACES
+                        claude    for stage 2 over Tailscale.
 ===============================================================================
 HEADER
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
@@ -52,9 +57,18 @@ rm -f /etc/samba/smb.conf
 rm -rf /var/lib/samba/private/* /var/lib/samba/*.tdb /var/lib/samba/*.ldb 2>/dev/null || true
 
 IFACE=$(ip -o -4 route show to default | awk '{print $5}' | head -1)
+INTERFACES=${DC_INTERFACES:-lo $IFACE}
+HOSTIP=()
+if [ -n "${DC_HOSTNAME:-}" ]; then
+  # The DC's name must resolve to the address clients use, before provisioning.
+  hostnamectl set-hostname "$DC_HOSTNAME"
+  sed -i "/[[:space:]]$DC_HOSTNAME\b/d" /etc/hosts
+  echo "${DC_HOST_IP:-127.0.1.1} $DC_HOSTNAME.$(echo "$REALM" | tr 'A-Z' 'a-z') $DC_HOSTNAME" >> /etc/hosts
+fi
+[ -n "${DC_HOST_IP:-}" ] && HOSTIP=(--host-ip="$DC_HOST_IP")
 samba-tool domain provision --server-role=dc --use-rfc2307 --dns-backend=SAMBA_INTERNAL \
-  --realm="$REALM" --domain="$DOMAIN" --adminpass="$ADMINPASS" \
-  --option="interfaces=lo $IFACE" --option="bind interfaces only=yes" \
+  --realm="$REALM" --domain="$DOMAIN" --adminpass="$ADMINPASS" "${HOSTIP[@]}" \
+  --option="interfaces=$INTERFACES" --option="bind interfaces only=yes" \
   --option="dns forwarder=1.1.1.1" >/dev/null
 cp /var/lib/samba/private/krb5.conf /etc/krb5.conf
 
