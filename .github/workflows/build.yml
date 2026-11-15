@@ -561,6 +561,8 @@ jobs:
           export DC_HOST_IP=$(tailscale ip -4) DC_HOSTNAME=dc1 DC_INTERFACES="lo tailscale0"
           echo "DC Tailscale address: $DC_HOST_IP"
           sudo -E bash .github/scripts/samba/provision-dc.sh
+          echo "Listening:"; sudo ss -ltnup | grep -E ':(53|88|389|445|464|636|3268) ' || true
+          tailscale status
       - name: Wait for the Mac
         if: env.HAS_TS == 'true'
         env:
@@ -601,11 +603,22 @@ jobs:
         run: |
           # The action always passes --accept-routes; the runner needs no routes.
           sudo tailscale set --accept-routes=false
-          for i in $(seq 1 90); do
-            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null) && [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null && break
+          for i in $(seq 1 60); do
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
+            if [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null; then break; fi
+            if [ $((i % 6)) -eq 1 ]; then
+              echo "--- $(date -u +%T) DC address: ${ip:-unknown}"
+              tailscale status | head -5
+              [ -n "$ip" ] && { tailscale ping -c 1 --timeout 5s "$ip" || true; nc -v -z -G 3 "$ip" 389 || true; }
+            fi
             ip=""; sleep 10
           done
-          [ -n "$ip" ] || { echo "::error::$TS_DC never answered on LDAP"; exit 1; }
+          if [ -z "$ip" ]; then
+            echo "::error::$TS_DC never answered on LDAP"
+            ifconfig | grep -A3 '^utun' | head -20; netstat -rn -f inet | grep -E '^100|utun' | head
+            sudo tail -40 ~/tailscaled.log 2>/dev/null || true
+            exit 1
+          fi
           echo "Domain controller: $ip"
           echo "DC_IP=$ip" >> "$GITHUB_ENV"
       - name: Bind to AD and run macOSLAPS with Method AD

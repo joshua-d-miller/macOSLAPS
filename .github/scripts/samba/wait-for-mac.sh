@@ -47,10 +47,12 @@ DEADLINE=$(( $(date +%s) + ${WAIT_MINUTES:-45} * 60 ))
 ### Prints the computers that joined, once, and their marks as they come.   ###
 seen=""
 mac_seen=0; mac_gone=0
+# Present in the netmap (ephemeral devices disappear when their job logs out).
+# "Online" is not used: it can read false while a device is idle.
 mac_online() {
   tailscale status --json 2>/dev/null | python3 -c 'import json,sys
 d=json.load(sys.stdin); h=sys.argv[1]
-sys.exit(0 if any(p.get("HostName")==h and p.get("Online") for p in (d.get("Peer") or {}).values()) else 1)' "$1"
+sys.exit(0 if any(p.get("HostName")==h for p in (d.get("Peer") or {}).values()) else 1)' "$1"
 }
 while :; do
   joined=$(ldbsearch -H "$SAM" -b "CN=Computers,$BASEDN" "(objectClass=computer)" sAMAccountName 2>/dev/null \
@@ -68,7 +70,7 @@ while :; do
       mac_seen=1; mac_gone=0
     elif [ "$mac_seen" -eq 1 ]; then
       mac_gone=$((mac_gone + 1))
-      if [ "$mac_gone" -ge 12 ]; then
+      if [ "$mac_gone" -ge 18 ]; then
         echo "::error::The Mac left the tailnet without reporting a result (see the ad-mac job)"
         exit 1
       fi
