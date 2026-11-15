@@ -97,7 +97,7 @@ A throwaway Samba domain controller with both LAPS schemas and a Mac runner join
 
 ## Known issues and limitations
 
-- **#120 is still open,** and **#96** is unconfirmed: "Unable to change password using FirstPass" on secureToken accounts. See test 1.
+- **#120 is still open,** and **#96** is unconfirmed: "Unable to change password using FirstPass" on secureToken accounts. CI now passes this with a real token and FileVault; please confirm on real hardware (test 1).
 - **The Jamf management account** (user-initiated enrollment) is not detected: macOS has no record of it. List it in `ApprovedAdmins`. MDM-created admins from Automated Device Enrollment are detected.
 - **Reveals happen after login.** Device mode can't reveal the password at the FileVault unlock screen or the login window. Escrow the FileVault recovery key.
 - **A promoted admin is caught on the next run** (every 90 minutes), not the moment it happens.

@@ -32,9 +32,9 @@ Settings go in a configuration profile for the preference domain **`com.joshua-d
 
 Tools for building the profile:
 
-- **Jamf Pro:** upload the [custom schema](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/Profile%20Manifests/com.joshua-d-miller.macoslaps.json) under Application & Custom Settings.
-- **iMazing Profile Editor** and other editors: the [ProfileManifests manifest](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/Profile%20Manifests/com.joshua-d-miller.macoslaps.plist).
-- **Anything else:** start from the [example plist](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
+- **Jamf Pro:** upload the [custom schema](https://github.com/joshua-d-miller/macOSLAPS/blob/main/Profile%20Manifests/com.joshua-d-miller.macoslaps.json) under Application & Custom Settings.
+- **iMazing Profile Editor** and other editors: the [ProfileManifests manifest](https://github.com/joshua-d-miller/macOSLAPS/blob/main/Profile%20Manifests/com.joshua-d-miller.macoslaps.plist).
+- **Anything else:** start from the [example plist](https://github.com/joshua-d-miller/macOSLAPS/blob/main/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
 
 Every key is described in the [settings reference](settings.md).
 
@@ -77,7 +77,7 @@ Once installed, macOSLAPS appears in Applications:
 
 ![macOSLAPS in the Applications folder](images/icon-in-finder.png){ width=560 }
 
-Henri Kovanen's [MDM install script](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/MDM%20Scripts/macoslaps4-mdm-install-script.sh) installs, updates or uninstalls macOSLAPS from your MDM, and can also create the managed admin. Review its settings before you use it.
+Henri Kovanen's [MDM install script](https://github.com/joshua-d-miller/macOSLAPS/blob/main/MDM%20Scripts/macoslaps4-mdm-install-script.sh) installs, updates or uninstalls macOSLAPS from your MDM, and can also create the managed admin. Review its settings before you use it.
 
 ## 5. Collect the password in your MDM
 

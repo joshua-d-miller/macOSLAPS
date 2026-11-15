@@ -11,16 +11,16 @@ Log messages go to stderr for both, so only the result is captured.
 
 ## Ready-made scripts
 
-The [`integrations/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/integrations) folder has an escrow script and a status script for each:
+The [`integrations/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations) folder has an escrow script and a status script for each:
 
 | MDM | Folder | What to create |
 |---|---|---|
-| Jamf Pro | [`jamf/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/integrations/jamf) | Extension attributes (String, Script) |
-| Microsoft Intune | [`intune/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/integrations/intune) | Custom attributes for macOS |
-| Workspace ONE | [`workspace-one/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/integrations/workspace-one) | Sensors |
-| Iru (Kandji), Mosyle, Addigy and others | [`generic/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/integrations/generic) | Whatever your MDM calls a custom inventory script |
+| Jamf Pro | [`jamf/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/jamf) | Extension attributes (String, Script) |
+| Microsoft Intune | [`intune/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/intune) | Custom attributes for macOS |
+| Workspace ONE | [`workspace-one/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/workspace-one) | Sensors |
+| Iru (Kandji), Mosyle, Addigy and others | [`generic/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/generic) | Whatever your MDM calls a custom inventory script |
 
-For Jamf Pro there are also the [`jamf Extension Attributes/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/jamf%20Extension%20Attributes) (password only, expiration only, or both), and Henri Kovanen's [`MDM Scripts/`](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/MDM%20Scripts) for installing macOSLAPS and reporting from any MDM.
+For Jamf Pro there are also the [`jamf Extension Attributes/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/jamf%20Extension%20Attributes) (password only, expiration only, or both), and Henri Kovanen's [`MDM Scripts/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/MDM%20Scripts) for installing macOSLAPS and reporting from any MDM.
 
 !!! tip "Replace scripts from 3.x"
     Earlier scripts read the old keychain item or the old path, and mishandled passwords containing a backslash. Use this release's.
@@ -29,9 +29,9 @@ For Jamf Pro there are also the [`jamf Extension Attributes/`](https://github.co
 
 Deliver settings in a configuration profile for the preference domain `com.joshua-d-miller.macoslaps`:
 
-- **Jamf Pro:** Configuration Profiles → Application & Custom Settings → Upload, preference domain `com.joshua-d-miller.macoslaps`, and paste the [custom schema](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/Profile%20Manifests/com.joshua-d-miller.macoslaps.json). Every setting then appears as a form with its default and allowed values.
-- **iMazing Profile Editor** and other editors that read ProfileManifests: the [manifest](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/Profile%20Manifests/com.joshua-d-miller.macoslaps.plist).
-- **Any MDM** that uploads a plist: start from the [example](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
+- **Jamf Pro:** Configuration Profiles → Application & Custom Settings → Upload, preference domain `com.joshua-d-miller.macoslaps`, and paste the [custom schema](https://github.com/joshua-d-miller/macOSLAPS/blob/main/Profile%20Manifests/com.joshua-d-miller.macoslaps.json). Every setting then appears as a form with its default and allowed values.
+- **iMazing Profile Editor** and other editors that read ProfileManifests: the [manifest](https://github.com/joshua-d-miller/macOSLAPS/blob/main/Profile%20Manifests/com.joshua-d-miller.macoslaps.plist).
+- **Any MDM** that uploads a plist: start from the [example](https://github.com/joshua-d-miller/macOSLAPS/blob/main/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
 
 The [settings reference](settings.md) lists every key.
 

@@ -8,7 +8,7 @@ Every setting macOSLAPS 4.0 reads, with its built-in default. Deliver them in a 
 !!! tip "Check what a Mac actually uses"
     `sudo macOSLAPS -showConfig` prints every setting, its value and where it came from (managed profile, local file or default). `FirstPass` is never printed.
 
-The same list is in the repository as a [Jamf Pro custom schema and an iMazing Profile Editor manifest](https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/Profile%20Manifests), and as an [example plist](https://github.com/joshua-d-miller/macOSLAPS/blob/4.0.0.950/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
+The same list is in the repository as a [Jamf Pro custom schema and an iMazing Profile Editor manifest](https://github.com/joshua-d-miller/macOSLAPS/tree/main/Profile%20Manifests), and as an [example plist](https://github.com/joshua-d-miller/macOSLAPS/blob/main/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).
 
 ## Account and method
 
