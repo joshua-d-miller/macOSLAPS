@@ -144,6 +144,9 @@ defaults write "$DOM" LocalAdminAccount -string "$ACCT"
 defaults write "$DOM" Method -string AD
 defaults write "$DOM" DaysTillExpiration -int 30
 defaults write "$DOM" PasswordLength -int 16
+# The test reads the stored password with -escrow, which would turn on staged
+# rotation (auto); rotations must reach AD straight away here.
+defaults write "$DOM" StagedRotation -string off
 APPROVED=()
 for u in $(dscl . -read /Groups/admin GroupMembership 2>/dev/null | cut -d: -f2); do
   [ "$u" = "$ACCT" ] || APPROVED+=("$u")
