@@ -104,19 +104,14 @@ UUID=$(dscl . -read "/Users/$ACCT" GeneratedUID | awk '{print $2}')
 sysadminctl -secureTokenOn "$ACCT" -password "$FIRST" -adminUser runner -adminPassword "$RP" >/dev/null 2>&1
 token && pass "$ACCT has a real secureToken" || { fail "could not grant $ACCT a secureToken"; exit 1; }
 
+# Built with plistlib so any character in a password is escaped properly.
 fv_plist() {
-  cat <<PLIST
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>Username</key><string>runner</string>
-  <key>Password</key><string>$RP</string>
-  <key>AdditionalUsers</key><array><dict>
-    <key>Username</key><string>$ACCT</string>
-    <key>Password</key><string>$FIRST</string>
-  </dict></array>
-</dict></plist>
-PLIST
+  RP="$RP" FIRST="$FIRST" ACCT="$ACCT" python3 -c '
+import os, plistlib, sys
+sys.stdout.buffer.write(plistlib.dumps({
+    "Username": "runner", "Password": os.environ["RP"],
+    "AdditionalUsers": [{"Username": os.environ["ACCT"], "Password": os.environ["FIRST"]}],
+}))'
 }
 # The output plist holds a recovery key: it goes to /dev/null, never the log.
 for attempt in 1 2; do
