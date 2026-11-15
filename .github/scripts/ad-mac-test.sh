@@ -166,6 +166,12 @@ for schema in legacy windowsLAPS both; do
     out=$("$LAPS" -resetPassword 2>&1)
   fi
   rc=$?
+  # What macOSLAPS said about this run (it never logs passwords).
+  echo "  macOSLAPS log:"; tail -n 14 /Library/Logs/macOSLAPS.log | sed 's/^/    /'
+  echo "  LAPS attributes on $COMPUTER: $(ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$DC_FQDN" \
+    -b "CN=$COMPUTER,CN=Computers,$BASEDN" -s base "(objectClass=computer)" \
+    ms-Mcs-AdmPwd ms-Mcs-AdmPwdExpirationTime msLAPS-Password msLAPS-PasswordExpirationTime 2>/dev/null \
+    | sed -n 's/^\([A-Za-z-]*\)::\{0,1\} .*/\1/p' | grep -v '^dn$' | tr '\n' ' ')"
   [ $rc -eq 0 ] && pass "$schema: rotation finished" || { fail "$schema: rotation exited $rc"; echo "$out" | tail -15; continue; }
 
   legacy_pw=$(ad_value ms-Mcs-AdmPwd); [ -n "$legacy_pw" ] && echo "::add-mask::$legacy_pw"
