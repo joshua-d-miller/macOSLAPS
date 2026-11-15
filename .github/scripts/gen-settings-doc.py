@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-12
+ Updated:   2026-11-15
 
  Purpose:
      Writes docs/settings.md, the settings reference on the docs site,
@@ -22,8 +22,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-12   joshua    New file.
-                        claude
+ 4.0.0     2026-11-12   joshua    New file. Repository links point at main
+                        claude    (4.0 is on main since 2026-11-14).
 ===============================================================================
 """
 
@@ -138,10 +138,10 @@ def render():
         "",
         "The same list is in the repository as a "
         "[Jamf Pro custom schema and an iMazing Profile Editor manifest]"
-        "(https://github.com/joshua-d-miller/macOSLAPS/tree/4.0.0.950/"
+        "(https://github.com/joshua-d-miller/macOSLAPS/tree/main/"
         "Profile%20Manifests), and as an "
         "[example plist](https://github.com/joshua-d-miller/macOSLAPS/blob/"
-        "4.0.0.950/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).",
+        "main/PLIST%20Example/com.joshua-d-miller.macoslaps.plist).",
         "",
     ]
     for title, keys in SECTIONS:
