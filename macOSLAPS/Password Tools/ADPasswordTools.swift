@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-11
+ Updated:   2026-11-14
 
  Purpose:
      Reads and writes the password and its expiration in Active Directory,
@@ -23,6 +23,8 @@
                                   (ADRevealCode) or only the expiration.
 
                                   New header and section style.
+                        joshua    ADRevealCode: writes the code issued for
+                        claude    the new password, not the one it replaces.
 ===============================================================================
 */
 
@@ -192,7 +194,7 @@ public class ADTools: NSObject {
     class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
         let record = computer_record[0]
         // Device mode: the reveal code (ADRevealCode) or only the expiration, never the password.
-        let secret = Reveal.directorySecret(password: password)
+        let secret = Reveal.directorySecret(password: password, newPassword: true)
         if writesWindowsLAPS && schema != "legacy" {
             ADTools.noteExperimentalSchemaOnce()
         }

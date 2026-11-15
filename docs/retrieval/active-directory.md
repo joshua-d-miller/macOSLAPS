@@ -21,8 +21,8 @@ macOSLAPS checks that it can write to AD before changing the password.
 | `windowsLAPS` | `msLAPS-Password` (JSON with the account, time and password) | `msLAPS-PasswordExpirationTime` | The ADUC LAPS tab, `Get-LapsADPassword` |
 | `both` | both of the above | both | either |
 
-!!! warning "Experimental"
-    `windowsLAPS` and `both` are new in 4.0 and haven't been tested against a real domain yet. Please [report how they work](../testing.md) for you. Windows LAPS encrypted passwords (`msLAPS-EncryptedPassword`) aren't supported.
+!!! info "Tested against Samba"
+    Every build binds a Mac to a Samba domain with both schemas and checks `legacy`, `windowsLAPS` and `both` end to end, plus `ADRevealCode`. They haven't been tested against Windows Server domain controllers yet: please [report how they work](../testing.md) for you. Windows LAPS encrypted passwords (`msLAPS-EncryptedPassword`) aren't supported.
 
 ## Device mode with AD
 
