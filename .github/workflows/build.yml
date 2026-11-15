@@ -523,6 +523,27 @@ jobs:
           path: ${{ runner.temp }}/screenshots
           retention-days: 14
 
+  # A real secureToken and FileVault (issues #96, #120): the runner account holds
+  # a token and its auto-login password is known, so the managed admin gets a
+  # real token and FileVault is turned on; macOSLAPS must keep both working
+  # through every rotation, fail closed on a wrong FirstPass and stop on an
+  # outside change. Skips with a notice if the runner image stops allowing it.
+  securetoken:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26, xcode-27]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: macOSLAPS-${{ needs.build.outputs.version }}
+          path: artifact
+      - name: Real secureToken and FileVault
+        run: sudo bash .github/scripts/securetoken-test.sh "artifact/dist/${{ needs.build.outputs.pkg }}"
   # AD stage 2: a Samba domain controller (Linux) and a Mac join an isolated
   # Tailscale network for this run only (ephemeral devices tagged tag:ci, which
   # may reach only each other), the Mac binds to the domain and macOSLAPS runs

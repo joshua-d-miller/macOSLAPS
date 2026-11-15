@@ -17,7 +17,7 @@ Test on non-production Macs first, and read [Upgrading from 3.x](upgrading.md) b
 
 These need real hardware, a real directory or a real MDM, which CI doesn't have. Tell us your macOS version (13 through 27), Intel or Apple silicon, your MDM, your Method, and your RetrievalMode.
 
-1. **secureToken accounts, especially on macOS 26 (#120, #96).** CI can't create a real secureToken. Test the first rotation with FirstPass, a later rotation, then logging in and **unlocking FileVault** with the new password.
+1. **secureToken accounts on real Macs (#120, #96).** CI now tests a real secureToken with FileVault on (below), but on virtual machines and without a restart. Test the first rotation with FirstPass, a later rotation, then **restart and unlock FileVault** with the new password at the unlock screen.
 2. **Admin group protection on your fleet.** Set `ApprovedAdmins` the way you would in production, then compare `-status -v` with what you expect.
     - Does `-status` list your MDM's enrollment admin under `mdmAdmins` (Jamf PreStage admin, Intune ADE admin, Iru Auto Admin)? If not, please send the `AutoSetupAdminAccounts` block from `sudo /usr/libexec/mdmclient QueryDeviceInformation`.
     - Is the Jamf management account listed as unapproved? (Expected until you add it to `ApprovedAdmins`.)
@@ -70,6 +70,14 @@ Every build runs these on GitHub's macOS runners. A build can only be published 
 - The reveal recorded with the user and the ticket, and the grace period started; **Show Phonetic** pressed.
 - The menu bar countdown appeared; the icon checked in Finder; the escrow-mode window; a reveal from Terminal through a pipe.
 - Every step is captured as a screenshot (the ones on these pages come from this test).
+
+### A real secureToken with FileVault on, on macOS 15, 26 and 27
+
+The runner's own account holds a secureToken, so the managed admin gets a real token and FileVault is turned on for both. Then:
+
+- A wrong `FirstPass` is refused: the password, the token and FileVault unlock are untouched.
+- The first rotation with `FirstPass`, then a forced one. After each, the stored password logs in and unlocks FileVault, the previous one doesn't, the token stays, and the account stays a FileVault user. The FileVault check asks the volume directly (`diskutil apfs unlockVolume -verify`), without a restart.
+- An outside password change stops rotation with `externalChange`, and the token and FileVault keep the outside password. `-firstPass <current>` takes the account back.
 
 ### Active Directory on macOS 26, against a Samba domain
 
