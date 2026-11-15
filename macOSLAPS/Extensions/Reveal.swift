@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-12
+ Updated:   2026-11-14
 
  Purpose:
      Device mode (RetrievalMode device): the MDM gets a reveal code
@@ -41,6 +41,9 @@
                                   deadlineSetAt records when a deadline was
                                   set. "Will be logged out" is shown only
                                   when the managed admin is logged in.
+                        joshua    ADRevealCode: a rotation issues the new
+                        claude    code before writing AD, so AD holds the
+                                  live code (it held the code just burned).
 ===============================================================================
 */
 
@@ -186,7 +189,7 @@ enum Reveal {
     /// After every successful rotation (RunState.record("rotated")).
     static func afterRotation() {
         RunState.set([:], remove: ["rotatesAt", "revealedAt", "rotateReason", "deadlineSetAt"])
-        if deviceMode { replaceCode(reason: "after rotation") }
+        if deviceMode && !issuedForRotation { replaceCode(reason: "after rotation") }
     }
 
     /// Whether the managed admin has a GUI login session (the kind
@@ -364,11 +367,25 @@ enum Reveal {
 // -------------------- //
 // In device mode AD never gets the password: the reveal code when           //
 // ADRevealCode is on, otherwise only the expiration time.                   //
+    /// Set when this run already issued the code for its new password (ADRevealCode),
+    /// so afterRotation doesn't burn it right after it was written to AD.
+    private static var issuedForRotation = false
+
     /// The value for AD's password attribute, and the account label for Windows LAPS JSON.
-    static func directorySecret(password: String) -> (value: String, account: String)? {
+    /// `newPassword`: AD is being written for a password that just changed, so the old
+    /// code is burned now and its replacement is what AD gets.
+    static func directorySecret(password: String, newPassword: Bool = false) -> (value: String, account: String)? {
         guard deviceMode else { return (password, Constants.local_admin) }
-        guard writesCodeToAD, let code = currentCode() else { return nil }
-        return (code, "\(Constants.local_admin) (reveal code)")
+        guard writesCodeToAD else { return nil }
+        let code: String?
+        if newPassword && !issuedForRotation {
+            code = replaceCode(reason: "new password")
+            issuedForRotation = code != nil
+        } else {
+            code = currentCode()
+        }
+        guard let value = code else { return nil }
+        return (value, "\(Constants.local_admin) (reveal code)")
     }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //

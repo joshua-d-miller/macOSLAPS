@@ -26,7 +26,7 @@ These need real hardware, a real directory or a real MDM, which CI doesn't have.
 4. **Device mode end to end:** the MDM collects the code, a standard user reveals the password in the app, elevation, the menu bar countdown, the 15-minute notification, and the forced logout and rotation at the deadline, with and without the admin signed in.
 5. **The app:** VoiceOver, the phonetic spelling over the phone, the icon in the Dock and notifications, and the menu bar item's menu (CI shows the countdown but can't open the menu).
 6. **Encrypted escrow in your MDM:** does the inventory attribute keep the whole CMS block with its line breaks? Smart card or YubiKey decryption with `security cms`.
-7. **Active Directory on a real domain** with each `ADSchema`, and `ADRevealCode` in device mode.
+7. **Active Directory on a real Windows domain** with each `ADSchema`, and `ADRevealCode` in device mode. CI covers these against Samba; Windows Server and your own LAPS tools (ADUC, `Get-LapsADPassword`) are the gap.
 8. **Settings delivered as configuration profiles**, split across both domains (CI can only test files in /Library/Preferences), and the profile manifests imported into Jamf Pro or iMazing Profile Editor.
 9. **Your packages and InstallerChoices.xml,** including the `-Binary-` pkg alone over 845, and the Login Items notification text and your Managed Login Items rule (#75).
 10. **Staged rotation with your MDM's hook,** including `InventoryHookConfirms` with your MDM's agent command.
@@ -79,6 +79,15 @@ The runner's own account holds a secureToken, so the managed admin gets a real t
 - The first rotation with `FirstPass`, then a forced one. After each, the stored password logs in and unlocks FileVault, the previous one doesn't, the token stays, and the account stays a FileVault user. The FileVault check asks the volume directly (`diskutil apfs unlockVolume -verify`), without a restart.
 - An outside password change stops rotation with `externalChange`, and the token and FileVault keep the outside password. `-firstPass <current>` takes the account back.
 
+### Active Directory on macOS 26, against a Samba domain
+
+A throwaway Samba domain controller with both LAPS schemas and a Mac runner join a private Tailscale network for the run. The Mac binds to the domain with `dsconfigad`, then:
+
+- `ADSchema legacy`, `windowsLAPS` and `both`: the password lands in the right attributes, works on the Mac, matches `-escrow`, and the old one stops working; `msLAPS-Password` is valid JSON naming the account; both expiration times are in the future.
+- A scheduled run before the expiration leaves the password alone; `-status` reports Method AD with a working password.
+- Device mode with `ADRevealCode`: both attributes hold the current reveal code, never the password. Without `ADRevealCode`, AD gets only the expiration.
+- The domain itself: computers can write their own LAPS attributes, admins can read them, ordinary users and other computers can't.
+
 ### Also on every build
 
 - About 23,000 password-generator checks, including 10,000 random policies.
@@ -93,7 +102,7 @@ The runner's own account holds a secureToken, so the managed admin gets a real t
 - **Reveals happen after login.** Device mode can't reveal the password at the FileVault unlock screen or the login window. Escrow the FileVault recovery key.
 - **A promoted admin is caught on the next run** (every 90 minutes), not the moment it happens.
 - **The window is English only.** The strings are in `Resources/en.lproj/Localizable.strings` for translators.
-- **`ADSchema windowsLAPS` and `both` are experimental.** CI has not run macOSLAPS in AD mode against a domain.
+- **`ADSchema windowsLAPS` and `both` are new.** CI tests every schema against a Samba domain on each build, but not yet against Windows Server domain controllers.
 - **Windows LAPS encrypted passwords** (`msLAPS-EncryptedPassword`) are not supported.
 - **Entra ID** has no supported way for non-Windows devices to store LAPS passwords. With Intune, use custom attributes with `-escrow` (ideally encrypted), or device mode.
 - **`PasswordStyle passphrase`** falls back to `readable` for now.
