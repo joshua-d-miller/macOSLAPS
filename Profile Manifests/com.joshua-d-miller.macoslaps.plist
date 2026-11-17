@@ -136,13 +136,14 @@
 			<key>pfm_title</key>
 			<string>Method</string>
 			<key>pfm_description</key>
-			<string>Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.</string>
+			<string>auto (default): AD when the Mac is bound to Active Directory, otherwise Local. Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.</string>
 			<key>pfm_type</key>
 			<string>string</string>
 			<key>pfm_default</key>
-			<string>AD</string>
+			<string>auto</string>
 			<key>pfm_range_list</key>
 			<array>
+				<string>auto</string>
 				<string>Local</string>
 				<string>AD</string>
 			</array>
@@ -197,7 +198,7 @@
 			<key>pfm_title</key>
 			<string>Preferred domain controller</string>
 			<key>pfm_description</key>
-			<string>Domain controller to use with Method AD.</string>
+			<string>Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only.</string>
 			<key>pfm_type</key>
 			<string>string</string>
 			<key>pfm_default</key>

@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      Admin group protection. Anyone who knows the managed admin's password
@@ -25,6 +25,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Elevation tools count only when signed (SAP
+                        claude    Privileges and Jamf Connect by their team),
+                                  so an empty folder can't switch auto to
+                                  report only.
  4.0.0     2026-11-12   joshua    New file. Admins your MDM created during
                         claude    Automated Device Enrollment are never
                                   removed; nobody is removed when an enrolled
@@ -34,6 +38,7 @@
 
 import Foundation
 import OpenDirectory
+import Security
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ------------ //
@@ -114,15 +119,33 @@ enum AdminGroup {
 // ------------------- //
 // With one of these installed, users become admin on purpose, so auto only  //
 // reports.                                                                  //
-    static let elevationTools : [(name: String, paths: [String])] = [
-        ("SAP Privileges", ["/Applications/Privileges.app"]),
-        ("Jamf Connect", ["/Applications/Jamf Connect.app"]),
-        ("Admin By Request", ["/Applications/Admin By Request.app"]),
-        ("Make Me Admin", ["/Applications/Make Me Admin.app"]),
+    /// Each tool's app, and the team that must have signed it (nil: any Developer ID
+    /// or App Store signature; the team IDs of the last two couldn't be confirmed).
+    static let elevationTools : [(name: String, path: String, team: String?)] = [
+        ("SAP Privileges", "/Applications/Privileges.app", "7R5ZEU67FQ"),
+        ("Jamf Connect", "/Applications/Jamf Connect.app", "483DWKW443"),
+        ("Admin By Request", "/Applications/Admin By Request.app", nil),
+        ("Make Me Admin", "/Applications/Make Me Admin.app", nil),
     ]
 
+    /// The first tool installed and properly signed. An empty folder or a renamed copy
+    /// of some other app doesn't count, so it can't switch auto to report only.
     static func elevationTool() -> String? {
-        elevationTools.first { tool in tool.paths.contains { FileManager.default.fileExists(atPath: $0) } }?.name
+        elevationTools.first { tool in
+            FileManager.default.fileExists(atPath: tool.path) && signed(tool.path, team: tool.team)
+        }?.name
+    }
+
+    private static func signed(_ path: String, team: String?) -> Bool {
+        var code : SecStaticCode?
+        guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &code) == errSecSuccess,
+              let app = code else { return false }
+        let text = "anchor apple generic" + (team.map { " and certificate leaf[subject.OU] = \"\($0)\"" } ?? "")
+        var requirement : SecRequirement?
+        guard SecRequirementCreateWithString(text as CFString, [], &requirement) == errSecSuccess,
+              let req = requirement else { return false }
+        // The executable and Info.plist are checked; skipping every resource keeps this fast.
+        return SecStaticCodeCheckValidity(app, SecCSFlags(rawValue: UInt32(kSecCSDoNotValidateResources)), req) == errSecSuccess
     }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -176,8 +199,7 @@ enum AdminGroup {
         guard let node = try? ODNode(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)),
               let record = try? node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: nil),
               isMember(Constants.local_admin, of: "admin") else { return false }
-        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
-        guard let pw = password else { return false }
-        return RunState.storedPasswordWorks(pw, created: created, record: record, force: true)
+        guard let stored = KeychainService.current else { return false }
+        return RunState.storedPasswordWorks(stored.password, created: stored.created, record: record, force: true)
     }
 }

@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-07-07
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Password generation, depending only on Foundation so the unit tests
@@ -25,6 +25,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    checkChosen for -newPassword.
+                        claude
  4.0.0     2026-11-11   joshua    Rewritten: exact length, requirements always
                         claude    met, every excluded character honored (#109,
                                   #93, #121); readable style.
@@ -120,6 +122,7 @@ enum PasswordGenerationError: Error, CustomStringConvertible, Equatable {
     case requirementUnsatisfiable(String)
     case requirementsExceedLength(required: Int, length: Int)
     case validationFailed(String)
+    case chosenRejected(String)
 
     var description: String {
         switch self {
@@ -133,6 +136,8 @@ enum PasswordGenerationError: Error, CustomStringConvertible, Equatable {
             return "PasswordRequirements add up to \(required) characters, which is more than PasswordLength (\(length))."
         case .validationFailed(let reason):
             return "Generated password failed validation: \(reason)."
+        case .chosenRejected(let reason):
+            return "The password given with -newPassword \(reason)."
         }
     }
 }
@@ -186,6 +191,24 @@ enum PasswordGenerator {
         }
         try validate(password, policy: policy)
         return password
+    }
+
+    /// A password a person chose (-newPassword): at least PasswordLength characters
+    /// (separators not counted), only characters the settings allow, and at least the
+    /// required number of each kind. Grouping is not required.
+    static func checkChosen(_ password: String, policy: PasswordPolicy) throws {
+        let allowed = Set(policy.alphabet)
+        let separators = policy.usesGrouping ? Set(policy.separator) : []
+        let body = password.filter { !separators.contains($0) }
+        guard body.count >= policy.length else {
+            throw PasswordGenerationError.chosenRejected("is shorter than PasswordLength (\(policy.length))")
+        }
+        guard body.allSatisfy({ allowed.contains($0) }) else {
+            throw PasswordGenerationError.chosenRejected("contains a character the password settings don't allow (RemovePassChars, ExclusionSets or PasswordStyle)")
+        }
+        for cls in PasswordCharacterClass.allCases where body.filter({ cls.contains($0) }).count < policy.requiredCount(cls) {
+            throw PasswordGenerationError.chosenRejected("needs at least \(policy.requiredCount(cls)) \(cls.rawValue) character(s) (PasswordRequirements)")
+        }
     }
 
     /// Independent check of every rule. Used after generation and by the tests.

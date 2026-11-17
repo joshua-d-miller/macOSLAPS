@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      The macOSLAPS command. Reads the arguments, moves a password stored
@@ -21,6 +21,16 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    One path for the AD and Local methods;
+                        claude    -getPassword and -firstPass parsing
+                                  shortened; -rotateNow handled once;
+                                  KeychainItem.
+                                  -read for scripts on the Mac (never counts
+                                  as a collection); -rotate and
+                                  -currentPassword (new names for
+                                  -resetPassword and -firstPass); -newPassword
+                                  from a prompt or stdin; the staging message
+                                  mentions the hook only when it can confirm.
  4.0.0     2026-11-12   joshua    App bundle and new identity
                         claude    (com.joshua-d-miller.macoslaps) with
                                   migration from 3.x / 845; -status, -escrow,
@@ -54,7 +64,7 @@ struct Constants {
     // Begin by tying date_formatter() to a variable
     static let dateFormatter = date_formatter()
     // Read Command Line Arugments into array to use later
-    static let arguments : Array = CommandLine.arguments.map {$0.lowercased()}
+    static let arguments : Array = CommandLine.arguments.map(canonicalArgument)
     // Retrieve our configuration for the application or use the
     // default values
     static let local_admin = GetPreference(preference_key: "LocalAdminAccount") as! String
@@ -70,6 +80,8 @@ struct Constants {
     // Constant values if triggering a password reset / specifying a First Password
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
+    /// -newPassword: the password to set instead of a generated one.
+    static var new_password : String? = nil
     static var initialize : Bool = false
     static var inside_hook : Bool = false
 }
@@ -80,12 +92,20 @@ struct Constants {
 // ------------------------- //
 // Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow", "-agent"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-read", "-newpassword", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow", "-agent"]
+/// Newer names for older flags (both keep working): -rotate is -resetPassword, and
+/// -currentPassword is -firstPass (the account's password right now).
+let argumentAliases : [String: String] = ["-rotate": "-resetpassword", "-currentpassword": "-firstpass"]
+/// A flag lowercased, with an alias replaced by the flag it stands for.
+func canonicalArgument(_ raw: String) -> String {
+    let lower = raw.lowercased()
+    return argumentAliases[lower] ?? lower
+}
 /// The argument right after `flag` in its original case, unless it is another flag.
 func argumentValue(after flag: String) -> String? {
     let raw = CommandLine.arguments
-    guard let i = raw.firstIndex(where: { $0.lowercased() == flag }), i + 1 < raw.count,
-          !knownArguments.contains(raw[i + 1].lowercased()) else { return nil }
+    guard let i = raw.firstIndex(where: { canonicalArgument($0) == flag }), i + 1 < raw.count,
+          !knownArguments.contains(canonicalArgument(raw[i + 1])) else { return nil }
     return raw[i + 1]
 }
 /// A secret (a reveal code, a FirstPass) read without ever being on the command line,
@@ -134,14 +154,9 @@ func fullVersion() -> String {
 // ------------------------- //
 // Rotation needs root, and only one rotation may run at a time.             //
 func verify_root() {
-    // Check if running as root
-    let current_running_User = NSUserName()
-    if current_running_User != "root" {
-        laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
-        exit(77)
-    } else {
-        return
-    }
+    guard NSUserName() != "root" else { return }
+    laps_log.print("macOSLAPS needs to be run as root to ensure the password change for \(Constants.local_admin) if needed.", .error)
+    exit(77)
 }
 /// Only one macOSLAPS run may rotate at a time. The LaunchDaemon, an MDM script and an
 /// installer's kickstart can all start a run within the same second; without this, two
@@ -221,10 +236,9 @@ func initializeWithoutRotating() -> Never {
     // Already managed? Then leave everything alone: re-saving would reset the creation date
     // and postpone rotation forever when an MDM runs -initialize on every check-in, and
     // checking an outdated FirstPass would add a failed login each time.
-    let (stored, created) = KeychainService.loadPassword(service: KeychainNames.current)
-    if let current = stored, RunState.storedPasswordWorks(current, created: created, record: record) {
-        let due = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
-        let what = current == Constants.first_password ? "already initialized with this password" : "already managed by macOSLAPS (the password has been rotated since)"
+    if let stored = KeychainService.current, RunState.storedPasswordWorks(stored.password, created: stored.created, record: record) {
+        let due = Constants.dateFormatter.string(from: LocalTools.get_expiration_date())
+        let what = stored.password == Constants.first_password ? "already initialized with this password" : "already managed by macOSLAPS (the password has been rotated since)"
         laps_log.print("\(Constants.local_admin) is \(what). Nothing was changed; the next rotation is due \(due).", .info)
         RunState.record("initialized", message: "already initialized")
         exit(0)
@@ -240,21 +254,66 @@ func initializeWithoutRotating() -> Never {
     }
     if Constants.method == "AD" {
         let computer = ADTools.connect()
-        let expiration = TimeConversion.windows()!
-        guard ADTools.set_password(computer_record: computer, password: Constants.first_password, new_ad_exp_date: expiration) == 0 else {
+        guard ADTools.set_password(computer_record: computer, password: Constants.first_password, new_ad_exp_date: TimeConversion.windows()) == 0 else {
             laps_log.print("Stored locally, but Active Directory could not be updated. The next run will rotate as usual.", .warn)
             exit(1)
         }
     }
-    let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) } ?? "unknown"
+    let expires = Constants.dateFormatter.string(from: LocalTools.get_expiration_date())
     RunState.record("initialized")
-    RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
+    RunState.noteVerified(true, created: KeychainService.current?.created)
     laps_log.print("Initialized \(Constants.local_admin) with its current password. No rotation was performed; the first rotation is due \(expires).", .info)
     if !(GetPreference(preference_key: "FirstPass") as? String ?? "").isEmpty {
         laps_log.print("FirstPass is set in the configuration, which any user of this Mac can read, and it is still \(Constants.local_admin)'s password until the first rotation. Remove FirstPass from the profile, or rotate soon with macOSLAPS -resetPassword.", .warn)
     }
     InventoryHook.run(reason: "initialize")
     exit(0)
+}
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------------- //
+// | -read and -newPassword | //
+// -------------------------- //
+// The password for scripts on this Mac, and a password chosen by a person.  //
+/// -read: the current password on one line, for scripts on this Mac (XCreds, the macOS
+/// installer). Unlike -escrow it never counts as the MDM collecting a staged password,
+/// and it prints even with EscrowCertificates, because it stays on this Mac.
+func readForScripts() -> Never {
+    if Reveal.deviceMode {
+        laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
+        exit(1)
+    }
+    guard let stored = KeychainService.current else {
+        laps_log.print("No macOSLAPS password is stored for \(Constants.local_admin) yet. Nothing was printed.", .error)
+        exit(1)
+    }
+    guard RunState.storedPasswordWorks(stored.password, created: stored.created, record: LocalTools.connect()) else {
+        laps_log.print("The stored password doesn't work for \(Constants.local_admin) right now. Nothing was printed; see macOSLAPS -status -v.", .error)
+        exit(1)
+    }
+    print(stored.password)
+    exit(0)
+}
+
+/// -newPassword: the password to set instead of a generated one, typed at a prompt or
+/// piped in (never on the command line), checked against the password settings.
+func chosenPassword() -> String {
+    if let given = argumentValue(after: "-newpassword"), given != "-" {
+        laps_log.print("Don't put the new password on the command line, where other processes can see it. Type it at the prompt, or pipe it: printf '%s\\n' \"$password\" | macOSLAPS -rotate -newPassword -", .error)
+        exit(64)
+    }
+    guard let chosen = SecretInput.read(prompt: "New password for \(Constants.local_admin): ") else {
+        laps_log.print("-newPassword needs the new password: type it at the prompt, or pipe it: printf '%s\\n' \"$password\" | macOSLAPS -rotate -newPassword -", .error)
+        exit(64)
+    }
+    do {
+        try PasswordGenerator.checkChosen(chosen, policy: currentPasswordPolicy(length: Constants.password_length))
+    } catch {
+        laps_log.print("\(error) Nothing was changed.", .error)
+        exit(1)
+    }
+    laps_log.print("Using the password given with -newPassword for \(Constants.local_admin) instead of a generated one. A password a person chose is easier to guess; the next rotation generates one again.", .warn)
+    return chosen
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -283,7 +342,7 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
             finishInterrupted(pending.password)
             Staging.finishApply()
             RunState.record("rotated", message: "finished an interrupted rotation")
-            RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
+            RunState.noteVerified(true, created: KeychainService.current?.created)
             InventoryHook.run(reason: "finishing an interrupted rotation")
             exit(0)
         }
@@ -291,7 +350,8 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
         RunState.set([:], remove: ["applying"])
     }
 
-    if let pending = Staging.pending() {
+    // -newPassword replaces a staged password instead of applying it.
+    if Constants.new_password == nil, let pending = Staging.pending() {
         if !Staging.active {
             laps_log.print("Staged rotation is off; applying the pending password now.", .info)
             apply(pending.password); exit(0)
@@ -314,14 +374,15 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
     // Taking over an account (-firstPass) or having no stored password: there is no
     // escrowed password to protect yet, and a FirstPass given on the command line would
     // be gone by the time a staged password is applied. Rotate now.
-    if Constants.use_firstpass || KeychainService.loadPassword(service: KeychainNames.current).0 == nil {
+    if Constants.use_firstpass || KeychainService.current == nil {
         laps_log.print("No managed password yet (or -firstPass): rotating now instead of staging.", .info)
         apply(nil); exit(0)
     }
 
     let next = PasswordGen(length: Constants.password_length)
     guard Staging.stage(next) else { exit(1) }
-    laps_log.print("Staged a new password for \(Constants.local_admin). It will be applied after the MDM collects it with -escrow (\(Staging.confirmationsNeeded) export(s), or sooner through the InventoryHook).", .info)
+    let sooner = InventoryHook.confirmsExports ? ", or sooner through the InventoryHook" : ""
+    laps_log.print("Staged a new password for \(Constants.local_admin). It will be applied on the first macOSLAPS run after the MDM collects it with -escrow (\(Staging.confirmationsNeeded) export(s)\(sooner)).", .info)
     Staging.runHookAndCheck()
     if Staging.confirmed {
         RunLock.acquire()
@@ -351,7 +412,7 @@ func macOSLAPS() {
     if Constants.arguments.contains("-agent") { Agent.run() }
     if AppUI.openedAsApp { AppUI.run(WindowDelegate(), accessory: false) }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.
-    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
+    if !Constants.arguments.filter({ ["-status", "-escrow", "-read", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
         laps_log.useStandardError = true
     }
     // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
@@ -377,13 +438,13 @@ func macOSLAPS() {
             Service.clientReveal(code: SecretInput.revealCode(), reason: argumentValue(after: "-reason") ?? "")
         }
         if args.contains("-status") && !args.contains("-v") { Service.clientStatus() }
-        if args.contains("-rotatenow") { Service.rotateNow() }
     }
+    // Root ends the grace period directly; anyone else asks the service.
     if args.contains("-rotatenow") { Service.rotateNow() }
     if NSUserName() == "root" && args.isDisjoint(with: ["-showconfig", "-help"]) {
         let reporting = args.contains("-status")
         let recovering = args.contains("-firstpass") || args.contains("-initialize")
-        let rotationRun = args.isDisjoint(with: ["-status", "-escrow", "-getpassword"]) && !Constants.inside_hook
+        let rotationRun = args.isDisjoint(with: ["-status", "-escrow", "-read", "-getpassword"]) && !Constants.inside_hook
         Migration.run(fatal: !(reporting || recovering), rotationRun: rotationRun)
     }
     // Delete the temporary -getPassword export from a previous run
@@ -396,53 +457,35 @@ func macOSLAPS() {
     for argument in Constants.arguments {
         switch argument {
         case "-getpassword":
+            // Deprecated, removed in 5.0: copies the password to a temporary System
+            // keychain item that /usr/bin/security can read, deleted on the next run.
             verify_root()
             if Reveal.deviceMode {
                 laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
                 exit(1)
             }
-            if Constants.method == "Local" {
-                let (current_password, keychain_item_check) = KeychainService.loadPassword(service: KeychainNames.current)
-                if current_password == nil && keychain_item_check == nil {
-                    laps_log.print("Unable to retrieve password from macOSLAPS Keychain entry.", .error)
-                    exit(1)
-                } else if current_password == nil && keychain_item_check == "Not Found" {
-                    laps_log.print("There does not appear to be a macOSLAPS Keychain Entry. Most likely, a password change has never been performed or the first password change has failed due to an incorrect password", .error)
-                    exit(1)
-                } else {
-                    // Pull Local Administrator Record
-                    guard let local_node = try? ODNode.init(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)) else {
-                        laps_log.print("Unable to connect to local node.", .error)
-                        exit(1)
-                    }
-                    guard let local_admin_record = try? local_node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: kODAttributeTypeRecordName) else {
-                        laps_log.print("Unable to retrieve local administrator record.", .error)
-                        exit(1)
-                    }
-                    // Verify Password
-                    guard RunState.storedPasswordWorks(current_password!, created: keychain_item_check, record: local_admin_record)
-                    else {
-                        laps_log.print("Password verification failed. Please use sysadminctl to reset. Exiting...")
-                        exit(1)
-                    }
-                    laps_log.print("Password has been verified to work. Extracting...", .info)
-                    let current_expiration_date = LocalTools.get_expiration_date()
-                    let current_expiration_string = Constants.dateFormatter.string(for: current_expiration_date)!
-                    let random_service_name = UUID().uuidString
-                    let copy_status : OSStatus = KeychainService.exportPassword(service: random_service_name, account: "root \(random_service_name)", data: current_password!, expiration: current_expiration_string)
-                    if copy_status == noErr {
-                        laps_log.print("Password was extracted to keychain item. This WILL BE deleted on next run.", .info)
-                    } else {
-                        laps_log.print("Unable to extract password to another keychain entry accessible by the security executable. Exiting...")
-                        exit(1)
-                    }
-                    try? random_service_name.write(toFile: "/var/root/.GeneratedLAPSServiceName", atomically: true, encoding: String.Encoding.utf8)
-                    exit(0)
-                }
-            } else {
+            guard Constants.method == "Local" else {
                 laps_log.print("Password WILL NOT be exported as the current method is set to Active Directory", .warn)
                 exit(0)
             }
+            guard let stored = KeychainService.current else {
+                laps_log.print("There does not appear to be a macOSLAPS Keychain Entry. Most likely, a password change has never been performed or the first password change has failed due to an incorrect password", .error)
+                exit(1)
+            }
+            guard RunState.storedPasswordWorks(stored.password, created: stored.created, record: LocalTools.connect()) else {
+                laps_log.print("Password verification failed. Please use sysadminctl to reset. Exiting...")
+                exit(1)
+            }
+            laps_log.print("Password has been verified to work. Extracting...", .info)
+            let expiration = Constants.dateFormatter.string(from: LocalTools.get_expiration_date())
+            let random_service_name = UUID().uuidString
+            guard KeychainService.exportPassword(service: random_service_name, account: "root \(random_service_name)", data: stored.password, expiration: expiration) == noErr else {
+                laps_log.print("Unable to extract password to another keychain entry accessible by the security executable. Exiting...")
+                exit(1)
+            }
+            laps_log.print("Password was extracted to keychain item. This WILL BE deleted on next run.", .info)
+            try? random_service_name.write(toFile: "/var/root/.GeneratedLAPSServiceName", atomically: true, encoding: String.Encoding.utf8)
+            exit(0)
         case "-resetpassword":
             Constants.pw_reset = true
         case "-showconfig":
@@ -454,6 +497,12 @@ func macOSLAPS() {
         case "-escrow":
             verify_root()
             Escrow.run()
+        case "-read":
+            verify_root()
+            readForScripts()
+        case "-newpassword":
+            Constants.pw_reset = true
+            Constants.new_password = chosenPassword()
         case "-reveal":
             verify_root()
             Reveal.runCommand(code: SecretInput.revealCode())
@@ -482,14 +531,20 @@ func macOSLAPS() {
                                     to /var/root/.GeneratedLAPSServiceName. The copy is
                                     deleted on the next run.
                   
-                  -resetpassword    Forces a password reset no matter the expiration date
-                  -firstpass        Performs a password reset using the FirstPass Configuration
-                                    Profile key or the password you specify after this flag.
-                                    The password of the admin MUST be this password or the
-                                    change WILL FAIL. Use -firstPass - to type it at a
-                                    prompt or pipe it in, so it never shows in the
-                                    process list:
-                                    printf '%s\\n' "$pw" | macOSLAPS -firstPass - -resetPassword
+                  -rotate           Changes the password now, whatever the expiration
+                                    date (also -resetPassword).
+                  -currentPassword  With -rotate: the account's password right now,
+                                    when macOSLAPS doesn't have it (also -firstPass).
+                                    Without a value, the FirstPass key is used. Use
+                                    -currentPassword - to type it at a prompt or pipe
+                                    it in, so it never shows in the process list:
+                                    printf '%s\\n' "$pw" | macOSLAPS -rotate -currentPassword -
+                  -newPassword -    With -rotate: set this password instead of a
+                                    generated one. Typed at a prompt or piped in, never
+                                    on the command line; it must meet the password
+                                    settings. With -currentPassword - as well, give
+                                    the passwords on separate lines, in the order of
+                                    the options.
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -498,6 +553,10 @@ func macOSLAPS() {
                   -escrow           Prints the current password for an MDM inventory
                                     attribute: JSON, or a CMS (PKCS #7) block encrypted to
                                     the EscrowCertificates when configured.
+
+                  -read             Prints the current password, alone on one line, for
+                                    scripts on this Mac. Never counts as the MDM
+                                    collecting a staged password (-escrow does).
 
                   -initialize       With -firstPass <password> (or the FirstPass key):
                                     verify that password and store it WITHOUT rotating.
@@ -538,11 +597,8 @@ func macOSLAPS() {
             Constants.use_firstpass = true
             // The value is the argument right after -firstPass, in its original case and in
             // any position (#92). A value on the command line overrides the FirstPass key.
-            let raw_arguments = CommandLine.arguments
-            if let flag_index = raw_arguments.firstIndex(where: { $0.lowercased() == "-firstpass" }),
-               flag_index + 1 < raw_arguments.count,
-               !knownArguments.contains(raw_arguments[flag_index + 1].lowercased()) {
-                if raw_arguments[flag_index + 1] == "-" {
+            if let given = argumentValue(after: "-firstpass") {
+                if given == "-" {
                     // -firstPass -: typed at a prompt or piped in, never on the command line.
                     guard let typed = SecretInput.read(prompt: "Current password for \(Constants.local_admin): ") else {
                         laps_log.print("-firstPass - needs the current password on standard input.", .error)
@@ -551,7 +607,7 @@ func macOSLAPS() {
                     Constants.first_password = typed
                     laps_log.print("The -firstPass argument was invoked. Using the password given on standard input.", .info)
                 } else {
-                    Constants.first_password = raw_arguments[flag_index + 1]
+                    Constants.first_password = given
                     laps_log.print("The -firstPass argument was invoked. Using the password given on the command line, which other processes can see while macOSLAPS runs. Pipe it instead: printf '%s\\n' \"$password\" | macOSLAPS -firstPass - -resetPassword", .warn)
                 }
             } else {
@@ -587,71 +643,42 @@ func macOSLAPS() {
     if Constants.initialize {
         initializeWithoutRotating()
     }
+    // When the password expires, and how a rotation is done, for the AD or Local method.
+    let expires : Date
+    let finishInterrupted : (String) -> Void
+    let apply : (String?) -> Void
     switch Constants.method {
     case "AD":
-        verify_root()
-        // Active Directory Password Change Function
-        let ad_computer_record = ADTools.connect()
-        // Get Expiration Time from Active Directory
-        var ad_exp_time = ""
-        if Constants.pw_reset == true {
-            ad_exp_time = "126227988000000000"
-        } else {
-            ad_exp_time = ADTools.check_pw_expiration(computer_record: ad_computer_record)!
-        }
-        // Convert that time into a date
-        let exp_date = TimeConversion.epoch(exp_time: ad_exp_time)
-        // Compare that newly calculated date against now to see if a change is required
-        rotateOrStage(due: exp_date! < Date(), finishInterrupted: { pending in
-            ADTools.restoreAfterInterruptedApply(computer_record: ad_computer_record, password: pending)
-        }, apply: { staged in
-            // Check if the domain controller that we are connected to is writable
-            ADTools.verify_dc_writability(computer_record: ad_computer_record)
+        let computer = ADTools.connect()
+        let attribute = Constants.pw_reset ? TimeConversion.expired : ADTools.check_pw_expiration(computer_record: computer)
+        expires = TimeConversion.epoch(exp_time: attribute) ?? .distantPast
+        finishInterrupted = { ADTools.restoreAfterInterruptedApply(computer_record: computer, password: $0) }
+        apply = { staged in
+            // Make sure the domain controller we're connected to is writable first.
+            ADTools.verify_dc_writability(computer_record: computer)
             PreferenceStore.shared.emitNotices()
             laps_log.print("Password Change is required as the LAPS password for \(Constants.local_admin), has expired", .info)
-            ADTools.password_change(computer_record: ad_computer_record, staged: staged)
-        })
-        if exp_date! < Date() {
-            exit(0)
-        }
-        else {
-            let actual_exp_date = Constants.dateFormatter.string(from: exp_date!)
-            laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(actual_exp_date)", .info)
-            RunState.record("not-due")
-            Reveal.waitForDeadlineIfSoon()
-            exit(0)
+            ADTools.password_change(computer_record: computer, staged: staged)
         }
     case "Local":
-        verify_root()
-        // Local method to perform passwords changes locally vs relying on Active Directory.
-        // It is assumed that users will be using either an MDM or some reporting method to store
-        // the password somewhere
-        // Load the Keychain Item and compare the date
-        var exp_date : Date?
-        if Constants.pw_reset == true {
-            exp_date = Calendar.current.date(byAdding: .day, value: -7, to: Date())
-        } else {
-            exp_date = LocalTools.get_expiration_date()
-        }
-        rotateOrStage(due: exp_date! < Date(), finishInterrupted: { _ in }, apply: { staged in
+        // The keychain holds the password; an MDM (or another report) escrows it.
+        expires = Constants.pw_reset ? .distantPast : LocalTools.get_expiration_date()
+        finishInterrupted = { _ in }
+        apply = { staged in
             PreferenceStore.shared.emitNotices()
             LocalTools.password_change(staged: staged)
-            let new_exp_date = LocalTools.get_expiration_date()
-            laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: new_exp_date!))", .info)
-        })
-        if exp_date! < Date() {
-            exit(0)
-        }
-        else {
-            laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: exp_date!))", .info)
-            RunState.record("not-due")
-            Reveal.waitForDeadlineIfSoon()
-            exit(0)
+            laps_log.print("Password change has been completed for the local admin \(Constants.local_admin). New expiration date is \(Constants.dateFormatter.string(from: LocalTools.get_expiration_date()))", .info)
         }
     default:
         laps_log.print("Unknown Method \"\(Constants.method)\". Set Method to AD or Local in \(PreferenceStore.shared.domain).", .error)
         exit(1)
     }
+    // Exits whenever it rotated, staged or applied; returns only when nothing is due.
+    rotateOrStage(due: expires < Date(), finishInterrupted: finishInterrupted, apply: apply)
+    laps_log.print("Password change is not required as the password for \(Constants.local_admin) does not expire until \(Constants.dateFormatter.string(from: expires))", .info)
+    RunState.record("not-due")
+    Reveal.waitForDeadlineIfSoon()
+    exit(0)
 }
 
 macOSLAPS()

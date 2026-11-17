@@ -26,7 +26,7 @@ With `EscrowCertificates` set, the code is [encrypted](encrypted-escrow.md) like
 
 ![The reveal window with a code and ticket number](../images/reveal-2-code-entered.png){ width=560 }
 
-**4. The password appears in large type.** **Show Phonetic** spells it out for reading over the phone ("Capital Uniform, small india, Seven…"). **Copy** puts it on the clipboard and clears the clipboard after 60 seconds. The window says how long the password keeps working.
+**4. The password appears in large type.** **Show Phonetic** spells it out for reading over the phone ("Capital Uniform, small india, Seven…"). **Copy** puts it on this Mac's clipboard only (never Universal Clipboard, so it doesn't reach the signed-in user's other devices), marks it so clipboard managers skip it, and clears it after 60 seconds. The window says how long the password keeps working.
 
 ![The revealed password with its phonetic spelling and the time it works until](../images/reveal-3-revealed.png){ width=560 }
 
@@ -49,7 +49,7 @@ The code is never accepted on the command line, where other processes could see 
 
 ## Safeguards
 
-- **Five wrong codes lock reveals** until the next rotation (`sudo macOSLAPS -resetPassword` issues a new code).
+- **After five wrong codes in a row, reveals wait**: a minute, then twice as long after each further wrong code, at most an hour. A right code or a rotation (`sudo macOSLAPS -resetPassword`) starts over. A wait rather than a lock, so a user typing wrong codes can't keep IT from revealing.
 - **Every reveal is recorded** with the signed-in user and the reason, in the log and in `-status` (`revealedAt`, `rotatesAt`, `rotateReason`).
 - **`-getPassword` is refused**, and staged rotation doesn't apply: the MDM never has the password to confirm.
 - The window and menu bar talk to a root service (`com.joshua-d-miller.macoslaps-service`) over XPC, and **both sides check the other's code signature** (team `9UYK4F9BSM`). The password is never written to a file or passed on a command line.

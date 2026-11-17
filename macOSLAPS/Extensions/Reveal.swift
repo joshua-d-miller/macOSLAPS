@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-14
+ Updated:   2026-11-17
 
  Purpose:
      Device mode (RetrievalMode device): the MDM gets a reveal code
@@ -24,12 +24,17 @@
 
  Used by:
      main.swift (-reveal, -expireIn, the rotation run), Service.swift,
-     Escrow.swift, ADPasswordTools.swift, Reporting.swift (-status, RunState)
+     Escrow.swift, ADPasswordTools.swift, Status.swift, RunState.swift
 ===============================================================================
  CHANGELOG
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    After five wrong codes reveals wait (1
+                        claude    minute, doubling, at most 1 hour) instead of
+                                  locking until the rotation; -reason is
+                                  logged on one line; one function prints a
+                                  reveal.
  4.0.0     2026-11-12   joshua    New file. A code reveals the password until
                         claude    the next rotation (Joshua: re-elevating
                                   during the grace period needs no new code);
@@ -103,8 +108,7 @@ enum Reveal {
 
     /// The current code; a new one is made when there is none (device mode only).
     static func currentCode(create: Bool = true) -> String? {
-        let (code, _) = KeychainService.loadPassword(service: KeychainNames.reveal)
-        if let existing = code { return existing }
+        if let existing = KeychainService.load(service: KeychainNames.reveal)?.password { return existing }
         guard create, deviceMode else { return nil }
         return replaceCode(reason: "first reveal code")
     }
@@ -119,13 +123,26 @@ enum Reveal {
             return nil
         }
         RunState.set(["revealCodeSet": RunState.iso.string(from: Date()), "revealFailures": 0,
-                      "adRevealCodeOutdated": writesCodeToAD ? "yes" : "no"])
+                      "adRevealCodeOutdated": writesCodeToAD ? "yes" : "no"], remove: ["revealRetryAt"])
         laps_log.print("New reveal code for \(Constants.local_admin) (\(reason)). The MDM collects it with -escrow.", .info)
         return code
     }
 
     static var failures : Int { RunState.intValue("revealFailures") }
-    static var locked : Bool { failures >= maxFailures }
+
+    /// After maxFailures wrong codes in a row, reveals wait: 1 minute, then twice as
+    /// long after each further wrong code, at most an hour. A correct code or a
+    /// rotation starts over. A wait, not a lock, so a user typing wrong codes can't
+    /// keep IT from revealing (a code has about 79 bits, so guessing is hopeless).
+    static func backoff(afterFailures count: Int) -> TimeInterval? {
+        guard count >= maxFailures else { return nil }
+        return min(3600, 60 * pow(2, Double(min(count - maxFailures, 6))))
+    }
+    /// When reveals are allowed again, while waiting.
+    static var retryAt : Date? {
+        RunState.value("revealRetryAt").flatMap(RunState.iso.date(from:)).flatMap { $0 > Date() ? $0 : nil }
+    }
+    static var locked : Bool { retryAt != nil }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ------------ //
@@ -227,8 +244,8 @@ enum Reveal {
 // ----------- //
 // Checks a code and, when it is right, shows the password and starts the    //
 // grace period. The same code works again until the rotation (to elevate    //
-// again); the rotation issues a new one. Every attempt is recorded; five    //
-// wrong ones lock reveals until the next rotation.                          //
+// again); the rotation issues a new one. Every attempt is recorded; after   //
+// five wrong ones in a row, reveals wait (1 minute, doubling, at most 1 h). //
     struct Result {
         let password: String
         let worksUntil: Date?
@@ -236,35 +253,46 @@ enum Reveal {
     }
 
     enum Failure: Error, CustomStringConvertible {
-        case notDeviceMode, locked, noCode, wrongCode(left: Int), noPassword
+        case notDeviceMode, waiting(until: Date), noCode, wrongCode(left: Int), noPassword
         var description: String {
             switch self {
             case .notDeviceMode: return "Reveal codes are only used when RetrievalMode is device."
-            case .locked: return "Too many wrong codes. Reveals are locked until the next rotation (macOSLAPS -resetPassword)."
+            case .waiting(let until): return "Too many wrong codes. Try again after \(Constants.dateFormatter.string(from: until))."
             case .noCode: return "There is no reveal code yet. It is created on the next macOSLAPS run."
-            case .wrongCode(let left): return "That code is not right. \(left) attempt(s) left before reveals are locked."
+            case .wrongCode(let left):
+                return left > 0 ? "That code is not right. \(left) attempt(s) left before reveals have to wait."
+                                : "That code is not right. Reveals have to wait a while before the next try."
             case .noPassword: return "macOSLAPS has no stored password for \(Constants.local_admin)."
             }
         }
     }
 
+    /// Text from a user (a -reason) for the log: one line, no control characters.
+    static func oneLine(_ text: String) -> String {
+        String(text.unicodeScalars.map { CharacterSet.controlCharacters.contains($0) ? " " : Character($0) })
+    }
+
     /// The shared check behind -reveal and the app.
-    static func perform(code: String, who: String) -> Swift.Result<Result, Failure> {
+    static func perform(code: String, who rawWho: String) -> Swift.Result<Result, Failure> {
+        let who = oneLine(rawWho)
         guard deviceMode else { return .failure(.notDeviceMode) }
-        guard !locked else { return .failure(.locked) }
+        if let until = retryAt { return .failure(.waiting(until: until)) }
         guard let stored = currentCode(create: false) else { return .failure(.noCode) }
         guard matches(code, stored) else {
             let count = failures + 1
-            RunState.set(["revealFailures": count])
+            var values : [String: Any] = ["revealFailures": count]
+            let wait = backoff(afterFailures: count)
+            if let w = wait { values["revealRetryAt"] = RunState.iso.string(from: Date().addingTimeInterval(w)) }
+            RunState.set(values)
             appendHistory("failed \(who)")
-            laps_log.print("Wrong reveal code entered (\(count) of \(maxFailures)) by \(who).", .warn)
-            if count >= maxFailures {
-                laps_log.print("Reveals are locked after \(maxFailures) wrong codes until the next rotation.", .error)
+            laps_log.print("Wrong reveal code entered (\(count) in a row) by \(who).", .warn)
+            if let w = wait {
+                laps_log.print("Reveals wait \(Int(w / 60)) minute(s) after \(count) wrong codes in a row.", .error)
             }
             return .failure(.wrongCode(left: max(0, maxFailures - count)))
         }
-        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
-        guard let pw = password else { return .failure(.noPassword) }
+        guard let stored = KeychainService.current else { return .failure(.noPassword) }
+        let pw = stored.password, created = stored.created
         var verified = false
         if let node = try? ODNode(session: ODSession.default(), type: UInt32(kODNodeTypeLocalNodes)),
            let record = try? node.record(withRecordType: kODRecordTypeUsers, name: Constants.local_admin, attributes: nil) {
@@ -281,7 +309,7 @@ enum Reveal {
             values["rotatesAt"] = RunState.iso.string(from: u)
             values["deadlineSetAt"] = RunState.preciseISO.string(from: Date())
         }
-        RunState.set(values)
+        RunState.set(values, remove: ["revealRetryAt"])
         appendHistory("revealed \(who)")
         laps_log.print("The password for \(Constants.local_admin) was revealed to \(who)" +
                        (until.map { "; it changes at \(Constants.dateFormatter.string(from: $0))." } ?? "."), .warn)
@@ -310,16 +338,21 @@ enum Reveal {
         case .success(let result):
             RunLock.release()
             Service.kickCheck()   // arms the deadline timer when the deadline is near
-            print("Local Admin Account: \(Constants.local_admin)")
-            print("Password: \(result.password)")
-            if let until = result.worksUntil {
-                let minutes = Int(until.timeIntervalSinceNow / 60)
-                print("Works until: \(Constants.dateFormatter.string(from: until)) (\(minutes / 60) h \(minutes % 60) min)")
-                if logoutApplies(action) { print("\(Constants.local_admin) will be logged out at that time.") }
-            }
-            if !result.verified { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
+            printRevealed(password: result.password, worksUntil: result.worksUntil, verified: result.verified)
             exit(0)
         }
+    }
+
+    /// What -reveal prints, run as root or through the service.
+    static func printRevealed(password: String, worksUntil: Date?, verified: Bool) {
+        print("Local Admin Account: \(Constants.local_admin)")
+        print("Password: \(password)")
+        if let until = worksUntil {
+            let minutes = Int(until.timeIntervalSinceNow / 60)
+            print("Works until: \(Constants.dateFormatter.string(from: until)) (\(minutes / 60) h \(minutes % 60) min)")
+            if logoutApplies(action) { print("\(Constants.local_admin) will be logged out at that time.") }
+        }
+        if !verified { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
     }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //

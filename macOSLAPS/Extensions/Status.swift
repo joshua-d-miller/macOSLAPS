@@ -1,34 +1,30 @@
 /*
 ===============================================================================
- macOSLAPS | Extensions | Reporting.swift
+ macOSLAPS | Extensions | Status.swift
 ===============================================================================
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      -status prints one line of JSON for an MDM inventory attribute or
      smart group; -status -v prints the same checks as a readable
-     checklist for a technician. Also the InventoryHook (a command run
-     after a password change so the MDM collects it sooner, e.g. jamf
-     recon) and the state kept between runs.
+     checklist for a technician.
 ===============================================================================
  CHANGELOG
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Split from Reporting.swift (the inventory
+                        claude    hook and RunState have their own files);
+                                  revealRetryAt for the reveal wait.
  4.0.0     2026-11-12   joshua    New file: -status (account, secureToken,
                         claude    FileVault, stored password, escrow, staging,
-                                  migration, admin group, reveal),
-                                  InventoryHook, state between runs with cached
-                                  failed checks; a rotation clears a deadline;
-                                  a deadline change publishes deadline.plist
-                                  for the menu bar agent; device mode warns
-                                  without a FileVault recovery key escrow
-                                  profile; externalChange; MDM-created admins;
-                                  state changes are locked and written
-                                  atomically; precise times for deadlineSetAt.
+                                  migration, admin group, reveal); device mode
+                                  warns without a FileVault recovery key
+                                  escrow profile; externalChange; MDM-created
+                                  admins.
 
                                   New header and section style.
 ===============================================================================
@@ -89,21 +85,24 @@ struct StatusReport: Codable {
     var unapprovedAdmins: [String]
     var elevationTool: String?
     var demotedAdmins: [String]?
-    /// Reveal / deadline: mode, when the current code was made, wrong tries, lockout,
-    /// whether an MDM (or AD) holds the code, the last reveal, and when the password changes.
     /// Set when the stored password stopped working because something else changed it;
     /// macOSLAPS stops rotating until -firstPass / -initialize.
     var externalChange: String?
+    var externalChangeReason: String?
     /// Admin accounts the MDM created during Automated Device Enrollment (never removed),
     /// whether that list could be read, and whether the managed admin is one of them.
     var mdmAdmins: [String]
     var mdmAdminList: String
     var localAdminIsMDMAccount: Bool
-    var externalChangeReason: String?
+    /// Reveal / deadline: mode, when the current code was made, wrong tries, the wait
+    /// after too many, whether an MDM (or AD) holds the code, the last reveal, and when
+    /// the password changes.
     var retrievalMode: String
     var revealCodeSet: String?
     var revealFailures: Int?
+    /// True while reveals wait after too many wrong codes, until revealRetryAt.
     var revealLocked: Bool?
+    var revealRetryAt: String?
     var revealCodeCollected: Bool?
     var revealedAt: String?
     var rotatesAt: String?
@@ -150,7 +149,8 @@ enum Status {
         let bootstrap: Bool? = bootstrapOutput.contains("escrowed to server: YES") ? true
             : (bootstrapOutput.contains("escrowed to server: NO") ? false : nil)
 
-        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
+        let stored = KeychainService.current
+        let password = stored?.password, created = stored?.created
         var verifies: Bool? = nil
         if let pw = password, let rec = record {
             verifies = RunState.storedPasswordWorks(pw, created: created, record: rec)
@@ -166,8 +166,7 @@ enum Status {
             // Otherwise unknown: checking FirstPass against the account on every inventory
             // could add failed logins toward a lockout policy.
         }
-        let createdDate = (created == nil || created == "Not Found") ? nil : created
-        let expires = password == nil ? nil : LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
+        let expires = password == nil ? nil : Constants.dateFormatter.string(from: LocalTools.get_expiration_date())
         let staged = Staging.pending()
         let certConfig = Escrow.certificateConfig()
         let certs = certConfig.certificates
@@ -189,7 +188,7 @@ enum Status {
             passwordStored: password != nil,
             passwordVerifies: verifies,
             passwordIsFirstPass: isFirstPass,
-            lastRotation: isoDate(createdDate),
+            lastRotation: isoDate(created),
             expires: isoDate(expires),
             escrow: certConfig.unusable ? "error" : (certConfig.configured ? "cms" : "plaintext"),
             escrowCertificates: certs.map { String(Escrow.fingerprint($0).prefix(16)) },
@@ -215,14 +214,15 @@ enum Status {
             elevationTool: AdminGroup.elevationTool(),
             demotedAdmins: { let d = RunState.arrayValue("demotedAdmins"); return d.isEmpty ? nil : d }(),
             externalChange: RunState.value("externalChange"),
+            externalChangeReason: RunState.value("externalChangeReason"),
             mdmAdmins: MDMAccounts.createdByMDM(),
             mdmAdminList: MDMAccounts.listState,
             localAdminIsMDMAccount: MDMAccounts.isCreatedByMDM(Constants.local_admin),
-            externalChangeReason: RunState.value("externalChangeReason"),
             retrievalMode: Reveal.deviceMode ? "device" : "escrow",
             revealCodeSet: Reveal.deviceMode ? RunState.value("revealCodeSet") : nil,
             revealFailures: Reveal.deviceMode ? Reveal.failures : nil,
             revealLocked: Reveal.deviceMode ? Reveal.locked : nil,
+            revealRetryAt: Reveal.deviceMode ? Reveal.retryAt.map { RunState.iso.string(from: $0) } : nil,
             revealCodeCollected: Reveal.deviceMode ? Reveal.codeCollected : nil,
             revealedAt: RunState.value("revealedAt"),
             rotatesAt: RunState.value("rotatesAt"),
@@ -312,7 +312,8 @@ enum Status {
             line(report.revealCodeCollected, "An MDM (or AD) holds the current reveal code",
                  "Run macOSLAPS -escrow from your MDM's inventory (or set ADRevealCode), or nobody can reveal the password.")
             if report.revealLocked == true {
-                line(false, "Reveals are locked after \(report.revealFailures ?? 0) wrong codes", "Run macOSLAPS -resetPassword: the rotation issues a new code.")
+                line(false, "Reveals wait until \(report.revealRetryAt ?? "?") after \(report.revealFailures ?? 0) wrong codes in a row",
+                     "Wait, or run macOSLAPS -resetPassword: the rotation issues a new code and starts over.")
             }
         }
         if let at = report.rotatesAt {
@@ -349,227 +350,10 @@ enum Status {
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
-// ------------------ //
-// | Inventory hook | //
-// ------------------ //
-// Runs jamf recon or a custom command after a change, never inside itself.  //
-enum InventoryHook {
-    /// Set in the hook's environment so macOSLAPS runs started by it (for example an
-    /// extension attribute run by `jamf recon`) never rotate or start the hook again.
-    static let environmentMarker = "MACOSLAPS_INVENTORY_HOOK"
-
-    /// Whether a successful run of the configured hook means inventory was collected
-    /// (jamf recon does; a custom command only when InventoryHookConfirms is true).
-    static var confirmsExports : Bool {
-        switch (GetPreference(preference_key: "InventoryHook") as? String ?? "").lowercased() {
-        case "jamf": return true
-        case "custom": return GetPreference(preference_key: "InventoryHookConfirms") as? Bool ?? false
-        default: return false
-        }
-    }
-
-    /// Runs the configured hook (if any) and waits up to `timeout` seconds. Never fatal.
-    /// Returns true when a hook ran and exited 0.
-    @discardableResult
-    static func run(reason: String, timeout: TimeInterval = 300) -> Bool {
-        // The rotation is finished; don't make other runs wait for the hook.
-        RunLock.release()
-        if Constants.inside_hook { return false }
-        let mode = (GetPreference(preference_key: "InventoryHook") as? String ?? "")
-            .trimmingCharacters(in: .whitespaces).lowercased()
-        var command: [String]
-        switch mode {
-        case "", "none":
-            return false
-        case "jamf":
-            command = ["/usr/local/bin/jamf", "recon"]
-        case "custom":
-            command = GetPreference(preference_key: "InventoryHookCommand") as? [String] ?? []
-        default:
-            laps_log.print("Unknown InventoryHook \"\(mode)\". Use jamf or custom.", .warn)
-            return false
-        }
-        guard let executable = command.first, FileManager.default.isExecutableFile(atPath: executable) else {
-            laps_log.print("InventoryHook \(mode): \(command.first ?? "no command") is not an executable file. Skipped.", .warn)
-            return false
-        }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = Array(command.dropFirst())
-        var environment = ProcessInfo.processInfo.environment
-        environment[environmentMarker] = "1"
-        process.environment = environment
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        do {
-            try process.run()
-        } catch {
-            laps_log.print("InventoryHook \(mode) could not start: \(describe(error))", .warn)
-            return false
-        }
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.5) }
-        if process.isRunning {
-            process.terminate()
-            laps_log.print("InventoryHook \(mode) (after \(reason)) did not finish within \(Int(timeout)) seconds and was stopped.", .warn)
-            return false
-        } else if process.terminationStatus == 0 {
-            laps_log.print("InventoryHook \(mode) ran after \(reason).", .info)
-            return true
-        } else {
-            laps_log.print("InventoryHook \(mode) (after \(reason)) exited with status \(process.terminationStatus).", .warn)
-            return false
-        }
-    }
-}
-
-// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
-// ---------------------- //
-// | State between runs | //
-// ---------------------- //
-// /var/db/macoslaps/state.plist: last run, staging counters, migration, and //
-// a cached result of checking the stored password. Never a password.        //
-/// Non-secret state kept between runs in /var/db/macoslaps/state.plist (root only):
-/// the last rotation run's time, result and error, and a cached result of checking the
-/// stored password against the account. No password is ever written here.
-enum RunState {
-    static let directory = "/var/db/macoslaps"
-    static let path = directory + "/state.plist"
-    /// Re-check a stored password against the account at most this often.
-    static let verifyInterval : TimeInterval = 24 * 60 * 60
-
-    static let iso : ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        f.timeZone = TimeZone.current
-        return f
-    }()
-
-    /// With fractional seconds, for comparing with file times (deadlineSetAt).
-    static let preciseISO : ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    private static func load() -> [String: Any] {
-        guard let data = FileManager.default.contents(atPath: path),
-              let dict = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return [:] }
-        return dict
-    }
-    /// Written to a 600 temporary file and renamed over the old one, so a reader never
-    /// sees half a file.
-    private static func save(_ dict: [String: Any]) {
-        let fm = FileManager.default
-        try? fm.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        guard let data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .xml, options: 0) else { return }
-        let temporary = path + ".tmp"
-        guard fm.createFile(atPath: temporary, contents: data, attributes: [.posixPermissions: 0o600]) else { return }
-        if rename(temporary, path) != 0 { unlink(temporary) }
-    }
-    /// The check daemon, the service and commands such as -expireIn and -escrow can all
-    /// change the state at once. Each load-change-save holds an exclusive lock, so one
-    /// can't write back a stale copy over another's change.
-    private static func update(_ change: (inout [String: Any]) -> Void) {
-        guard getuid() == 0 else { return }
-        try? FileManager.default.createDirectory(atPath: directory, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
-        let lock = open(directory + "/.state.lock", O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
-        if lock >= 0 { flock(lock, LOCK_EX) }
-        defer { if lock >= 0 { flock(lock, LOCK_UN); close(lock) } }
-        var dict = load()
-        change(&dict)
-        save(dict)
-    }
-
-    // MARK: Generic values (used by Staging)
-
-    static func value(_ key: String) -> String? { load()[key] as? String }
-    static func intValue(_ key: String) -> Int { (load()[key] as? NSNumber)?.intValue ?? 0 }
-    static func arrayValue(_ key: String) -> [String] { load()[key] as? [String] ?? [] }
-    static func set(_ values: [String: Any], remove: [String] = []) {
-        update { d in
-            for (k, v) in values { d[k] = v }
-            for k in remove { d.removeValue(forKey: k) }
-        }
-        // The menu bar agent follows the deadline through a world-readable copy.
-        if values["rotatesAt"] != nil || remove.contains("rotatesAt") { Reveal.publishDeadline() }
-    }
-
-    // MARK: Last run
-
-    /// Set once a rotation run starts; errors logged after that are remembered.
-    static var tracking = false
-    static var lastError : String?
-    private static var recorded = false
-
-    static func begin() {
-        tracking = true
-        atexit {
-            // Exits without an explicit result (error paths call exit(1)) are failures.
-            if RunState.tracking && !RunState.recordedResult {
-                RunState.record("failed", message: RunState.lastError ?? "exited without completing")
-            }
-        }
-    }
-    static var recordedResult : Bool { recorded }
-
-    /// result: rotated, not-due, initialized, failed.
-    static func record(_ result: String, message: String? = nil) {
-        recorded = true
-        if result == "rotated" { Reveal.afterRotation() }
-        if result == "rotated" || result == "initialized" {
-            update { d in Ownership.stateKeys.forEach { d.removeValue(forKey: $0) } }
-        }
-        update { d in
-            d["lastRun"] = iso.string(from: Date())
-            d["lastResult"] = result
-            if let message = message { d["lastMessage"] = message } else { d.removeValue(forKey: "lastMessage") }
-            if result != "failed" { d["lastSuccess"] = iso.string(from: Date()) }
-        }
-    }
-
-    static func lastRun() -> (run: String?, result: String?, message: String?, success: String?) {
-        let d = load()
-        return (d["lastRun"] as? String, d["lastResult"] as? String, d["lastMessage"] as? String, d["lastSuccess"] as? String)
-    }
-
-    // MARK: Cached password check
-
-    /// Whether `password` (the stored one, created at `created`) works for the account.
-    /// A failed check is remembered for verifyInterval per stored password, so inventory
-    /// scripts running -status/-escrow/-getPassword don't add a failed login every time
-    /// when the keychain and the account disagree.
-    static func storedPasswordWorks(_ password: String, created: String?, record: ODRecord, force: Bool = false) -> Bool {
-        let key = created ?? "unknown"
-        let d = load()
-        // Only a failure is reused: checking a password that works never counts toward a
-        // lockout, so a success is re-checked every time (and catches manual changes).
-        if !force, d["verifiedItem"] as? String == key,
-           let at = (d["verifiedAt"] as? String).flatMap(iso.date(from:)),
-           Date().timeIntervalSince(at) < verifyInterval,
-           d["verifiedResult"] as? Bool == false {
-            return false
-        }
-        let works = (try? record.verifyPassword(password)) != nil
-        noteVerified(works, created: created)
-        return works
-    }
-
-    /// Records a password check done elsewhere (e.g. right after a rotation).
-    static func noteVerified(_ works: Bool, created: String?) {
-        update { d in
-            d["verifiedItem"] = created ?? "unknown"
-            d["verifiedAt"] = iso.string(from: Date())
-            d["verifiedResult"] = works
-        }
-    }
-}
-
-// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ----------- //
 // | Helpers | //
 // ----------- //
-// Certificate expiry and date formats for the JSON.                         //
+// Certificate expiry for -status.                                           //
 /// Earliest expiry among certificates (nil if none or unreadable).
 func earliestExpiry(_ certs: [SecCertificate]) -> Date? {
     certs.compactMap { cert -> Date? in
@@ -578,12 +362,4 @@ func earliestExpiry(_ certs: [SecCertificate]) -> Date? {
               let number = entry[kSecPropertyKeyValue as String] as? NSNumber else { return nil }
         return Date(timeIntervalSinceReferenceDate: number.doubleValue)
     }.min()
-}
-
-/// Converts a macOSLAPS date ("yyyy-MM-dd HH:mm:ss", local time, as stored in the keychain
-/// comment) to ISO 8601 with the time zone offset for JSON output. Unparseable → as is.
-func isoDate(_ legacy: String?) -> String? {
-    guard let text = legacy else { return nil }
-    guard let date = Constants.dateFormatter.date(from: text) else { return text }
-    return RunState.iso.string(from: date)
 }

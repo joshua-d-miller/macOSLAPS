@@ -44,7 +44,7 @@ Every build runs these on GitHub's macOS runners. A build can only be published 
 - Safety: a simulated secureToken account requires the old password; secureToken detection fails closed; stop signals mid-change are ignored; two runs at once don't interleave; an outside password change stops rotation without touching the account; `-firstPass` and `-firstPass -`.
 - Settings: new and old domains resolved per key.
 - `-status`, `-status -v`, `-escrow` in plain text and CMS, `-initialize`, staged rotation, the custom inventory hook, `PasswordStyle readable`.
-- Device mode: reveal codes, wrong codes, the five-try lockout, the grace deadline, `-expireIn`, the deadline met between scheduled runs, codes refused on the command line.
+- Device mode: reveal codes, wrong codes, the wait after five wrong codes, the grace deadline, `-expireIn`, the deadline met between scheduled runs, codes refused on the command line.
 - The privileged service: a standard user reveals through XPC, an unsigned copy is refused, rotate-now requests (including stale ones, which are ignored).
 - Admin group protection: unapproved admins removed, approved ones and groups kept, report mode, MDM-created admin list read.
 - Logs: location, symlink, rotation, unified log.

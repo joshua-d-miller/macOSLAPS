@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Staged rotation: the MDM gets the next password before the account
@@ -31,6 +31,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    pending() returns a KeychainItem.
+                        claude
  4.0.0     2026-11-11   joshua    New file. Never stages in device mode.
                         claude
                                   New header and section style.
@@ -76,10 +78,8 @@ enum Staging {
     }
 
     /// The pending password and its creation date, if one is staged.
-    static func pending() -> (password: String, created: String?)? {
-        let (password, created) = KeychainService.loadPassword(service: service)
-        guard let pw = password else { return nil }
-        return (pw, (created == "Not Found") ? nil : created)
+    static func pending() -> KeychainItem? {
+        KeychainService.load(service: service)
     }
 
     static var exports : Int { RunState.intValue("pendingExports") }

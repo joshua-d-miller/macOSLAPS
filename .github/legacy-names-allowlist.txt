@@ -15,9 +15,9 @@ macOSLAPS-legacy/main.swift                         # the helper signed edu.psu.
 macOSLAPS/Extensions/KeychainService.swift          # names of the old keychain items
 macOSLAPS/Extensions/Migration.swift                # migration from 3.x / 845
 macOSLAPS/Preferences/Preferences.swift             # legacy preference domain
-MDM Scripts/macoslaps4-mdm-install-script.sh        # removes old installs; legacy settings
-MDM Scripts/macoslaps4-mdm-password-and-expiration.sh  # reads the legacy settings domain
-MDM Scripts/macoslaps4-mdm-password-simple.sh       # reads the legacy settings domain
+integrations/install/macOSLAPS-Install.sh          # removes old installs; legacy settings
+integrations/generic/macOSLAPS-Password-Expiration.sh  # reads the legacy settings domain
+integrations/generic/macOSLAPS-Password.sh         # reads the legacy settings domain
 packaging/app-scripts/postinstall                   # forgets the old receipt
 packaging/daemon-scripts/postinstall                # forgets the old receipt
 packaging/daemon-scripts/preinstall                 # removes the old LaunchDaemon

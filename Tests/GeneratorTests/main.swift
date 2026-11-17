@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-09
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Unit tests for PasswordGenerator
@@ -21,6 +21,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    checkChosen (-newPassword).
+                        claude
  4.0.0     2026-11-11   joshua    New file.
                         claude
                                   New header and section style.
@@ -205,6 +207,17 @@ for _ in 0..<10_000 {
     }
 }
 expect(generated > 5_000, "property: only \(generated) of 10000 random policies generated")
+
+// -newPassword: a chosen password is checked against the same settings.
+func chosenOK(_ pw: String, _ policy: PasswordPolicy) -> Bool { (try? PasswordGenerator.checkChosen(pw, policy: policy)) != nil }
+let chosenPolicy = PasswordPolicy(length: 12, excludedCharacters: ["|"], requirements: ["Number": 2])
+expect(chosenOK("Chosen-Pass-24", chosenPolicy), "chosen: a password meeting the settings is accepted")
+expect(chosenOK("Chosen-Pass-24-and-longer", chosenPolicy), "chosen: longer than PasswordLength is fine")
+expect(!chosenOK("Short-24", chosenPolicy), "chosen: shorter than PasswordLength is refused")
+expect(!chosenOK("Chosen|Pass-24", chosenPolicy), "chosen: an excluded character is refused")
+expect(!chosenOK("Chosen-Pass-x4", chosenPolicy), "chosen: too few numbers is refused")
+expect(!chosenOK("Chosen-Pass-24", PasswordPolicy(length: 12, style: "readable")), "chosen: symbols refused with PasswordStyle readable")
+expect(chosenOK("ABCD-EFGH-JKMN", PasswordPolicy(length: 12, grouping: 4, separator: "-", style: "readable")), "chosen: separators don't count toward the length")
 
 print("\(checks) checks, \(failures) failures")
 exit(failures == 0 ? 0 : 1)

@@ -20,7 +20,7 @@ The [`integrations/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/int
 | Workspace ONE | [`workspace-one/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/workspace-one) | Sensors |
 | Iru (Kandji), Mosyle, Addigy and others | [`generic/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/generic) | Whatever your MDM calls a custom inventory script |
 
-For Jamf Pro there are also the [`jamf Extension Attributes/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/jamf%20Extension%20Attributes) (password only, expiration only, or both), and Henri Kovanen's [`MDM Scripts/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/MDM%20Scripts) for installing macOSLAPS and reporting from any MDM.
+`jamf/` also has James Smith's extension attributes in the 3.x format (password only, expiration only, or both), and `generic/` has Henri Kovanen's password scripts for any MDM. Henri's [`install/`](https://github.com/joshua-d-miller/macOSLAPS/tree/main/integrations/install) script installs macOSLAPS from your MDM. They used to be in the `jamf Extension Attributes/` and `MDM Scripts/` folders.
 
 !!! tip "Replace scripts from 3.x"
     Earlier scripts read the old keychain item or the old path, and mishandled passwords containing a backslash. Use this release's.
@@ -50,7 +50,7 @@ Two more payloads help:
 | `lastResult` | `failed` | The last run failed; `lastMessage` says why |
 | `unapprovedAdmins` | not empty | Admins that aren't approved (with `AdminGroupPolicy report`, or before they're removed) |
 | `passwordIsFirstPass` | `true` | The account still has the shared `FirstPass` password |
-| `revealLocked` | `true` | Device mode: too many wrong codes |
+| `revealLocked` | `true` | Device mode: reveals wait after too many wrong codes (until `revealRetryAt`) |
 | `escrowCertificatesExpire` | soon | An escrow certificate needs replacing |
 
 ## Refreshing inventory after a rotation

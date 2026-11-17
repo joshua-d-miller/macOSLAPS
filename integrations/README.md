@@ -15,6 +15,20 @@ Log messages go to stderr for these commands, so only the result is captured.
 | `intune/` | Intune custom attributes for macOS |
 | `workspace-one/` | Workspace ONE sensors |
 | `generic/` | Anything else (Iru/Kandji, Mosyle, Addigy, ...) |
+| `install/` | Installing, updating or removing macOSLAPS from any MDM |
+
+Also here, and still working with 3.x as well as 4.0:
+
+| Script | What it reports | Formerly |
+|---|---|---|
+| `jamf/macOSLAPS-Password-EA.zsh` | `\| Password: … \|` | `jamf Extension Attributes/Password Only.zsh` |
+| `jamf/macOSLAPS-Expiration-EA.zsh` | `\| Expiration: … \|` | `jamf Extension Attributes/Expiration Only.zsh` |
+| `jamf/macOSLAPS-Password-Expiration-EA.zsh` | both | `jamf Extension Attributes/Password and Expiration Combined.zsh` |
+| `generic/macOSLAPS-Password.sh` | `<password> (expires …)` | `MDM Scripts/macoslaps4-mdm-password-simple.sh` |
+| `generic/macOSLAPS-Password-Expiration.sh` | the same, rotating first when close to expiring | `MDM Scripts/macoslaps4-mdm-password-and-expiration.sh` |
+| `install/macOSLAPS-Install.sh` | installs macOSLAPS and sets up the managed admin | `MDM Scripts/macoslaps4-mdm-install-script.sh` |
+
+The Jamf extension attributes were written by James Smith and the password and install scripts by Henri Kovanen (Decens Oy).
 
 ## Staged rotation (4.0)
 With `StagedRotation` on (or `auto`, the default, once your MDM runs `-escrow`), a new password is first stored as **pending** and `-escrow` reports it next to the current one (`"pending"`, `"pendingSet"`). macOSLAPS changes the account to it only after `-escrow` has reported it `EscrowConfirmations` times (default 2), so your MDM always has the password the Mac is using. Keep both values: if the current password doesn't work, try the pending one.

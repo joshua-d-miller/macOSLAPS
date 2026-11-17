@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      Reads the settings. macOSLAPS is moving from the original
@@ -21,6 +21,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Method defaults to auto: AD when bound to
+                        claude    Active Directory, else Local; -showConfig
+                                  says which.
  4.0.0     2026-11-12   joshua    New domain com.joshua-d-miller.macoslaps, per
                         claude    key over the legacy one; type coercion;
                                   -showconfig; ApprovedAdmins, AdminGroupPolicy
@@ -33,6 +36,7 @@
 */
 
 import Foundation
+import SystemConfiguration
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ------------------------ //
@@ -56,7 +60,7 @@ var defaultpreferences : [ String : Any ] = [
     "ExclusionSets"          :       [String](),
     "PreferredDC"            :       "",
     "FirstPass"              :       "",
-    "Method"                 :       "AD",
+    "Method"                 :       "auto",
     "ADSchema"               :       "legacy",
     "PasswordStyle"          :       "random",
     "InventoryHook"          :       "",
@@ -291,12 +295,21 @@ private func coerceRequirements(_ raw: Any) -> [String : Int]? {
     return result
 }
 
+/// AD, Local, or auto (the default): AD when this Mac is bound to Active Directory,
+/// Local when it isn't. Sites that relied on the old default (AD) keep it on bound Macs.
 private func normalizeMethod(_ value: String) -> String {
     switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
     case "ad", "activedirectory", "active directory": return "AD"
     case "local": return "Local"
+    case "auto", "": return isBoundToActiveDirectory() ? "AD" : "Local"
     default: return value   // main.swift rejects unknown methods with an error
     }
+}
+
+/// Whether this Mac has an Active Directory binding (the AD plugin's configuration).
+func isBoundToActiveDirectory() -> Bool {
+    let store = SCDynamicStoreCreate(nil, "macOSLAPS" as CFString, nil, nil)
+    return SCDynamicStoreCopyValue(store, "com.apple.opendirectoryd.ActiveDirectory" as CFString) != nil
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -308,7 +321,10 @@ private func normalizeMethod(_ value: String) -> String {
 /// The returned value always has the same type as the key's default, so callers' casts are safe.
 func GetPreference(preference_key key: String) -> Any? {
     let fallback = defaultpreferences[key]
-    guard let raw = PreferenceStore.shared.rawValue(forKey: key) else { return fallback }
+    guard let raw = PreferenceStore.shared.rawValue(forKey: key) else {
+        // Method's default, auto, still has to be resolved to AD or Local.
+        return key == "Method" ? normalizeMethod(fallback as? String ?? "auto") : fallback
+    }
     guard let fallback = fallback else { return raw }
 
     // Match on the default's exact type (not `is`, which can bridge numbers and booleans).
@@ -347,6 +363,9 @@ func printEffectiveConfiguration() {
     for key in defaultpreferences.keys.sorted() {
         let value = GetPreference(preference_key: key)
         var shown = value.map { "\($0)" } ?? "nil"
+        if key == "Method", ((prefs.rawValue(forKey: key) as? String) ?? "auto").lowercased().trimmingCharacters(in: .whitespaces) == "auto" {
+            shown += " (auto: \(isBoundToActiveDirectory() ? "bound to Active Directory" : "not bound to Active Directory"))"
+        }
         if secretPreferenceKeys.contains(key) {
             shown = ((value as? String) ?? "").isEmpty ? "(not set)" : "(set, redacted)"
         }

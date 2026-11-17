@@ -42,7 +42,7 @@ Include both when you ask for help in #laps or open an issue. Neither prints a p
 :   `EscrowCertificates` is set but none of the certificates is usable. `-status -v` says which and why. This is deliberate: it never falls back to plain text.
 
 **Device mode: "Too many wrong codes"**
-:   Five wrong codes lock reveals. `sudo macOSLAPS -resetPassword` rotates and issues a new code.
+:   After five wrong codes in a row, reveals wait a minute, and twice as long after each further wrong code (at most an hour). `-status` shows until when (`revealRetryAt`). Wait, or run `sudo macOSLAPS -resetPassword`, which rotates and issues a new code.
 
 **Device mode: the window says the service didn't answer**
 :   Check that `com.joshua-d-miller.macoslaps-service` is loaded (`sudo launchctl print system/com.joshua-d-miller.macoslaps-service`), and that a Managed Login Items rule isn't blocking it.
