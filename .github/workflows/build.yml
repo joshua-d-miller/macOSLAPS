@@ -229,7 +229,9 @@ jobs:
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           APP_ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
           INST_ID=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/{print $2; exit}')
-          codesign --force --timestamp --options runtime --identifier com.joshua-d-miller.macoslaps --sign "$APP_ID" "$BIN"
+          # Apple's timestamp server sometimes fails for a while; try again before giving up.
+          retry() { for n in 1 2 3 4 5; do "$@" && return 0; echo "::warning::$1 failed (try $n of 5); retrying in 30 s"; sleep 30; done; return 1; }
+          retry codesign --force --timestamp --options runtime --identifier com.joshua-d-miller.macoslaps --sign "$APP_ID" "$BIN"
           codesign --verify --strict --verbose=2 "$BIN"
           echo "KC=$KC" >> "$GITHUB_ENV"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
@@ -280,9 +282,11 @@ jobs:
           }, open(path, "wb"))
           PY
           plutil -lint "$APP/Contents/Info.plist"
+          # Apple's timestamp server sometimes fails for a while; try again before giving up.
+          retry() { for n in 1 2 3 4 5; do "$@" && return 0; echo "::warning::$1 failed (try $n of 5); retrying in 30 s"; sleep 30; done; return 1; }
           # Inside-out: the helper first, then the bundle (which signs the main executable).
-          codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
-          codesign --force --options runtime "${sign[@]}" "$APP"
+          retry codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
+          retry codesign --force --options runtime "${sign[@]}" "$APP"
           codesign --verify --strict --deep --verbose=2 "$APP"
           for f in "$APP" "$APP/Contents/Helpers/macOSLAPS-legacy"; do
             echo "$f: $(codesign -dv "$f" 2>&1 | grep -E '^Identifier|^TeamIdentifier' | tr '\n' ' ')"
