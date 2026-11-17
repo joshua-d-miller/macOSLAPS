@@ -26,8 +26,8 @@ Settings go in a configuration profile for the preference domain **`com.joshua-d
 </array>
 ```
 
-!!! danger "Set `Method` and check `ApprovedAdmins` before you deploy"
-    - The built-in default for `Method` is `AD`, from macOSLAPS's Active Directory origins. MDM setups must set **`Local`**.
+!!! danger "Check `Method` and `ApprovedAdmins` before you deploy"
+    - `Method` defaults to **`auto`**: `AD` on a Mac bound to Active Directory, `Local` on one that isn't. Set it explicitly if your bound Macs should use `Local`.
     - **Admin group protection is on by default.** On its first run macOSLAPS removes every admin except the managed account, `root`, the accounts in `ApprovedAdmins` and the admin your MDM created during enrollment. If your users are admins on purpose, add them, or set `AdminGroupPolicy` to `report`. Read [Admin group protection](admin-group.md).
 
 Tools for building the profile:

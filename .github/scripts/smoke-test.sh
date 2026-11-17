@@ -26,6 +26,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-17   joshua    Reveal wait (backoff) instead of the lock;
                         claude    elevation tools must be signed.
+                                  -read, -rotate, -currentPassword,
+                                  -newPassword; Method auto.
  4.0.0     2026-11-12   joshua    Tests for every 4.0 feature: app layout, new
                         claude    label and receipts, Login Items attribution,
                                   migration status, staging, -firstPass never
@@ -373,6 +375,11 @@ else
 fi
 rm -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist"
 defaults delete "$NEWDOM" >/dev/null 2>&1; rm -f "$NEWDOM.plist"
+# Method unset: the default auto picks Local on a Mac that isn't bound to AD.
+defaults delete "$DOMAIN" Method >/dev/null 2>&1
+"$LAPS" -showConfig 2>/dev/null | grep -q "Method = Local (auto: not bound to Active Directory)  \[default\]" \
+    && "$LAPS" -status | grep -q '"method":"Local"' && pass "Method defaults to auto: Local when not bound" || fail "Method auto: $("$LAPS" -showConfig 2>/dev/null | grep Method)"
+defaults write "$DOMAIN" Method -string Local
 killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = $LEN  \[/Library/Preferences, legacy domain\]" && pass "back to legacy-only settings" || fail "settings not restored to legacy only"
 echo "::endgroup::"
@@ -689,6 +696,47 @@ re='^[A-HJ-NP-Za-km-np-z2-9]{4}(-[A-HJ-NP-Za-km-np-z2-9]{4}){3}$'
 [[ "$RP" =~ $re ]] && pass "readable password is 4x4 groups without look-alikes or symbols" || fail "readable password format: length ${#RP}"
 dscl . -authonly "$ACCT" "$RP" >/dev/null 2>&1 && pass "readable password authenticates" || fail "readable password does not authenticate"
 defaults delete "$DOMAIN" PasswordStyle
+echo "::endgroup::"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------------------------------- ###
+### | -read, -rotate, -currentPassword, -newPassword | ###
+### ------------------------------------------------- ###
+### -read prints only the password and never counts as a collection;       ###
+### the new names work like the old ones; a chosen password is read from   ###
+### stdin only and must meet the password settings.                        ###
+echo "::group::-read, -rotate, -currentPassword, -newPassword"
+CUR=$(get_pw)
+[ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] && pass "-read prints only the current password" || fail "-read output"
+defaults write "$DOMAIN" StagedRotation -string on
+"$LAPS" -rotate >/dev/null 2>&1
+BEFORE_READ=$(jget "$("$LAPS" -status)" pendingExports)
+"$LAPS" -read >/dev/null 2>&1; "$LAPS" -read >/dev/null 2>&1
+[ -n "$BEFORE_READ" ] && [ "$(jget "$("$LAPS" -status)" pendingExports)" = "$BEFORE_READ" ] && [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] \
+    && pass "-rotate stages; -read prints the password in use and doesn't count as a collection" || fail "-read with a staged password: $("$LAPS" -status)"
+defaults write "$DOMAIN" StagedRotation -string off
+"$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied
+CUR=$(get_pw)
+CHOSEN='Chosen-Pass-2468-xyz'
+OUT=$("$LAPS" -rotate -newPassword "$CHOSEN" 2>&1); RC=$?
+[ "$RC" -eq 64 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword on the command line is refused" || fail "-newPassword in argv: rc $RC"
+printf '%s\n' 'short-1' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a too-short chosen password was accepted" \
+    || { [ "$(get_pw)" = "$CUR" ] && pass "a chosen password shorter than PasswordLength is refused, nothing changed" || fail "password changed after a refused -newPassword"; }
+printf '%s\n' 'Chosen-Pass-|-2468' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a chosen password with an excluded character was accepted" \
+    || pass "a chosen password with a RemovePassChars character is refused"
+printf '%s\n' "$CHOSEN" | "$LAPS" -rotate -newPassword - >/dev/null 2>&1
+[ "$(get_pw)" = "$CHOSEN" ] && dscl . -authonly "$ACCT" "$CHOSEN" >/dev/null 2>&1 && pass "-rotate -newPassword - sets the chosen password" || fail "chosen password not set"
+# Changed outside macOSLAPS: -rotate -currentPassword - takes the account back.
+dscl . -passwd "/Users/$ACCT" "$CHOSEN" 'Outside-Pass-1357' >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
+NOW=$(get_pw)
+[ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
+# Both from stdin, in the order of the options.
+printf '%s\n%s\n' "$NOW" "$CHOSEN-2" | "$LAPS" -rotate -currentPassword - -newPassword - >/dev/null 2>&1
+[ "$(get_pw)" = "$CHOSEN-2" ] && dscl . -authonly "$ACCT" "$CHOSEN-2" >/dev/null 2>&1 && pass "-currentPassword - and -newPassword - read two lines in order" || fail "two passwords from stdin"
+"$LAPS" -rotate >/dev/null 2>&1
+[ "$(get_pw)" != "$CHOSEN-2" ] && pass "the next rotation generates a password again" || fail "-newPassword stuck"
 echo "::endgroup::"
 
 if [ "$HAS_TOKEN" -eq 1 ]; then

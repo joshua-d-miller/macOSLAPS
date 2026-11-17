@@ -25,6 +25,12 @@
                         claude    -getPassword and -firstPass parsing
                                   shortened; -rotateNow handled once;
                                   KeychainItem.
+                                  -read for scripts on the Mac (never counts
+                                  as a collection); -rotate and
+                                  -currentPassword (new names for
+                                  -resetPassword and -firstPass); -newPassword
+                                  from a prompt or stdin; the staging message
+                                  mentions the hook only when it can confirm.
  4.0.0     2026-11-12   joshua    App bundle and new identity
                         claude    (com.joshua-d-miller.macoslaps) with
                                   migration from 3.x / 845; -status, -escrow,
@@ -58,7 +64,7 @@ struct Constants {
     // Begin by tying date_formatter() to a variable
     static let dateFormatter = date_formatter()
     // Read Command Line Arugments into array to use later
-    static let arguments : Array = CommandLine.arguments.map {$0.lowercased()}
+    static let arguments : Array = CommandLine.arguments.map(canonicalArgument)
     // Retrieve our configuration for the application or use the
     // default values
     static let local_admin = GetPreference(preference_key: "LocalAdminAccount") as! String
@@ -74,6 +80,8 @@ struct Constants {
     // Constant values if triggering a password reset / specifying a First Password
     static var pw_reset : Bool = false
     static var use_firstpass : Bool = false
+    /// -newPassword: the password to set instead of a generated one.
+    static var new_password : String? = nil
     static var initialize : Bool = false
     static var inside_hook : Bool = false
 }
@@ -84,12 +92,20 @@ struct Constants {
 // ------------------------- //
 // Every flag macOSLAPS understands, and the version with its build number.  //
 // Every flag macOSLAPS understands (lowercased). Used so -firstPass never takes a flag as its value.
-let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow", "-agent"]
+let knownArguments : Set<String> = ["-version", "-getpassword", "-resetpassword", "-help", "-firstpass", "-showconfig", "-status", "-v", "-escrow", "-read", "-newpassword", "-initialize", "-uninstall", "-purge", "-reveal", "-expirein", "-reason", "-service", "-rotatenow", "-agent"]
+/// Newer names for older flags (both keep working): -rotate is -resetPassword, and
+/// -currentPassword is -firstPass (the account's password right now).
+let argumentAliases : [String: String] = ["-rotate": "-resetpassword", "-currentpassword": "-firstpass"]
+/// A flag lowercased, with an alias replaced by the flag it stands for.
+func canonicalArgument(_ raw: String) -> String {
+    let lower = raw.lowercased()
+    return argumentAliases[lower] ?? lower
+}
 /// The argument right after `flag` in its original case, unless it is another flag.
 func argumentValue(after flag: String) -> String? {
     let raw = CommandLine.arguments
-    guard let i = raw.firstIndex(where: { $0.lowercased() == flag }), i + 1 < raw.count,
-          !knownArguments.contains(raw[i + 1].lowercased()) else { return nil }
+    guard let i = raw.firstIndex(where: { canonicalArgument($0) == flag }), i + 1 < raw.count,
+          !knownArguments.contains(canonicalArgument(raw[i + 1])) else { return nil }
     return raw[i + 1]
 }
 /// A secret (a reveal code, a FirstPass) read without ever being on the command line,
@@ -255,6 +271,52 @@ func initializeWithoutRotating() -> Never {
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// -------------------------- //
+// | -read and -newPassword | //
+// -------------------------- //
+// The password for scripts on this Mac, and a password chosen by a person.  //
+/// -read: the current password on one line, for scripts on this Mac (XCreds, the macOS
+/// installer). Unlike -escrow it never counts as the MDM collecting a staged password,
+/// and it prints even with EscrowCertificates, because it stays on this Mac.
+func readForScripts() -> Never {
+    if Reveal.deviceMode {
+        laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
+        exit(1)
+    }
+    guard let stored = KeychainService.current else {
+        laps_log.print("No macOSLAPS password is stored for \(Constants.local_admin) yet. Nothing was printed.", .error)
+        exit(1)
+    }
+    guard RunState.storedPasswordWorks(stored.password, created: stored.created, record: LocalTools.connect()) else {
+        laps_log.print("The stored password doesn't work for \(Constants.local_admin) right now. Nothing was printed; see macOSLAPS -status -v.", .error)
+        exit(1)
+    }
+    print(stored.password)
+    exit(0)
+}
+
+/// -newPassword: the password to set instead of a generated one, typed at a prompt or
+/// piped in (never on the command line), checked against the password settings.
+func chosenPassword() -> String {
+    if let given = argumentValue(after: "-newpassword"), given != "-" {
+        laps_log.print("Don't put the new password on the command line, where other processes can see it. Type it at the prompt, or pipe it: printf '%s\\n' \"$password\" | macOSLAPS -rotate -newPassword -", .error)
+        exit(64)
+    }
+    guard let chosen = SecretInput.read(prompt: "New password for \(Constants.local_admin): ") else {
+        laps_log.print("-newPassword needs the new password: type it at the prompt, or pipe it: printf '%s\\n' \"$password\" | macOSLAPS -rotate -newPassword -", .error)
+        exit(64)
+    }
+    do {
+        try PasswordGenerator.checkChosen(chosen, policy: currentPasswordPolicy(length: Constants.password_length))
+    } catch {
+        laps_log.print("\(error) Nothing was changed.", .error)
+        exit(1)
+    }
+    laps_log.print("Using the password given with -newPassword for \(Constants.local_admin) instead of a generated one. A password a person chose is easier to guess; the next rotation generates one again.", .warn)
+    return chosen
+}
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ----------------------- //
 // | Rotating or staging | //
 // ----------------------- //
@@ -288,7 +350,8 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
         RunState.set([:], remove: ["applying"])
     }
 
-    if let pending = Staging.pending() {
+    // -newPassword replaces a staged password instead of applying it.
+    if Constants.new_password == nil, let pending = Staging.pending() {
         if !Staging.active {
             laps_log.print("Staged rotation is off; applying the pending password now.", .info)
             apply(pending.password); exit(0)
@@ -318,7 +381,8 @@ func rotateOrStage(due: Bool, finishInterrupted: (String) -> Void, apply: (Strin
 
     let next = PasswordGen(length: Constants.password_length)
     guard Staging.stage(next) else { exit(1) }
-    laps_log.print("Staged a new password for \(Constants.local_admin). It will be applied after the MDM collects it with -escrow (\(Staging.confirmationsNeeded) export(s), or sooner through the InventoryHook).", .info)
+    let sooner = InventoryHook.confirmsExports ? ", or sooner through the InventoryHook" : ""
+    laps_log.print("Staged a new password for \(Constants.local_admin). It will be applied on the first macOSLAPS run after the MDM collects it with -escrow (\(Staging.confirmationsNeeded) export(s)\(sooner)).", .info)
     Staging.runHookAndCheck()
     if Staging.confirmed {
         RunLock.acquire()
@@ -348,7 +412,7 @@ func macOSLAPS() {
     if Constants.arguments.contains("-agent") { Agent.run() }
     if AppUI.openedAsApp { AppUI.run(WindowDelegate(), accessory: false) }
     // Commands whose stdout is read by scripts or people must not have log lines mixed in.
-    if !Constants.arguments.filter({ ["-status", "-escrow", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
+    if !Constants.arguments.filter({ ["-status", "-escrow", "-read", "-showconfig", "-help", "-reveal", "-service", "-rotatenow"].contains($0) }).isEmpty {
         laps_log.useStandardError = true
     }
     // An inventory hook (e.g. jamf recon) can run scripts that call macOSLAPS again. Those
@@ -380,7 +444,7 @@ func macOSLAPS() {
     if NSUserName() == "root" && args.isDisjoint(with: ["-showconfig", "-help"]) {
         let reporting = args.contains("-status")
         let recovering = args.contains("-firstpass") || args.contains("-initialize")
-        let rotationRun = args.isDisjoint(with: ["-status", "-escrow", "-getpassword"]) && !Constants.inside_hook
+        let rotationRun = args.isDisjoint(with: ["-status", "-escrow", "-read", "-getpassword"]) && !Constants.inside_hook
         Migration.run(fatal: !(reporting || recovering), rotationRun: rotationRun)
     }
     // Delete the temporary -getPassword export from a previous run
@@ -433,6 +497,12 @@ func macOSLAPS() {
         case "-escrow":
             verify_root()
             Escrow.run()
+        case "-read":
+            verify_root()
+            readForScripts()
+        case "-newpassword":
+            Constants.pw_reset = true
+            Constants.new_password = chosenPassword()
         case "-reveal":
             verify_root()
             Reveal.runCommand(code: SecretInput.revealCode())
@@ -461,14 +531,20 @@ func macOSLAPS() {
                                     to /var/root/.GeneratedLAPSServiceName. The copy is
                                     deleted on the next run.
                   
-                  -resetpassword    Forces a password reset no matter the expiration date
-                  -firstpass        Performs a password reset using the FirstPass Configuration
-                                    Profile key or the password you specify after this flag.
-                                    The password of the admin MUST be this password or the
-                                    change WILL FAIL. Use -firstPass - to type it at a
-                                    prompt or pipe it in, so it never shows in the
-                                    process list:
-                                    printf '%s\\n' "$pw" | macOSLAPS -firstPass - -resetPassword
+                  -rotate           Changes the password now, whatever the expiration
+                                    date (also -resetPassword).
+                  -currentPassword  With -rotate: the account's password right now,
+                                    when macOSLAPS doesn't have it (also -firstPass).
+                                    Without a value, the FirstPass key is used. Use
+                                    -currentPassword - to type it at a prompt or pipe
+                                    it in, so it never shows in the process list:
+                                    printf '%s\\n' "$pw" | macOSLAPS -rotate -currentPassword -
+                  -newPassword -    With -rotate: set this password instead of a
+                                    generated one. Typed at a prompt or piped in, never
+                                    on the command line; it must meet the password
+                                    settings. With -currentPassword - as well, give
+                                    the passwords on separate lines, in the order of
+                                    the options.
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -477,6 +553,10 @@ func macOSLAPS() {
                   -escrow           Prints the current password for an MDM inventory
                                     attribute: JSON, or a CMS (PKCS #7) block encrypted to
                                     the EscrowCertificates when configured.
+
+                  -read             Prints the current password, alone on one line, for
+                                    scripts on this Mac. Never counts as the MDM
+                                    collecting a staged password (-escrow does).
 
                   -initialize       With -firstPass <password> (or the FirstPass key):
                                     verify that password and store it WITHOUT rotating.

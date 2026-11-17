@@ -1,6 +1,6 @@
 # Active Directory
 
-With `Method AD`, macOSLAPS writes the password and its expiration to the Mac's computer object in Active Directory, like LAPS for Windows. It's the original way macOSLAPS worked, and the built-in default for `Method`.
+With `Method AD`, macOSLAPS writes the password and its expiration to the Mac's computer object in Active Directory, like LAPS for Windows. It's the original way macOSLAPS worked, and what the default `Method auto` picks on a Mac bound to Active Directory.
 
 ## Requirements
 

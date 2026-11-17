@@ -5,11 +5,12 @@ The installer puts `macOSLAPS` on the `PATH` (`/etc/paths.d/laps` points into th
 | Command | What it does |
 |---|---|
 | `macOSLAPS` | A normal run: rotates if the password is due, checks the admin group. The LaunchDaemon runs this every 90 minutes. |
-| `-resetPassword` | Rotates now, whatever the expiration date. |
-| `-firstPass <password>` | Rotates using this as the current password (or the `FirstPass` key if no password follows). Needed for a secureToken account's first rotation. |
-| `-firstPass -` | The same, reading the password from a prompt or a pipe, so it never shows in the process list: `printf '%s\n' "$pw" \| macOSLAPS -firstPass - -resetPassword` |
-| `-initialize` | With `-firstPass`: checks the password and stores it **without** rotating. The first rotation happens after `DaysTillExpiration`. |
+| `-rotate` | Rotates now, whatever the expiration date. `-resetPassword` is the older name and still works. |
+| `-rotate -currentPassword -` | Rotates when macOSLAPS doesn't know the account's current password, reading it from a prompt or a pipe so it never shows in the process list: `printf '%s\n' "$pw" \| macOSLAPS -rotate -currentPassword -`. Without a value the `FirstPass` key is used. Needed for a secureToken account's first rotation. `-firstPass` is the older name and still works. |
+| `-rotate -newPassword -` | Sets a password you choose instead of a generated one, read from a prompt or a pipe (never the command line). It must meet the password settings (`PasswordLength`, `PasswordRequirements`, `RemovePassChars`, `ExclusionSets`, `PasswordStyle`) and is staged and escrowed like a generated one. With `-currentPassword -` too, pipe the two passwords on separate lines, in the order of the options. |
+| `-initialize` | With `-currentPassword`: checks the password and stores it **without** rotating. The first rotation happens after `DaysTillExpiration`. |
 | `-escrow` | Prints the password for an MDM inventory attribute: JSON, a CMS block when `EscrowCertificates` is set, or the reveal code in device mode. See [Escrow](retrieval/escrow.md). |
+| `-read` | Prints only the current password, for scripts on the Mac (XCreds, a macOS installer). Unlike `-escrow` it never counts as the MDM collecting a staged password, and it prints even with `EscrowCertificates` set, since it stays on the Mac. Refused in device mode. |
 | `-status` | One line of JSON about the account, secureToken, FileVault, the stored password, escrow, admins and the last run. See [below](#status-fields). |
 | `-status -v` | The same as a readable checklist, with what to do about each problem. |
 | `-reveal` | Device mode: asks for the reveal code (or reads it from a pipe), shows the password and starts the grace period. Add `-reason "<ticket>"` to record why. The code is never accepted on the command line. |
@@ -18,7 +19,7 @@ The installer puts `macOSLAPS` on the `PATH` (`/etc/paths.d/laps` points into th
 | `-showConfig` | The settings in effect, which preference domain each came from, and whether it's managed, set locally or a default. `FirstPass` is never printed. |
 | `-uninstall` | Removes the app, LaunchDaemons, LaunchAgent, symlink and receipts. The stored password is kept, so a reinstall carries on. |
 | `-uninstall -purge` | Also deletes the stored passwords, the state and the logs. Make sure your MDM has the password first. |
-| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Use `-escrow`. |
+| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Use `-escrow` for the MDM and `-read` for scripts on the Mac. |
 | `-version` | Prints the version, `4.0.0.<build>`. |
 | `-help` | Lists the commands. |
 

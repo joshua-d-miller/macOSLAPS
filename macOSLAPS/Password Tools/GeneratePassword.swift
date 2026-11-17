@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Builds a PasswordPolicy from the preferences and generates a password
@@ -15,6 +15,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Uses the -newPassword password when given.
+                        claude
  4.0.0     2026-11-11   joshua    Uses PasswordPolicy: exact length,
                         claude    requirements always met, every excluded
                                   character honored (#109, #93, #121).
@@ -64,6 +66,8 @@ func currentPasswordPolicy(length: Int) -> PasswordPolicy {
 // A new password, or the run stops with the policy's error.                 //
 // Generate a randomized password from printable ASCII using the configured policy
 func PasswordGen(length: Int) -> String {
+    // -newPassword: the password given (already checked against the settings).
+    if let chosen = Constants.new_password { return chosen }
     let policy = currentPasswordPolicy(length: length)
     for name in policy.unknownExclusionSets {
         laps_log.print("Unknown ExclusionSets value \"\(name)\" ignored. Valid values: symbols, letters, numbers.", .warn)
