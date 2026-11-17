@@ -54,7 +54,7 @@ printf '%s\n' "$current_password" | sudo macOSLAPS -firstPass - -initialize
 - **Managed Login Items or PPPC profiles** naming `edu.psu.macoslaps-check` or `edu.psu.macOSLAPS`: switch them to team identifier `9UYK4F9BSM`, which covers both LaunchDaemons and the LaunchAgent. System Settings now shows "macOSLAPS" for them rather than a developer name.
 - **Scripts that call the full path** `/usr/local/laps/macOSLAPS` keep working through 4.x but log a deprecation notice. The path is removed in 5.0. Use `macOSLAPS` (on the `PATH`) or the app path.
 - **The app-only package over 845.** The `-Binary-` package alone leaves the old `edu.psu.macoslaps-check` LaunchDaemon running through the legacy symlink. It works, with the deprecation notice. Install the full or `-LD-` package to switch to the new LaunchDaemons.
-- **The combined Jamf extension attribute was renamed** `Password and Expiration Combined.zsh`. The colon in the old name broke checkouts on Windows.
+- **The extra Jamf extension attributes and Henri Kovanen's MDM scripts moved into `integrations/`** and were renamed: `jamf/macOSLAPS-Password-EA.zsh`, `jamf/macOSLAPS-Expiration-EA.zsh`, `jamf/macOSLAPS-Password-Expiration-EA.zsh` (formerly the `jamf Extension Attributes/` folder), `generic/macOSLAPS-Password.sh`, `generic/macOSLAPS-Password-Expiration.sh` and `install/macOSLAPS-Install.sh` (formerly `MDM Scripts/`). What they do is unchanged.
 
 ## Rolling back
 

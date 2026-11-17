@@ -77,7 +77,7 @@ Once installed, macOSLAPS appears in Applications:
 
 ![macOSLAPS in the Applications folder](images/icon-in-finder.png){ width=560 }
 
-Henri Kovanen's [MDM install script](https://github.com/joshua-d-miller/macOSLAPS/blob/main/MDM%20Scripts/macoslaps4-mdm-install-script.sh) installs, updates or uninstalls macOSLAPS from your MDM, and can also create the managed admin. Review its settings before you use it.
+Henri Kovanen's [MDM install script](https://github.com/joshua-d-miller/macOSLAPS/blob/main/integrations/install/macOSLAPS-Install.sh) installs, updates or uninstalls macOSLAPS from your MDM, and can also create the managed admin. Review its settings before you use it.
 
 ## 5. Collect the password in your MDM
 

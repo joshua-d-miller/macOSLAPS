@@ -1,11 +1,11 @@
 #!/bin/zsh
 : <<'HEADER'
 ===============================================================================
- macOSLAPS | MDM Scripts | macoslaps4-mdm-install-script.sh
+ macOSLAPS | Integrations | install/macOSLAPS-Install.sh
 ===============================================================================
  Version:   4.0.0
  Author:    Henri Kovanen (Decens Oy), Joshua D. Miller, Claude
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      Installs (or updates, or uninstalls) macOSLAPS from an MDM and makes
@@ -20,12 +20,12 @@
  Usage:
      Run as root from your MDM. Any setting can be overridden as an argument:
      Uninstall macOSLAPS:
-         ./macoslaps4-mdm-install-script.sh uninstall=true
+         ./macOSLAPS-Install.sh uninstall=true
      Uninstall macOSLAPS but leave the account:
-         ./macoslaps4-mdm-install-script.sh uninstall=true \
+         ./macOSLAPS-Install.sh uninstall=true \
              uninstallRemoveAdminAccount=false
      Install with custom download URL:
-         ./macoslaps4-mdm-install-script.sh \
+         ./macOSLAPS-Install.sh \
              downloadURL="https://yourserver.com/macOSLAPS.pkg"
 
  Returns:
@@ -44,6 +44,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Moved here from MDM Scripts/
+                        claude    (macoslaps4-mdm-install-script.sh).
  v9        2024-08-06   henri     Takes into account the new keychain method
                                   introduced in macOSLAPS 4.0.0. First version
                                   with an actual changelog.
