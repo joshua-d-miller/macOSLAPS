@@ -625,7 +625,8 @@ jobs:
         run: |
           sudo tailscale set --accept-routes=false
           for i in $(seq 1 90); do
-            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
+            # Unknown until the DC joins the tailnet; bash -e must not stop on that.
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null || true)
             [ -n "$ip" ] && nc -z -w 3 "$ip" 389 2>/dev/null && break
             ip=""; sleep 10
           done
@@ -699,7 +700,7 @@ jobs:
               if p.get("HostName","").startswith("laps-"):
                   print(" ", p["HostName"], (p.get("TailscaleIPs") or ["?"])[0], "online" if p.get("Online") else "offline", p.get("CurAddr") or p.get("Relay") or "")'; }
           for i in $(seq 1 60); do
-            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null || true)
             if [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null; then break; fi
             if [ $((i % 6)) -eq 1 ]; then
               echo "--- $(date -u +%T) DC address: ${ip:-unknown}"
@@ -718,7 +719,7 @@ jobs:
           echo "DC_IP=$ip" >> "$GITHUB_ENV"
           # The read-only DC joins after the writable one is up.
           for i in $(seq 1 60); do
-            rip=$(tailscale ip -4 "$TS_RODC" 2>/dev/null)
+            rip=$(tailscale ip -4 "$TS_RODC" 2>/dev/null || true)
             [ -n "$rip" ] && nc -z -G 3 "$rip" 389 2>/dev/null && break
             rip=""; sleep 10
           done
