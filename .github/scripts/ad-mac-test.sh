@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-14
- Updated:   2026-11-14
+ Updated:   2026-11-17
 
  Purpose:
      AD stage 2: binds a macOS runner to the throwaway Samba domain from
@@ -28,6 +28,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    PreferredDC over LDAP as the computer
+                        claude    account; an unreachable PreferredDC.
  4.0.0     2026-11-14   joshua    New file.
                         claude
 ===============================================================================
@@ -224,6 +226,42 @@ ST=$("$LAPS" -status 2>/dev/null)
 [ "$(jget "$ST" method)" = AD ] && [ "$(jget "$ST" passwordVerifies)" = True ] \
   && pass "-status: method AD, stored password verifies" \
   || fail "-status: $ST"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------- ###
+### | PreferredDC | ###
+### --------------- ###
+### Reads and writes go over LDAP to the chosen DC, as the computer         ###
+### account (its own Kerberos ticket, not the admin's).                     ###
+echo "---- PreferredDC $DC_FQDN, ADSchema both"
+defaults write "$DOM" PreferredDC -string "$DC_FQDN"
+defaults write "$DOM" ADSchema -string both
+lines_before=$(wc -l < /Library/Logs/macOSLAPS.log)
+"$LAPS" -rotate >/dev/null 2>&1; rc=$?
+new_log=$(tail -n +"$((lines_before + 1))" /Library/Logs/macOSLAPS.log)
+echo "  macOSLAPS log:"; sed 's/^/    /' <<< "$new_log"
+grep -qiF "Using PreferredDC $DC_FQDN (LDAP as $COMPUTER\$)" <<< "$new_log" \
+  && pass "PreferredDC: macOSLAPS connects to $DC_FQDN over LDAP as $COMPUTER\$" || fail "PreferredDC: not used"
+legacy_pw=$(ad_value ms-Mcs-AdmPwd); [ -n "$legacy_pw" ] && echo "::add-mask::$legacy_pw"
+win_pw=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["p"])' "$(ad_value msLAPS-Password)" 2>/dev/null)
+[ $rc -eq 0 ] && [ -n "$legacy_pw" ] && [ "$legacy_pw" = "$win_pw" ] && [ "$legacy_pw" != "$previous" ] \
+  && works "$legacy_pw" && [ "$legacy_pw" = "$(stored)" ] \
+  && pass "PreferredDC: the rotation wrote both schemas over LDAP, and the password works" \
+  || fail "PreferredDC: rotation over LDAP (rc $rc)"
+future_filetime "$(ad_attr ms-Mcs-AdmPwdExpirationTime)" && future_filetime "$(ad_attr msLAPS-PasswordExpirationTime)" \
+  && pass "PreferredDC: both expiration times are in the future" || fail "PreferredDC: expiration times"
+before=$(stored)
+"$LAPS" >/dev/null 2>&1
+[ "$before" = "$(stored)" ] && pass "PreferredDC: a scheduled run reads the expiration over LDAP and leaves the password alone" \
+  || fail "PreferredDC: a scheduled run rotated before the expiration"
+ls /var/run/macoslaps/krb5cc_* >/dev/null 2>&1 && fail "PreferredDC: a Kerberos ticket cache was left behind" \
+  || pass "PreferredDC: the computer's ticket cache is removed after the run"
+# A PreferredDC that can't be reached stops the run before anything changes.
+defaults write "$DOM" PreferredDC -string "nodc.$DOMAIN_DNS"
+"$LAPS" -rotate >/dev/null 2>&1 && fail "an unreachable PreferredDC was accepted" \
+  || { [ "$before" = "$(stored)" ] && works "$before" && pass "an unreachable PreferredDC stops the run; nothing changed" || fail "the password changed with an unreachable PreferredDC"; }
+defaults delete "$DOM" PreferredDC
+previous="$before"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------------------------- ###

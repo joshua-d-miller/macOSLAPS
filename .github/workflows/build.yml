@@ -109,6 +109,10 @@ jobs:
         run: |
           swiftc macOSLAPS/Extensions/MDMAccountsParser.swift Tests/MDMAccountsTests/main.swift -o mdm-tests
           ./mdm-tests
+      - name: Compile and run AD directory (LDAP) helper tests
+        run: |
+          swiftc macOSLAPS/Extensions/Shell.swift "macOSLAPS/Password Tools/ADDirectory.swift" Tests/ADDirectoryTests/main.swift -o ad-tests
+          ./ad-tests
 
   build:
     # The Developer ID secrets can live in the "signing" environment (Settings →

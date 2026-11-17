@@ -28,6 +28,7 @@
 		E5289A0E25E404C6005DE9EC /* DateFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A0625E404C6005DE9EC /* DateFormatter.swift */; };
 		E5289A1525E404D8005DE9EC /* GeneratePassword.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1225E404D8005DE9EC /* GeneratePassword.swift */; };
 		E5289A1625E404D8005DE9EC /* ADPasswordTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */; };
+		A1C0FFEE0000000000000119 /* ADDirectory.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE0000000000000120 /* ADDirectory.swift */; };
 		E5289A1725E404D8005DE9EC /* LocalPasswordTools.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */; };
 		E5289A1C25E404E6005DE9EC /* Preferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5289A1B25E404E6005DE9EC /* Preferences.swift */; };
 		E5C72DB52367661700762B42 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5C72DA92367661700762B42 /* main.swift */; };
@@ -67,6 +68,7 @@
 		E5289A0625E404C6005DE9EC /* DateFormatter.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = DateFormatter.swift; sourceTree = "<group>"; };
 		E5289A1225E404D8005DE9EC /* GeneratePassword.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = GeneratePassword.swift; sourceTree = "<group>"; };
 		E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ADPasswordTools.swift; sourceTree = "<group>"; };
+		A1C0FFEE0000000000000120 /* ADDirectory.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = ADDirectory.swift; sourceTree = "<group>"; };
 		E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = LocalPasswordTools.swift; sourceTree = "<group>"; };
 		E5289A1B25E404E6005DE9EC /* Preferences.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = Preferences.swift; sourceTree = "<group>"; };
 		E56B73031E38D39700FC66CB /* macOSLAPS */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = macOSLAPS; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -116,6 +118,7 @@
 			children = (
 				E5289A1225E404D8005DE9EC /* GeneratePassword.swift */,
 				E5289A1325E404D8005DE9EC /* ADPasswordTools.swift */,
+				A1C0FFEE0000000000000120 /* ADDirectory.swift */,
 				E5289A1425E404D8005DE9EC /* LocalPasswordTools.swift */,
 			);
 			path = "Password Tools";
@@ -241,6 +244,7 @@
 				E5289A0825E404C6005DE9EC /* PasswordPolicy.swift in Sources */,
 				E5289A1725E404D8005DE9EC /* LocalPasswordTools.swift in Sources */,
 				E5289A1625E404D8005DE9EC /* ADPasswordTools.swift in Sources */,
+				A1C0FFEE0000000000000119 /* ADDirectory.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

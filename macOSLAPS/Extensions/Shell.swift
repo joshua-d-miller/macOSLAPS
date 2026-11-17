@@ -20,7 +20,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-17   joshua    stderr apart when asked (used by the
                         claude    migration helper); output collected under
-                                  a lock.
+                                  a lock; input on stdin and extra
+                                  environment variables (LDAP to a chosen DC).
  4.0.0     2026-11-11   joshua    Reads output while the tool runs, with a
                         claude    timeout (fixes the -status deadlock).
 
@@ -71,22 +72,35 @@ class Shell: NSObject {
     }
 
     /// Runs `launchPath` with `arguments`, capturing stdout and stderr (together, or
-    /// apart with `separateErrors`). Returns status -1 if the tool couldn't be started
-    /// or timed out.
+    /// apart with `separateErrors`). `input` goes to the tool's stdin (secrets go there,
+    /// never in `arguments`); `environment` adds variables. Returns status -1 if the tool
+    /// couldn't be started or timed out.
     class func execute(launchPath: String, arguments: [String], timeout: TimeInterval = 60,
-                       separateErrors: Bool = false) -> Result {
+                       separateErrors: Bool = false, input: Data? = nil,
+                       environment: [String: String] = [:]) -> Result {
         let task = Process()
         task.executableURL = URL(fileURLWithPath: launchPath)
         task.arguments = arguments
+        if !environment.isEmpty {
+            task.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        }
         let out = Pipe(), err = separateErrors ? Pipe() : out
         task.standardOutput = out
         task.standardError = err
-        task.standardInput = FileHandle.nullDevice
+        let stdin = input.map { _ in Pipe() }
+        task.standardInput = stdin ?? FileHandle.nullDevice
 
         do {
             try task.run()
         } catch {
             return Result(status: -1, output: "", timedOut: false)
+        }
+        if let pipe = stdin, let data = input {
+            // Small inputs (a password, an LDIF change) fit the pipe buffer. A tool that
+            // exits without reading must not take macOSLAPS down with SIGPIPE.
+            signal(SIGPIPE, SIG_IGN)
+            try? pipe.fileHandleForWriting.write(contentsOf: data)
+            try? pipe.fileHandleForWriting.close()
         }
         let outReader = Reader(out)
         let errReader = separateErrors ? Reader(err) : nil
