@@ -290,14 +290,22 @@ else
     echo "  macOSLAPS $* (exit $rc):"; sed 's/^/    /' <<< "$new_log"
   }
   ad_now() { ad_value ms-Mcs-AdmPwd; }   # read on the writable DC, as the domain admin
+  # The RODC pulls from the writable DC every 30 s; wait until it has this computer.
+  for i in $(seq 1 30); do
+    ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "$BASEDN" "(sAMAccountName=$COMPUTER\$)" dn 2>/dev/null | grep -q "^dn:" && break
+    sleep 5
+  done
+  ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "$BASEDN" "(sAMAccountName=$COMPUTER\$)" dn 2>/dev/null | grep -q "^dn:" \
+    && pass "the RODC has replicated $COMPUTER" || fail "the RODC never received $COMPUTER"
 
   # 1. PreferredDC = the RODC: refused, nothing changes anywhere.
   defaults write "$DOM" PreferredDC -string "$RODC_FQDN"
   before=$(stored); before_ad=$(ad_now)
   run_log -rotate
   [ $rc -ne 0 ] && [ "$before" = "$(stored)" ] && works "$before" && [ "$before_ad" = "$(ad_now)" ] \
-    && pass "PreferredDC on the RODC: the write is refused and nothing changed" \
-    || fail "PreferredDC on the RODC (exit $rc)"
+    && grep -q "Unable to write the LAPS expiration attribute(s) .* through LDAP to $RODC_FQDN" <<< "$new_log" \
+    && pass "PreferredDC on the RODC: the RODC refuses the write and nothing changed" \
+    || fail "PreferredDC on the RODC (exit $rc): not refused by the RODC itself"
 
   # 2. The binding prefers the RODC; PreferredDC unset: the password still reaches the writable DC.
   defaults delete "$DOM" PreferredDC
