@@ -10,8 +10,8 @@
  Purpose:
      Unit tests for the LDAP helpers in
      macOSLAPS/Password Tools/ADDirectory.swift: reading ldapsearch
-     output, writing a change, escaping a search filter and ordering the
-     domain controllers DNS returns. No domain, Xcode project or root
+     output, writing a change, escaping a search filter, and reading and
+     ordering the domain controllers DNS returns. No domain, Xcode project or root
      needed.
 
  Usage:
@@ -81,16 +81,18 @@ expect(LDAPBackend.ldapEscape("Café$") == "Café$", "non-ASCII stays intact")
 // ------------------ //
 // | DNS SRV order | //
 // ------------------ //
-let srv = """
-10 100 389 dc2.laps.test.
-0 50 389 dc1.laps.test.
-0 100 389 dc3.laps.test.
-garbage
-0 100 389 DC3.laps.test.
-"""
-expect(DomainControllers.parseSRV(srv) == ["dc3.laps.test", "dc1.laps.test", "dc2.laps.test"],
-       "lowest priority first, then highest weight; duplicates and junk dropped")
-expect(DomainControllers.parseSRV("").isEmpty, "no records")
+let records : [DomainControllers.SRV] = [(10, 100, "dc2.laps.test."), (0, 50, "dc1.laps.test."),
+                                         (0, 100, "dc3.laps.test."), (0, 100, "DC3.laps.test.")]
+expect(DomainControllers.order(records) == ["dc3.laps.test", "dc1.laps.test", "dc2.laps.test"],
+       "lowest priority first, then highest weight; duplicates dropped")
+expect(DomainControllers.order([]).isEmpty, "no records")
+// RDATA for "0 100 389 dc1.laps.test."
+let rdata : [UInt8] = [0, 0, 0, 100, 1, 133, 3] + Array("dc1".utf8) + [4] + Array("laps".utf8) + [4] + Array("test".utf8) + [0]
+let parsed = rdata.withUnsafeBytes { DomainControllers.parse($0) }
+expect(parsed?.priority == 0 && parsed?.weight == 100 && parsed?.target == "dc1.laps.test", "SRV RDATA is parsed")
+expect([UInt8]([0, 0, 0, 1, 1, 133, 9, 65]).withUnsafeBytes { DomainControllers.parse($0) } == nil, "a truncated RDATA is rejected")
+// A real lookup through the system resolver (no answer expected for this name).
+expect(DomainControllers.query("_ldap._tcp.dc._msdcs.invalid", timeout: 3).isEmpty, "a lookup with no answer returns nothing")
 
 print("\(checks) checks, \(failures) failures")
 exit(failures == 0 ? 0 : 1)

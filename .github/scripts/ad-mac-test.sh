@@ -29,7 +29,9 @@
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-17   joshua    PreferredDC over LDAP as the computer
-                        claude    account; an unreachable PreferredDC.
+                        claude    account; an unreachable PreferredDC; a
+                                  read-only DC (PreferredDC on it, the
+                                  binding on it, and both).
  4.0.0     2026-11-14   joshua    New file.
                         claude
 ===============================================================================
@@ -262,6 +264,72 @@ defaults write "$DOM" PreferredDC -string "nodc.$DOMAIN_DNS"
   || { [ "$before" = "$(stored)" ] && works "$before" && pass "an unreachable PreferredDC stops the run; nothing changed" || fail "the password changed with an unreachable PreferredDC"; }
 defaults delete "$DOM" PreferredDC
 previous="$before"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------- ###
+### | A read-only DC (RODC) | ###
+### ------------------------- ###
+### rodc1 is a Samba RODC in the same domain. A write to it is refused, so  ###
+### PreferredDC pointing at it must stop the run; with the binding on it,   ###
+### the password must still reach the writable DC.                          ###
+echo "---- Read-only domain controller"
+if [ -z "${RODC_IP:-}" ]; then
+  fail "no read-only DC to test against (see the ad-rodc job)"
+else
+  RODC_FQDN="rodc1.$DOMAIN_DNS"
+  sed -i '' "/[[:space:]]$RODC_FQDN/d" /etc/hosts
+  echo "$RODC_IP $RODC_FQDN rodc1" >> /etc/hosts
+  dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+  nc -z -G 5 "$RODC_IP" 389 && pass "the RODC answers LDAP at $RODC_FQDN" || fail "the RODC isn't reachable on LDAP"
+  rodc_says=$(ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "" -s base "(objectClass=*)" dsServiceName 2>&1 | head -3)
+  echo "  RODC rootDSE: $rodc_says"
+  run_log() {   # runs macOSLAPS with the given arguments; sets rc and new_log
+    local before_lines; before_lines=$(wc -l < /Library/Logs/macOSLAPS.log)
+    "$LAPS" "$@" >/dev/null 2>&1; rc=$?
+    new_log=$(tail -n +"$((before_lines + 1))" /Library/Logs/macOSLAPS.log)
+    echo "  macOSLAPS $* (exit $rc):"; sed 's/^/    /' <<< "$new_log"
+  }
+  ad_now() { ad_value ms-Mcs-AdmPwd; }   # read on the writable DC, as the domain admin
+
+  # 1. PreferredDC = the RODC: refused, nothing changes anywhere.
+  defaults write "$DOM" PreferredDC -string "$RODC_FQDN"
+  before=$(stored); before_ad=$(ad_now)
+  run_log -rotate
+  [ $rc -ne 0 ] && [ "$before" = "$(stored)" ] && works "$before" && [ "$before_ad" = "$(ad_now)" ] \
+    && pass "PreferredDC on the RODC: the write is refused and nothing changed" \
+    || fail "PreferredDC on the RODC (exit $rc)"
+
+  # 2. The binding prefers the RODC; PreferredDC unset: the password still reaches the writable DC.
+  defaults delete "$DOM" PreferredDC
+  out=$(dsconfigad -preferred "$RODC_FQDN" 2>&1) && pass "the binding now prefers $RODC_FQDN" || fail "dsconfigad -preferred: $out"
+  dsconfigad -show | grep -i "preferred" | sed 's/^/  /'
+  sleep 5
+  run_log -rotate
+  now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+  if [ $rc -eq 0 ] && [ -n "$now_ad" ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" && [ "$now_ad" = "$(stored)" ]; then
+    if grep -q "Writing to .* instead (LDAP as" <<< "$new_log"; then
+      pass "binding on the RODC: the write was refused and macOSLAPS fell back to a writable DC over LDAP"
+    else
+      pass "binding on the RODC: the rotation reached the writable DC"
+      echo "::notice::macOS wrote through the RODC itself (it followed the referral), so the LDAP fallback wasn't needed"
+    fi
+  else
+    fail "binding on the RODC: the new password didn't reach the writable DC (exit $rc)"
+  fi
+  before_ad="$now_ad"
+
+  # 3. The binding prefers the RODC; PreferredDC = the writable DC: works.
+  defaults write "$DOM" PreferredDC -string "$DC_FQDN"
+  run_log -rotate
+  now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+  [ $rc -eq 0 ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" && [ "$now_ad" = "$(stored)" ] \
+    && pass "binding on the RODC with PreferredDC on the writable DC: rotation works" \
+    || fail "PreferredDC on the writable DC with the binding on the RODC (exit $rc)"
+
+  defaults delete "$DOM" PreferredDC
+  dsconfigad -nopreferred >/dev/null 2>&1 || true
+  previous="$now_ad"
+fi
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------------------------- ###

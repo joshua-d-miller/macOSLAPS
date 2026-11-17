@@ -33,6 +33,7 @@
 
 import Foundation
 import OpenDirectory
+import dnssd
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ----------------- //
@@ -248,30 +249,74 @@ enum LDIF {
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
-// ------------------------ //
+// ----------------------- //
 // | Writable DCs in DNS | //
-// ------------------------ //
-// For a read-only bound DC: _ldap._tcp.dc._msdcs.<domain>, by priority.     //
+// ----------------------- //
+// For a read-only bound DC: _ldap._tcp.dc._msdcs.<domain>, through the      //
+// system resolver (dig and host ignore /etc/resolver, which split-DNS       //
+// setups and VPN clients use).                                              //
 enum DomainControllers {
+    typealias SRV = (priority: Int, weight: Int, target: String)
+
     static func fromDNS(domain: String) -> [String] {
-        let result = Shell.execute(launchPath: "/usr/bin/dig",
-                                   arguments: ["+short", "_ldap._tcp.dc._msdcs.\(domain)", "SRV"], timeout: 30)
-        guard result.status == 0 else { return [] }
-        return parseSRV(result.output)
+        order(query("_ldap._tcp.dc._msdcs.\(domain)"))
     }
 
-    /// "priority weight port target." lines → targets, lowest priority first.
-    static func parseSRV(_ text: String) -> [String] {
-        let records = text.split(separator: "\n").compactMap { line -> (Int, Int, String)? in
-            let parts = line.split(separator: " ")
-            guard parts.count == 4, let priority = Int(parts[0]), let weight = Int(parts[1]) else { return nil }
-            var target = String(parts[3])
-            if target.hasSuffix(".") { target.removeLast() }
-            return target.isEmpty ? nil : (priority, weight, target)
-        }
+    /// Lowest priority first, then highest weight; duplicates dropped.
+    static func order(_ records: [SRV]) -> [String] {
         var seen = Set<String>()
-        return records.sorted { $0.0 != $1.0 ? $0.0 < $1.0 : $0.1 > $1.1 }
-            .map { $0.2 }
-            .filter { seen.insert($0.lowercased()).inserted }
+        return records.sorted { $0.priority != $1.priority ? $0.priority < $1.priority : $0.weight > $1.weight }
+            .map { $0.target.hasSuffix(".") ? String($0.target.dropLast()) : $0.target }
+            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
     }
+
+    /// The SRV records for `name`, answered by mDNSResponder (the system resolver).
+    static func query(_ name: String, timeout: TimeInterval = 5) -> [SRV] {
+        let answers = SRVAnswers()
+        var reference : DNSServiceRef?
+        let error = DNSServiceQueryRecord(&reference, 0, 0, name, UInt16(kDNSServiceType_SRV), UInt16(kDNSServiceClass_IN),
+            { _, flags, _, errorCode, _, _, _, length, data, _, context in
+                guard let context = context else { return }
+                let answers = Unmanaged<SRVAnswers>.fromOpaque(context).takeUnretainedValue()
+                if flags & DNSServiceFlags(kDNSServiceFlagsMoreComing) == 0 { answers.done = true }
+                guard errorCode == DNSServiceErrorType(kDNSServiceErr_NoError), let data = data,
+                      let record = DomainControllers.parse(UnsafeRawBufferPointer(start: data, count: Int(length))) else { return }
+                answers.records.append(record)
+            }, Unmanaged.passUnretained(answers).toOpaque())
+        guard error == DNSServiceErrorType(kDNSServiceErr_NoError), let service = reference else { return [] }
+        defer { DNSServiceRefDeallocate(service) }
+        let deadline = Date().addingTimeInterval(timeout)
+        while !answers.done {
+            let left = deadline.timeIntervalSinceNow
+            guard left > 0 else { break }
+            var descriptor = pollfd(fd: DNSServiceRefSockFD(service), events: Int16(POLLIN), revents: 0)
+            guard poll(&descriptor, 1, Int32(left * 1000)) > 0,
+                  DNSServiceProcessResult(service) == DNSServiceErrorType(kDNSServiceErr_NoError) else { break }
+        }
+        return answers.records
+    }
+
+    /// SRV RDATA: priority, weight, port (two bytes each), then the target as labels.
+    static func parse(_ bytes: UnsafeRawBufferPointer) -> SRV? {
+        guard bytes.count > 7 else { return nil }
+        let priority = Int(bytes[0]) << 8 | Int(bytes[1])
+        let weight = Int(bytes[2]) << 8 | Int(bytes[3])
+        var labels : [String] = []
+        var index = 6
+        while index < bytes.count {
+            let length = Int(bytes[index])
+            if length == 0 { break }
+            index += 1
+            guard index + length <= bytes.count else { return nil }
+            labels.append(String(decoding: bytes[index..<index + length], as: UTF8.self))
+            index += length
+        }
+        return labels.isEmpty ? nil : (priority, weight, labels.joined(separator: "."))
+    }
+}
+
+/// What the DNS callback collects (a class, so the C callback can reach it).
+final class SRVAnswers {
+    var records : [DomainControllers.SRV] = []
+    var done = false
 }

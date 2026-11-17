@@ -594,6 +594,65 @@ jobs:
           MAC_HOST: ${{ env.TS_MAC }}
         run: sudo -E bash .github/scripts/samba/wait-for-mac.sh
 
+  # A read-only DC next to the writable one, joined over Tailscale. The Mac points
+  # its binding and PreferredDC at it; it stays up until the Mac has left.
+  ad-rodc:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HAS_TS: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
+      ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+      TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_RODC: laps-rodc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Skip without Tailscale
+        if: env.HAS_TS != 'true'
+        run: 'echo "::notice::RODC skipped: no TS_OAUTH_CLIENT_ID secret"'
+      - uses: actions/checkout@v7
+        if: env.HAS_TS == 'true'
+      - uses: tailscale/github-action@v4
+        if: env.HAS_TS == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: ${{ env.TS_RODC }}
+          args: --accept-dns=false
+      - name: Wait for the writable DC
+        if: env.HAS_TS == 'true'
+        run: |
+          sudo tailscale set --accept-routes=false
+          for i in $(seq 1 90); do
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
+            [ -n "$ip" ] && nc -z -w 3 "$ip" 389 2>/dev/null && break
+            ip=""; sleep 10
+          done
+          [ -n "$ip" ] || { echo "::error::$TS_DC never answered on LDAP"; exit 1; }
+          echo "Writable DC: $ip"
+          echo "DC_IP=$ip" >> "$GITHUB_ENV"
+      - name: Join the domain as a read-only DC
+        if: env.HAS_TS == 'true'
+        run: |
+          export RODC_HOST_IP=$(tailscale ip -4) RODC_HOSTNAME=rodc1 DC_HOSTNAME=dc1
+          sudo -E bash .github/scripts/samba/join-rodc.sh
+      - name: Stay up until the Mac is done
+        if: env.HAS_TS == 'true'
+        run: |
+          # The Mac's result is reported by ad-dc; this only waits for it to leave.
+          present() { tailscale status --json | python3 -c 'import json,sys
+          d=json.load(sys.stdin); h=sys.argv[1]
+          sys.exit(0 if any(p.get("HostName")==h for p in (d.get("Peer") or {}).values()) else 1)' "$1"; }
+          seen=0; gone=0
+          for i in $(seq 1 300); do
+            if present "$TS_MAC"; then seen=1; gone=0
+            elif [ "$seen" -eq 1 ]; then gone=$((gone + 1)); [ "$gone" -ge 12 ] && break
+            fi
+            sleep 10
+          done
+          echo "The Mac has left (or the wait ended); stopping the RODC."
+
   ad-mac:
     needs: build
     runs-on: macos-26
@@ -603,6 +662,7 @@ jobs:
       ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
       TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
       TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_RODC: laps-rodc-${{ github.run_id }}-${{ github.run_attempt }}
       COMPUTER: CIMAC${{ github.run_number }}
     steps:
       - name: Skip without Tailscale
@@ -656,6 +716,18 @@ jobs:
           fi
           echo "Domain controller: $ip"
           echo "DC_IP=$ip" >> "$GITHUB_ENV"
+          # The read-only DC joins after the writable one is up.
+          for i in $(seq 1 60); do
+            rip=$(tailscale ip -4 "$TS_RODC" 2>/dev/null)
+            [ -n "$rip" ] && nc -z -G 3 "$rip" 389 2>/dev/null && break
+            rip=""; sleep 10
+          done
+          if [ -n "$rip" ]; then
+            echo "Read-only domain controller: $rip"
+            echo "RODC_IP=$rip" >> "$GITHUB_ENV"
+          else
+            echo "::error::$TS_RODC never answered on LDAP (see the ad-rodc job)"
+          fi
       - name: Bind to AD and run macOSLAPS with Method AD
         if: env.HAS_TS == 'true'
         run: sudo -E bash .github/scripts/ad-mac-test.sh "artifact/dist/${{ needs.build.outputs.pkg }}"
