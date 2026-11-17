@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      -escrow prints the current password for an MDM inventory attribute
@@ -31,6 +31,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Removed the unused certificates(); one
+                        claude    output path for JSON and CMS.
  4.0.0     2026-11-11   joshua    New file: plaintext JSON or CMS escrow, fails
                         claude    closed when EscrowCertificates is set but
                                   unusable, reports a staged pending password;
@@ -113,15 +115,6 @@ enum Escrow {
             certs.append(cert)
         }
         return CertificateConfig(configured: !entries.isEmpty, certificates: certs, problems: problems)
-    }
-
-    /// Usable certificates in `EscrowCertificates` (logs a warning for each skipped entry).
-    static func certificates() -> [SecCertificate] {
-        let config = certificateConfig()
-        for problem in config.problems {
-            laps_log.print("EscrowCertificates \(problem); it was skipped.", .warn)
-        }
-        return config.certificates
     }
 
     /// SHA-256 fingerprint of a certificate (hex, uppercase), for -status and logs.
@@ -222,18 +215,17 @@ enum Escrow {
 
     /// `-escrow`: print the payload (plain JSON or CMS PEM) and exit.
     static func run() -> Never {
-        let (password, created) = KeychainService.loadPassword(service: KeychainNames.current)
-        guard let current = password else {
+        guard let stored = KeychainService.current else {
             print("{\"v\":1,\"status\":\"no-password\",\"account\":\(jsonString(Constants.local_admin))}")
             exit(0)
         }
+        let current = stored.password, created = stored.created
         let record = LocalTools.connect()
         let verified = RunState.storedPasswordWorks(current, created: created, record: record)
         if !verified {
             laps_log.print("The stored password does not currently work for \(Constants.local_admin). Escrowing it anyway and reporting verified=false.", .warn)
         }
-        let createdDate = (created == nil || created == "Not Found") ? nil : created
-        let expires = LocalTools.get_expiration_date().map { Constants.dateFormatter.string(from: $0) }
+        let expires = Constants.dateFormatter.string(from: LocalTools.get_expiration_date())
         let staged = Reveal.deviceMode ? nil : Staging.pending()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -247,7 +239,7 @@ enum Escrow {
                 revealCode: code, codeSet: RunState.value("revealCodeSet"), expires: isoDate(expires),
                 rotatesAt: RunState.value("rotatesAt"), verified: verified, host: computerName()))
         } else {
-            encoded = try? encoder.encode(Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(createdDate),
+            encoded = try? encoder.encode(Payload(v: 1, account: Constants.local_admin, password: current, set: isoDate(created),
                 expires: isoDate(expires), verified: verified, host: computerName(),
                 pending: staged?.password, pendingSet: isoDate(staged?.created)))
         }
@@ -267,14 +259,10 @@ enum Escrow {
             printEscrowError("EscrowCertificates is set but has no usable RSA certificate")
             exit(1)
         }
-        if !config.configured {
-            print(String(data: json, encoding: .utf8)!)
-            if staged != nil { Staging.noteExported() } else { Staging.noteEscrowRan() }
-            exit(0)
-        }
         do {
-            let der = try envelope(json, recipients: config.certificates)
-            print(pem(der, label: "CMS"))
+            let output = try config.configured ? pem(envelope(json, recipients: config.certificates), label: "CMS")
+                                               : String(decoding: json, as: UTF8.self)
+            print(output)
             if staged != nil { Staging.noteExported() } else { Staging.noteEscrowRan() }
             exit(0)
         } catch {

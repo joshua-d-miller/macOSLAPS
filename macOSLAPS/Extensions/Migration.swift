@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-11
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Moves the password stored by macOSLAPS 3.x / 4.0.0 (845) to the 4.0
@@ -34,6 +34,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    The helper runs through Shell.execute.
+                        claude
  4.0.0     2026-11-11   joshua    New file: migration through the legacy helper
                         claude    only (the export and plaintext fallbacks were
                                   dropped once CI showed the helper reads 3.0.4
@@ -109,36 +111,11 @@ enum Migration {
         AppBundle.executable("Helpers/macOSLAPS-legacy")
     }
 
-    struct HelperResult {
-        let status: Int32
-        let output: Data
-        let error: String
-    }
-
     /// Runs the helper. Its stdout (the password, for `read`) stays in memory.
-    static func runHelper(_ verb: String, _ service: String) -> HelperResult? {
+    static func runHelper(_ verb: String, _ service: String) -> Shell.Result? {
         guard let path = helperPath() else { return nil }
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: path)
-        task.arguments = [verb, service]
-        let out = Pipe(), err = Pipe()
-        task.standardOutput = out
-        task.standardError = err
-        task.standardInput = FileHandle.nullDevice
-        guard (try? task.run()) != nil else { return nil }
-        var output = Data(), error = Data()
-        let group = DispatchGroup()
-        group.enter()
-        DispatchQueue.global(qos: .utility).async { output = out.fileHandleForReading.readDataToEndOfFile(); group.leave() }
-        group.enter()
-        DispatchQueue.global(qos: .utility).async { error = err.fileHandleForReading.readDataToEndOfFile(); group.leave() }
-        let deadline = Date().addingTimeInterval(30)
-        while task.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.05) }
-        if task.isRunning { task.terminate() }
-        task.waitUntilExit()
-        _ = group.wait(timeout: .now() + 5)
-        let message = String(decoding: error, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        return HelperResult(status: task.terminationStatus, output: output, error: message)
+        let result = Shell.execute(launchPath: path, arguments: [verb, service], timeout: 30, separateErrors: true)
+        return result.status == -1 && !result.timedOut ? nil : result
     }
 
     /// Reads an old item through the helper: (password, comment), or nil with a reason.
@@ -148,9 +125,9 @@ enum Migration {
             return nil
         }
         guard result.status == 0,
-              let json = try? JSONSerialization.jsonObject(with: result.output) as? [String: String],
+              let json = try? JSONSerialization.jsonObject(with: result.data) as? [String: String],
               let password = json["password"], !password.isEmpty else {
-            laps_log.print("The migration helper could not read \(service) (exit \(result.status)\(result.error.isEmpty ? "" : ": \(result.error)")).", .warn)
+            laps_log.print("The migration helper could not read \(service) (exit \(result.status)\(result.errors.isEmpty ? "" : ": \(result.errors)")).", .warn)
             return nil
         }
         return (password, json["comment"] ?? "")
@@ -170,7 +147,7 @@ enum Migration {
     /// -initialize continue, the last two to recover.
     static func run(fatal: Bool, rotationRun: Bool) {
         guard getuid() == 0 else { return }
-        if KeychainService.loadPassword(service: KeychainNames.current).0 != nil {
+        if KeychainService.current != nil {
             retireLeftovers()
             return
         }
@@ -186,7 +163,7 @@ enum Migration {
         // One migration at a time; another run may have finished it while we waited.
         RunLock.acquire()
         defer { RunLock.release() }
-        if KeychainService.loadPassword(service: KeychainNames.current).0 != nil {
+        if KeychainService.current != nil {
             retireLeftovers()
             return
         }
@@ -235,7 +212,7 @@ enum Migration {
 
         let status = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin,
                                                   data: found.password, created: found.created)
-        guard status == noErr, KeychainService.loadPassword(service: KeychainNames.current).0 == found.password else {
+        guard status == noErr, KeychainService.current?.password == found.password else {
             laps_log.print("Unable to store the migrated password in the new keychain item (OSStatus \(status)). The earlier item was left in place.", .error)
             if fatal { exit(1) }
             return

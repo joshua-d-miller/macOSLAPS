@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2018-07-21
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Stores the password in the System keychain. A root launchd daemon has
@@ -26,6 +26,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    load(service:) returns a KeychainItem (or
+                        claude    nil) instead of two optionals and a "Not
+                                  Found" string.
  4.0.0     2026-11-11   joshua    New keychain names under the 4.0 identity
                         claude    (and the reveal code); password and creation
                                   date stored in one call; unreadable items
@@ -53,6 +56,13 @@ enum KeychainNames {
     static let reveal = "com.joshua-d-miller.macoslaps.reveal"
     static let legacyCurrent = "macOSLAPS"
     static let legacyPending = "macOSLAPS-pending"
+}
+
+/// A stored item: the password (or code) and the date in its "Created:" comment.
+struct KeychainItem {
+    let password: String
+    /// "yyyy-MM-dd HH:mm:ss" local time; nil when the item has no creation comment.
+    let created: String?
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -144,9 +154,10 @@ class KeychainService {
         return comment_status
     }
     
-    class func loadPassword(service: String) -> (String?, String?) {
-        // Instantiate a new default keychain query
-        // Tell the query to return a result
+    /// The item under `service`, or nil when there is none. An item that exists but
+    /// can't be read stops the run: treating it as "no password stored" would make
+    /// callers fall back to FirstPass and could lock the account out of its secureToken.
+    class func load(service: String) -> KeychainItem? {
         guard let keychainRef = KeychainService.systemKeychain() else {
             laps_log.print("Unable to open the System keychain.", .error)
             exit(1)
@@ -158,36 +169,31 @@ class KeychainService {
             kSecReturnAttributes as String : kCFBooleanTrue!,
             kSecMatchLimit as String       : kSecMatchLimitOne,
             kSecUseKeychain as String      : keychainRef]
-        
         var item: AnyObject? = nil
         let status: OSStatus = withoutUserInteraction { SecItemCopyMatching(query as CFDictionary, &item) }
-        if status == noErr {
-            guard let existingItem = item as? [String: Any],
-                  let passwordData = existingItem[String(kSecValueData)] as? Data,
-                  let password = String(data: passwordData, encoding: String.Encoding.utf8) else {
-                laps_log.print("The \(service) keychain item exists but its password could not be read. Refusing to continue so the stored password is not lost.", .error)
-                exit(1)
-            }
-            guard let comment = existingItem[String(kSecAttrComment)] as? String,
-                  comment.hasPrefix("Created: ") else {
-                laps_log.print("There is currently no expiration date comment", .warn)
-                return(password, nil)
-            }
-            let creationdate = String(comment.dropFirst("Created: ".count))
-            
-            return (password, creationdate)
-        } else if status == errSecItemNotFound {
-            // macOSLAPS Keychain Entry Not Found
-            return(nil, "Not Found")
+        if status == errSecItemNotFound { return nil }
+        guard status == noErr else {
+            // For example errSecInteractionNotAllowed when the item's access list does
+            // not trust this binary.
+            let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error"
+            laps_log.print("Unable to read the \(service) keychain item (OSStatus \(status): \(message)). Refusing to continue so the stored password is not lost.", .error)
+            exit(1)
         }
-        // Any other status means the item may exist but we cannot read it (for example
-        // errSecInteractionNotAllowed when the item's access list does not trust this
-        // binary). Never treat that as "no password stored": callers would fall back to
-        // FirstPass and could lock the account out of its secureToken.
-        let message = SecCopyErrorMessageString(status, nil) as String? ?? "Unknown error"
-        laps_log.print("Unable to read the \(service) keychain item (OSStatus \(status): \(message)). Refusing to continue so the stored password is not lost.", .error)
-        exit(1)
+        guard let existingItem = item as? [String: Any],
+              let passwordData = existingItem[String(kSecValueData)] as? Data,
+              let password = String(data: passwordData, encoding: String.Encoding.utf8) else {
+            laps_log.print("The \(service) keychain item exists but its password could not be read. Refusing to continue so the stored password is not lost.", .error)
+            exit(1)
+        }
+        guard let comment = existingItem[String(kSecAttrComment)] as? String, comment.hasPrefix("Created: ") else {
+            laps_log.print("There is currently no expiration date comment", .warn)
+            return KeychainItem(password: password, created: nil)
+        }
+        return KeychainItem(password: password, created: String(comment.dropFirst("Created: ".count)))
     }
+    /// The managed admin's stored password.
+    class var current : KeychainItem? { load(service: KeychainNames.current) }
+
     class func exportPassword(service: String, account: String, data: String, expiration: String) -> OSStatus {
         let dataFromString = data.data(using: String.Encoding.utf8, allowLossyConversion: false)
         let keychainRef : SecKeychain? = KeychainService.systemKeychain()

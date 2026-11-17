@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      The macOSLAPS app: the window a technician uses to reveal the
@@ -30,6 +30,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Copy stays on this Mac (no Universal
+                        claude    Clipboard) and is marked concealed for
+                                  clipboard managers; the reveal wait message.
  4.0.0     2026-11-12   joshua    New file. The window and menu say the
                         claude    admin will be logged out only when it is
                                   logged in.
@@ -189,11 +192,16 @@ final class AppModel: ObservableObject {
     }
 
     /// Copies the password and clears the clipboard after 60 seconds if it still holds it.
+    /// This Mac only: never to Universal Clipboard (which would send it to the signed-in
+    /// user's other devices), and marked concealed and transient so clipboard managers
+    /// don't keep it in their history.
     func copy() {
         guard let pw = password else { return }
         let board = NSPasteboard.general
-        board.clearContents()
+        _ = board.prepareForNewContents(with: .currentHostOnly)
         board.setString(pw, forType: .string)
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType"))
+        board.setString("", forType: NSPasteboard.PasteboardType("org.nspasteboard.TransientType"))
         clearToken += 1
         let token = clearToken, count = board.changeCount
         DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
@@ -282,7 +290,7 @@ struct MainView: View {
                     .foregroundColor(works ? .secondary : .red)
             }
             if (model.status["revealLocked"] as? Bool) == true {
-                Text(AppUI.t("Reveals are locked after too many wrong codes. Contact IT.")).foregroundColor(.red)
+                Text(AppUI.t("Too many wrong codes. Try again later, or contact IT.")).foregroundColor(.red)
             }
         }
         .font(.callout)

@@ -42,4 +42,4 @@ The uninstall script is also in the app, for MDMs that run scripts: `/Applicatio
 | `adminGroupPolicy`, `unapprovedAdmins`, `elevationTool`, `demotedAdmins` | [Admin group protection](admin-group.md) |
 | `mdmAdmins`, `mdmAdminList`, `localAdminIsMDMAccount` | [MDM-created admins](admin-group.md#mdm-created-admins) |
 | `externalChange`, `externalChangeReason` | The password was [changed by something else](secure-token.md#when-something-else-changes-the-password) |
-| `revealCodeSet`, `revealFailures`, `revealLocked`, `revealCodeCollected`, `revealedAt`, `rotatesAt`, `rotateReason` | [Device mode](retrieval/device-mode.md) and `-expireIn` |
+| `revealCodeSet`, `revealFailures`, `revealLocked`, `revealRetryAt`, `revealCodeCollected`, `revealedAt`, `rotatesAt`, `rotateReason` | [Device mode](retrieval/device-mode.md) and `-expireIn` |
