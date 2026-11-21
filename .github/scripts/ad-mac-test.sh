@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-14
- Updated:   2026-11-17
+ Updated:   2026-11-21
 
  Purpose:
      AD stage 2: binds a macOS runner to the throwaway Samba domain from
@@ -28,6 +28,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-21   joshua    The DNS check counts only an SRV answer
+                        claude    (not dig's timeout message), keeps
+                                  retrying, and says whether TCP works.
  4.0.0     2026-11-17   joshua    PreferredDC over LDAP as the computer
                         claude    account; an unreachable PreferredDC; a
                                   read-only DC (PreferredDC on it, the
@@ -94,11 +97,30 @@ sed -i '' "/[[:space:]]$DC_FQDN/d" /etc/hosts
 echo "$DC_IP $DC_FQDN $DC_HOSTNAME" >> /etc/hosts
 dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
 
+# dig +short prints ";; connection timed out" on stdout, so only an SRV
+# answer (priority weight port target.) counts.
+srv_of() {
+  dig +short +time=3 +tries=1 "$@" @"$DC_IP" "_ldap._tcp.$DOMAIN_DNS" SRV \
+    2>/dev/null | grep -E '^[0-9]+ [0-9]+ [0-9]+ [^ ]+\.$'
+}
+srv=""
 for i in $(seq 1 30); do
-  srv=$(dig +short @"$DC_IP" "_ldap._tcp.$DOMAIN_DNS" SRV 2>/dev/null)
-  [ -n "$srv" ] && break; sleep 5
+  srv=$(srv_of) && break
+  [ "$i" -eq 1 ] && echo "  no DNS answer from $DC_IP yet; retrying (4 min)"
+  srv=""; sleep 5
 done
-[ -n "${srv:-}" ] && pass "the DC answers DNS for $DOMAIN_DNS ($srv)" || { fail "no SRV record for _ldap._tcp.$DOMAIN_DNS from $DC_IP"; exit 1; }
+if [ -n "$srv" ]; then
+  pass "the DC answers DNS for $DOMAIN_DNS ($srv)"
+else
+  fail "no SRV record for _ldap._tcp.$DOMAIN_DNS from $DC_IP over UDP"
+  if tcp=$(srv_of +tcp); then
+    echo "  over TCP it answers ($tcp): UDP to the DC is lost on the tailnet"
+  else
+    echo "  no answer over TCP either: the DC's DNS service isn't answering"
+  fi
+  tailscale ping -c 1 --timeout 5s "$DC_IP" 2>&1 | sed 's/^/  /' || true
+  exit 1
+fi
 nc -z -G 5 "$DC_IP" 389 && pass "LDAP reachable on $DC_IP" || fail "LDAP (389) not reachable on $DC_IP"
 nc -z -G 5 "$DC_IP" 88 && pass "Kerberos reachable on $DC_IP" || fail "Kerberos (88) not reachable on $DC_IP"
 
