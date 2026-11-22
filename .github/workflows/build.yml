@@ -6,6 +6,11 @@ name: Build & Test
 # runs macOSLAPS against a Samba AD domain over Tailscale (when the secrets are set),
 # opens the CMS escrow on Windows, and attaches everything to a published release.
 #
+# To release: run this workflow on main with "release" ticked (Actions → Build & Test →
+# Run workflow). The build is 4.0.0.<1000 + run number>; once every test passes, the
+# release job creates that tag and the prerelease, with .github/release-notes/<version>.md
+# and the signed, notarized pkgs. Publishing a release with your own tag still works.
+#
 # Signing is optional. With no secrets set, the build is ad-hoc signed and the pkg
 # is unsigned (fine for community testing via `sudo installer -pkg`). Add these
 # repository secrets to get Developer ID signed + notarized output:
@@ -21,19 +26,28 @@ on:
     branches: [main]
     tags: ['v*']
   release:
-    # Publish a (pre)release on GitHub with a new tag such as 4.0.0(846); this
+    # Publish a (pre)release on GitHub with a new tag such as 4.0.0.1150; this
     # workflow builds that commit, tests it and attaches the signed pkg and notes.
+    # Or run this workflow on main with "release" ticked (below): no tag needed.
     types: [published]
   pull_request:
     paths-ignore:
       # Documentation only: built by docs.yml, and skipping it here keeps
-      # test build numbers (845 + run number) from piling up.
+      # test build numbers (1000 + run number) from piling up.
       - 'docs/**'
       - 'zensical.toml'
       - '**.md'
       - '.github/workflows/docs.yml'
       - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
+    inputs:
+      release:
+        description: >-
+          Publish this build as a prerelease (main only). Its build number is
+          1000 + run number; once every test passes, the release job creates
+          the tag 4.0.0.<build> and the prerelease, with the notes and pkgs.
+        type: boolean
+        default: false
   # The full macOS matrix weekly, so a problem on an OS that pull requests
   # skip shows up even between releases.
   schedule:
@@ -144,15 +158,22 @@ jobs:
 
       - name: Set build number
         id: version
+        env:
+          RELEASE: ${{ inputs.release }}
         run: |
           # Release tags carry the build number: 4.0.0.868 (older releases used 4.0.0(845)).
-          # Other builds use 845 + run number.
+          # Other builds, and releases made with workflow_dispatch "release", use
+          # 1000 + run number: unique, and above every earlier build (845 + run
+          # number until 4.0.0.1000).
           short=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" macOSLAPS/Info.plist)
           if [[ "$GITHUB_REF" == refs/tags/* && ( "$GITHUB_REF_NAME" =~ ^([0-9]+\.[0-9]+\.[0-9]+)\.([0-9]+)$ || "$GITHUB_REF_NAME" =~ ^([0-9.]+)\(([0-9]+)\)$ ) ]]; then
             [ "${BASH_REMATCH[1]}" = "$short" ] || { echo "::error::Tag version ${BASH_REMATCH[1]} != Info.plist $short"; exit 1; }
             build=${BASH_REMATCH[2]}
           else
-            build=$((845 + GITHUB_RUN_NUMBER))
+            build=$((1000 + GITHUB_RUN_NUMBER))
+            if [ "${RELEASE:-false}" = "true" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::A release is built from main only (this run is on $GITHUB_REF)."; exit 1
+            fi
           fi
           echo "Building $short ($build)"
           echo "short=$short" >> "$GITHUB_OUTPUT"
@@ -796,10 +817,15 @@ jobs:
         run: ./.github/scripts/windows-decrypt.ps1
 
   release:
-    needs: [generator-tests, build, smoke-test, upgrade-test, upgrade-test-3x, windows-decrypt]
+    # Every test job: a release is published only when all of them passed.
+    needs: [generator-tests, build, smoke-test, upgrade-test, upgrade-test-3x, windows-decrypt,
+            securetoken, screenshots, ad-dc, ad-rodc, ad-mac]
     permissions:
       contents: write
-    if: github.event_name == 'release' || startsWith(github.ref, 'refs/tags/')
+    # A published release, a tag, or a manual run on main with "release" ticked.
+    if: >-
+      github.event_name == 'release' || startsWith(github.ref, 'refs/tags/') ||
+      (github.event_name == 'workflow_dispatch' && inputs.release && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -826,7 +852,18 @@ jobs:
             printf '\n**UNSIGNED TEST BUILD.** Install with `sudo installer -pkg <file> -target /`. Not for production.\n' >> notes.md
           fi
           tag="$GITHUB_REF_NAME"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            # Release mode: this run makes the tag and the release, on the commit it tested.
+            tag="$VERSION"
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+               || git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+              echo "::error::$tag already exists; nothing was published."; exit 1
+            fi
+            gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+              --title "macOSLAPS ${short}.${build}" --notes-file notes.md \
+              artifact/dist/*.pkg artifact/dist/SHA256SUMS.txt
+            echo "Published $(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json url -q .url)"
+          elif gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --prerelease \
               --title "macOSLAPS ${short}.${build}" --notes-file notes.md
             gh release upload "$tag" --repo "$GITHUB_REPOSITORY" --clobber \
