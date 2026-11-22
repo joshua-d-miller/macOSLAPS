@@ -60,8 +60,8 @@ SECTIONS = [
     ("Admin group protection", ["ApprovedAdmins", "AdminGroupPolicy",
                                 "AllowMDMManagedAccount"]),
     ("Active Directory", ["ADSchema", "PreferredDC"]),
-    ("Plaintext on this Mac (profile only)", ["AllowRead",
-                                              "AllowNewPassword"]),
+    ("3.x-style plaintext (profile only)", ["AllowRead",
+                                            "AllowNewPassword"]),
 ]
 
 

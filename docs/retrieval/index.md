@@ -11,7 +11,7 @@ macOSLAPS keeps the password on the Mac, in the System keychain, and makes it av
 
 ## Which one?
 
-- **Escrow** is the simplest and works with every MDM. Anyone who can read your MDM's inventory can read the password, so limit who can see that attribute.
+- **Escrow** is the simplest and works with every MDM. Anyone who can read your MDM's inventory can read the password, so limit who can see that attribute. Scripts on the Mac can also read the current password the 3.x way (`-read`) if your profile sets `AllowRead`; see [Two ways to read it](escrow.md#two-ways-to-read-it).
 - **Encrypted escrow** is escrow without trusting the MDM: the password is encrypted to certificates whose private keys only your admins hold. Use it when the MDM is shared, hosted, or has many admins.
 - **Device mode** keeps the password off every server. A technician sees it only at the Mac, every reveal is logged with who and why, and the password changes a few hours later. It needs someone at the Mac, after login: it can't help at the FileVault unlock screen, so escrow the FileVault recovery key too.
 - **Active Directory** suits Macs bound to AD that you already manage with Windows LAPS tools.

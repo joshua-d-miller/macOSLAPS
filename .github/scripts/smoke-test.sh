@@ -27,7 +27,9 @@
  4.0.0     2026-11-22   joshua    -read and -newPassword are off by default
                         claude    and ignore AllowRead / AllowNewPassword in
                                   /Library/Preferences; the tests turn them
-                                  on through a managed profile.
+                                  on through a managed profile. With
+                                  certificates or in device mode they stay
+                                  refused (and -getPassword too).
  4.0.0     2026-11-17   joshua    Reveal wait (backoff) instead of the lock;
                         claude    elevation tools must be signed.
                                   -read, -rotate, -currentPassword,
@@ -763,6 +765,20 @@ else
     [ "$(get_pw)" = "$CHOSEN-2" ] && dscl . -authonly "$ACCT" "$CHOSEN-2" >/dev/null 2>&1 && pass "-currentPassword - and -newPassword - read two lines in order" || fail "two passwords from stdin"
     "$LAPS" -rotate >/dev/null 2>&1
     [ "$(get_pw)" != "$CHOSEN-2" ] && pass "the next rotation generates a password again" || fail "-newPassword stuck"
+    # The keys are for plain escrow only: with certificates or in device mode
+    # nothing hands the password out in plaintext, whatever they say.
+    CUR=$(get_pw)
+    for MODE in certificates device; do
+        if [ "$MODE" = certificates ]; then defaults write "$DOMAIN" EscrowCertificates -array "not a certificate"
+        else defaults write "$DOMAIN" RetrievalMode -string device; fi
+        OUT=$("$LAPS" -read 2>/dev/null); RC=$?
+        printf '%s\n' 'Chosen-Pass-2468-mode' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
+        GP=$("$LAPS" -getPassword 2>/dev/null); RC3=$?
+        [ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC2" -eq 78 ] && [ "$RC3" -ne 0 ] && [ "$(get_pw)" = "$CUR" ] \
+            && pass "$MODE: -read, -newPassword and -getPassword refused despite AllowRead / AllowNewPassword" \
+            || fail "$MODE: plaintext path open (-read rc $RC, -newPassword rc $RC2, -getPassword rc $RC3)"
+        defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
+    done
 fi
 rm -f "$MANAGED.plist"; killall cfprefsd 2>/dev/null; sleep 1
 echo "::endgroup::"

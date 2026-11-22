@@ -26,6 +26,19 @@ Log messages go to stderr, so the attribute captures only the JSON. Ready-made s
 !!! warning "Who can read it"
     In plain escrow, anyone who can read the inventory attribute can read the password. Limit who can see it, or use [encrypted escrow](encrypted-escrow.md).
 
+## Two ways to read it
+
+Plain escrow offers the password two ways:
+
+| | Command | What it gives | Turn it on |
+|---|---|---|---|
+| **For your MDM (4.0)** | `macOSLAPS -escrow` | JSON with the current password and, during a [staged rotation](#staged-rotation), the next one. The MDM always has the password the Mac is using. Each run counts as a collection. | Always available |
+| **For scripts on the Mac (3.x style)** | `macOSLAPS -read` | Only the current password, on one line, as 3.x scripts expected. Never counts as a collection, so it doesn't hurry a staged rotation. | `AllowRead true` in your MDM's profile |
+
+`-read` is off unless your MDM's configuration profile sets `AllowRead true`. Setting it is your acknowledgement that anything running as root on the Mac can read the password in plaintext. A value in `/Library/Preferences` is ignored, because root can write there. `AllowNewPassword true` likewise allows `-rotate -newPassword -` (a password a person chose).
+
+Neither key does anything with [`EscrowCertificates`](encrypted-escrow.md) or in [device mode](device-mode.md). There the password is never handed out in plaintext: `-read`, `-newPassword` and `-getPassword` are refused (exit 78).
+
 ## Staged rotation
 
 A rotation that happens right after your MDM's last inventory would leave the MDM with an old password until the next one. Staged rotation closes that gap:
@@ -39,7 +52,7 @@ So your MDM always holds the password the Mac is using. Keep both values: if the
 
 **When it's applied:** on the first macOSLAPS run after the last collection, not at the moment of it. The LaunchDaemon runs every 90 minutes. If you don't load it and rotate from MDM policies instead, a staged password waits for your next `-rotate`, unless the inventory hook confirms it in the same run (below).
 
-**Scripts on the Mac** that need the password (XCreds, a macOS installer) should use `macOSLAPS -read`, not `-escrow`: it prints only the current password and never counts as a collection. `-read` prints plaintext, so it only runs when your MDM's profile sets `AllowRead true` (see [Command line](../command-line.md#plaintext-commands-are-opt-in)).
+**Scripts on the Mac** that need the password (XCreds, a macOS installer) should use `macOSLAPS -read` (with `AllowRead true`), not `-escrow`: it prints only the current password and never counts as a collection. See [Two ways to read it](#two-ways-to-read-it).
 
 `StagedRotation auto` (the default) stages only on Macs where `-escrow` ran in the last 14 days. `on` always stages, `off` never does. A first rotation with `-firstPass`, or a Mac with no stored password, always rotates immediately.
 

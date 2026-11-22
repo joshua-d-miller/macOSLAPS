@@ -288,15 +288,15 @@
       "default": true
     },
     "AllowRead": {
-      "title": "Allow -read (plaintext on this Mac)",
-      "description": "Allows macOSLAPS -read, which prints the current password in plaintext for scripts on this Mac (XCreds, a macOS installer). Setting it is your acknowledgement that root on the Mac can then read the password in plaintext; EscrowCertificates and device mode are the safer ways to retrieve it. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
+      "title": "Allow -read (3.x-style plaintext)",
+      "description": "Plaintext escrow only. Allows macOSLAPS -read, the 3.x-style path: it prints only the current password, for scripts on this Mac (XCreds, a macOS installer). Setting it acknowledges that root on the Mac can then read the password in plaintext. The MDM's -escrow JSON (current and staged password) doesn't need it. Ignored with EscrowCertificates or RetrievalMode device, where the password is never handed out in plaintext. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
       "property_order": 140,
       "type": "boolean",
       "default": false
     },
     "AllowNewPassword": {
       "title": "Allow -newPassword (a chosen password)",
-      "description": "Allows macOSLAPS -newPassword with -rotate, which sets a password a person chose (from a prompt or stdin) instead of a generated one, until the next rotation. Setting it is your acknowledgement that root on the Mac can then choose the password. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
+      "description": "Plaintext escrow only. Allows macOSLAPS -newPassword with -rotate, which sets a password a person chose (from a prompt or stdin) instead of a generated one, until the next rotation. Setting it acknowledges that root on the Mac can then choose the password. Ignored with EscrowCertificates or RetrievalMode device. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
       "property_order": 145,
       "type": "boolean",
       "default": false

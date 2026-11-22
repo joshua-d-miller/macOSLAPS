@@ -7,10 +7,10 @@ The installer puts `macOSLAPS` on the `PATH` (`/etc/paths.d/laps` points into th
 | `macOSLAPS` | A normal run: rotates if the password is due, checks the admin group. The LaunchDaemon runs this every 90 minutes. |
 | `-rotate` | Rotates now, whatever the expiration date. `-resetPassword` is the older name and still works. |
 | `-rotate -currentPassword -` | Rotates when macOSLAPS doesn't know the account's current password, reading it from a prompt or a pipe so it never shows in the process list: `printf '%s\n' "$pw" \| macOSLAPS -rotate -currentPassword -`. Without a value the `FirstPass` key is used. Needed for a secureToken account's first rotation. `-firstPass` is the older name and still works. |
-| `-rotate -newPassword -` | Sets a password you choose instead of a generated one, read from a prompt or a pipe (never the command line). It must meet the password settings (`PasswordLength`, `PasswordRequirements`, `RemovePassChars`, `ExclusionSets`, `PasswordStyle`) and is staged and escrowed like a generated one. With `-currentPassword -` too, pipe the two passwords on separate lines, in the order of the options. **Off unless your MDM's profile sets `AllowNewPassword`** (see [below](#plaintext-commands-are-opt-in)). |
+| `-rotate -newPassword -` | Sets a password you choose instead of a generated one, read from a prompt or a pipe (never the command line). It must meet the password settings (`PasswordLength`, `PasswordRequirements`, `RemovePassChars`, `ExclusionSets`, `PasswordStyle`) and is staged and escrowed like a generated one. With `-currentPassword -` too, pipe the two passwords on separate lines, in the order of the options. **Plain escrow only, when your MDM's profile sets `AllowNewPassword`** (see [below](#plaintext-commands-are-opt-in)). |
 | `-initialize` | With `-currentPassword`: checks the password and stores it **without** rotating. The first rotation happens after `DaysTillExpiration`. |
 | `-escrow` | Prints the password for an MDM inventory attribute: JSON, a CMS block when `EscrowCertificates` is set, or the reveal code in device mode. See [Escrow](retrieval/escrow.md). |
-| `-read` | Prints only the current password, for scripts on the Mac (XCreds, a macOS installer). Unlike `-escrow` it never counts as the MDM collecting a staged password, and it prints even with `EscrowCertificates` set, since it stays on the Mac. Refused in device mode. **Off unless your MDM's profile sets `AllowRead`** (see [below](#plaintext-commands-are-opt-in)). |
+| `-read` | The 3.x-style path: prints only the current password, for scripts on the Mac (XCreds, a macOS installer). Unlike `-escrow` it never counts as the MDM collecting a staged password. **Plain escrow only, when your MDM's profile sets `AllowRead`** (see [below](#plaintext-commands-are-opt-in)). |
 | `-status` | One line of JSON about the account, secureToken, FileVault, the stored password, escrow, admins and the last run. See [below](#status-fields). |
 | `-status -v` | The same as a readable checklist, with what to do about each problem. |
 | `-reveal` | Device mode: asks for the reveal code (or reads it from a pipe), shows the password and starts the grace period. Add `-reason "<ticket>"` to record why. The code is never accepted on the command line. |
@@ -19,7 +19,7 @@ The installer puts `macOSLAPS` on the `PATH` (`/etc/paths.d/laps` points into th
 | `-showConfig` | The settings in effect, which preference domain each came from, and whether it's managed, set locally or a default. `FirstPass` is never printed. |
 | `-uninstall` | Removes the app, LaunchDaemons, LaunchAgent, symlink and receipts. The stored password is kept, so a reinstall carries on. |
 | `-uninstall -purge` | Also deletes the stored passwords, the state and the logs. Make sure your MDM has the password first. |
-| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Use `-escrow` for the MDM and `-read` for scripts on the Mac. |
+| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Refused with `EscrowCertificates` or in device mode. Use `-escrow` for the MDM and `-read` for scripts on the Mac. |
 | `-version` | Prints the version, `4.0.0.<build>`. |
 | `-help` | Lists the commands. |
 
@@ -31,8 +31,9 @@ The uninstall script is also in the app, for MDMs that run scripts: `/Applicatio
 
 - `AllowRead true` allows `-read`; `AllowNewPassword true` allows `-newPassword`.
 - They count **only from a configuration profile** your MDM installs. A value in `/Library/Preferences` is ignored (root can write there), and macOSLAPS logs that it ignored it.
-- Setting them is your acknowledgement of that risk. Where you can, retrieve the password through [`EscrowCertificates`](retrieval/encrypted-escrow.md) or [device mode](retrieval/device-mode.md) instead.
-- When a command is off, it exits with code 78 and names the key to set.
+- They work **only in plain escrow**. With [`EscrowCertificates`](retrieval/encrypted-escrow.md) or in [device mode](retrieval/device-mode.md) the password is never handed out in plaintext, so both commands (and `-getPassword`) are refused whatever the keys say.
+- Setting them is your acknowledgement of that risk. Your MDM doesn't need them: `-escrow` gives it the current and staged password (see [Two ways to read it](retrieval/escrow.md#two-ways-to-read-it)).
+- When a command is refused, it exits with code 78 and says why.
 
 ## Status fields
 

@@ -35,6 +35,8 @@ Encrypted escrow keeps the password out of your MDM's database in readable form,
 
 It fails closed: if `EscrowCertificates` is set but none of the certificates is usable, `-escrow` prints an error and **no password**. `-status -v` warns when a certificate is unusable or about to expire.
 
+Nothing on the Mac prints the password in plaintext either: `-read`, `-newPassword` and `-getPassword` are refused with `EscrowCertificates` set, even if your profile sets `AllowRead` or `AllowNewPassword` (those are for [plain escrow](escrow.md#two-ways-to-read-it)).
+
 ## Read it
 
 Copy the whole block, including the `BEGIN` and `END` lines, into `escrow.txt`:

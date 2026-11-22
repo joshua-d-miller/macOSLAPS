@@ -51,7 +51,7 @@ The code is never accepted on the command line, where other processes could see 
 
 - **After five wrong codes in a row, reveals wait**: a minute, then twice as long after each further wrong code, at most an hour. A right code or a rotation (`sudo macOSLAPS -resetPassword`) starts over. A wait rather than a lock, so a user typing wrong codes can't keep IT from revealing.
 - **Every reveal is recorded** with the signed-in user and the reason, in the log and in `-status` (`revealedAt`, `rotatesAt`, `rotateReason`).
-- **`-getPassword` is refused**, and staged rotation doesn't apply: the MDM never has the password to confirm.
+- **`-read`, `-newPassword` and `-getPassword` are refused**, even if your profile sets `AllowRead` or `AllowNewPassword`, and staged rotation doesn't apply: the MDM never has the password to confirm.
 - The window and menu bar talk to a root service (`com.joshua-d-miller.macoslaps-service`) over XPC, and **both sides check the other's code signature** (team `9UYK4F9BSM`). The password is never written to a file or passed on a command line.
 - If no MDM has collected the code with `-escrow` in the last 14 days, macOSLAPS warns that nobody could reveal the password.
 

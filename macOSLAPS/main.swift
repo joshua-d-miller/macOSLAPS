@@ -21,9 +21,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-22   joshua    -read and -newPassword run only when the
-                        claude    MDM's profile sets AllowRead /
-                                  AllowNewPassword (exit 78 otherwise).
+ 4.0.0     2026-11-22   joshua    -read and -newPassword run only in
+                        claude    plaintext escrow, when the MDM's profile
+                                  sets AllowRead / AllowNewPassword (exit 78
+                                  otherwise); -getPassword is refused with
+                                  EscrowCertificates.
  4.0.0     2026-11-17   joshua    One path for the AD and Local methods;
                         claude    -getPassword and -firstPass parsing
                                   shortened; -rotateNow handled once;
@@ -278,19 +280,29 @@ func initializeWithoutRotating() -> Never {
 // | -read and -newPassword | //
 // -------------------------- //
 // The password for scripts on this Mac, and a password chosen by a person.  //
-/// -read and -newPassword hand root on this Mac the password in plaintext,
-/// or let it choose one, so each runs only when the MDM's profile sets its
-/// Allow key: the admin's acknowledgement of the risk. Off: exit 78.
+/// -read and -newPassword are the 3.x-style plaintext path: root on this Mac
+/// reads the password, or chooses one. They exist only in plaintext escrow,
+/// and only when the MDM's profile sets the Allow key (the admin's
+/// acknowledgement). With EscrowCertificates or in device mode the password
+/// is never handed out in plaintext, whatever the key says. Exit 78.
 func requireAllowed(_ key: String, for command: String, because reason: String) {
+    if Reveal.deviceMode {
+        laps_log.print("\(command) isn't available in device mode: the password is only shown at the Mac with a reveal code (macOSLAPS -reveal, or the app).", .error)
+        exit(78)
+    }
+    if Escrow.certificateConfig().configured {
+        laps_log.print("\(command) isn't available with EscrowCertificates set: the password only leaves macOSLAPS encrypted. Use -escrow and decrypt it with your private key.", .error)
+        exit(78)
+    }
     guard (GetPreference(preference_key: key) as? Bool) == true else {
         laps_log.print("\(command) is turned off: it \(reason). To allow it, set \(key) to true in your macOSLAPS configuration profile (a value in /Library/Preferences is ignored).", .error)
         exit(78)
     }
 }
 
-/// -read: the current password on one line, for scripts on this Mac (XCreds, the macOS
-/// installer). Unlike -escrow it never counts as the MDM collecting a staged password,
-/// and it prints even with EscrowCertificates, because it stays on this Mac.
+/// -read: the current password on one line, for scripts on this Mac (XCreds,
+/// the macOS installer). Unlike -escrow it never counts as the MDM collecting
+/// a staged password. Only in plaintext escrow with AllowRead.
 func readForScripts() -> Never {
     if Reveal.deviceMode {
         laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
@@ -477,6 +489,10 @@ func macOSLAPS() {
                 laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
                 exit(1)
             }
+            if Escrow.certificateConfig().configured {
+                laps_log.print("-getPassword isn't available with EscrowCertificates set: the password only leaves macOSLAPS encrypted. Use -escrow and decrypt it with your private key.", .error)
+                exit(78)
+            }
             guard Constants.method == "Local" else {
                 laps_log.print("Password WILL NOT be exported as the current method is set to Active Directory", .warn)
                 exit(0)
@@ -559,8 +575,8 @@ func macOSLAPS() {
                                     on the command line; it must meet the password
                                     settings. With -currentPassword - as well, give
                                     the passwords on separate lines, in the order of
-                                    the options. Off unless your MDM's profile sets
-                                    AllowNewPassword.
+                                    the options. Plaintext escrow only, and only
+                                    when your MDM's profile sets AllowNewPassword.
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -572,8 +588,9 @@ func macOSLAPS() {
 
                   -read             Prints the current password, alone on one line, for
                                     scripts on this Mac. Never counts as the MDM
-                                    collecting a staged password (-escrow does). Off
-                                    unless your MDM's profile sets AllowRead.
+                                    collecting a staged password (-escrow does). The
+                                    3.x-style path: plaintext escrow only, and only
+                                    when your MDM's profile sets AllowRead.
 
                   -initialize       With -firstPass <password> (or the FirstPass key):
                                     verify that password and store it WITHOUT rotating.
