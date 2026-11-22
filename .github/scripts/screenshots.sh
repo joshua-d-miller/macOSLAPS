@@ -165,6 +165,16 @@ shows_deadline() { window_text "$1" | grep -q "works until"; }
 has_deadline() { [ -n "$(jget "$("$LAPS" -status)" rotatesAt)" ]; }
 agent_pid() { pgrep -u "$GUI_UID" -f "macOSLAPS -agent" | head -1; }
 has_agent() { [ -n "$(agent_pid)" ]; }
+agent_gone() { [ -z "$(agent_pid)" ]; }
+# What the agent looks like to launchd and Accessibility, when its status
+# item can't be found.
+agent_facts() {
+    echo "  macOSLAPS processes:"; pgrep -lf macOSLAPS | sed 's/^/    /'
+    echo "  launchd (gui/$GUI_UID):"
+    launchctl print "gui/$GUI_UID/com.joshua-d-miller.macoslaps.agent" 2>&1 \
+        | grep -E "state =|session|program|arguments|pid =|last exit" | sed 's/^/    /'
+    [ -n "${1:-}" ] && echo "  Accessibility menu bars of $1: $(as_gui osascript -e "tell application \"System Events\" to tell (first process whose unix id is $1) to get {name, background only, count of menu bars}" 2>&1)"
+}
 agent_window() { as_gui /tmp/wininfo | awk -F'\t' -v p="$1" -v l="$2" '$3==p && $2>=l {print $1; exit}'; }
 has_agent_window() { [ -n "$(agent_window "$1" "$2")" ]; }
 
@@ -305,6 +315,7 @@ elif [ -n "$AGENT_PID" ]; then
     wait_for 15 ax_rect "$AGENT_PID" "$STATUS_ITEM" 0
     RECT=$(ax_rect "$AGENT_PID" "$STATUS_ITEM" 120)
     echo "  status item frame (padded): ${RECT:-none}"
+    [ -n "$RECT" ] || agent_facts "$AGENT_PID"
     [ -n "$RECT" ] && shot_rect 05-menubar-item "$RECT"
 fi
 need 05-menubar-item
@@ -339,10 +350,15 @@ kill "$APP_PID" 2>/dev/null
 wait_for 15 app_gone || { kill -9 "$APP_PID" 2>/dev/null; sleep 1; }
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
 defaults write "$DOM" RetrievalMode -string escrow
+# The agent (same bundle) quits a few seconds after the deadline is gone.
+# While it runs, open may hand the request to it instead of starting the app.
+A=$(agent_pid); echo "  agent before reopening: ${A:+pid $A}${A:-none running}"
+wait_for 20 agent_gone || echo "::warning::the menu bar agent is still running after 20 s"
 as_gui open "$APP"
 wait_for 30 has_app; wait_for 30 has_window; sleep 1
 APP_PID=$(app_pid)
 echo "  escrow mode: app pid ${APP_PID:-none}"
+[ -n "$APP_PID" ] || agent_facts
 WIN=$(window_of "$APP_PID" 0)
 [ -n "$WIN" ] && shot 10-window-escrow-mode "$WIN"
 need 10-window-escrow-mode
