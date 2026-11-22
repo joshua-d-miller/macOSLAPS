@@ -244,7 +244,7 @@ final class LDAPBackend: ADBackend {
         let search = run("/usr/bin/ldapsearch", ["-LLL", "-Q", "-Y", "GSSAPI", "-H", "ldap://\(server)",
                                                  "-b", binding.baseDN, filter, "dn"], cache: cache)
         guard search.status == 0 else {
-            throw Failure.step("\(server) can't be searched over LDAP (ldapsearch exit \(search.status)\(search.errors.isEmpty ? "" : ": \(search.errors)"))")
+            throw Failure.step("the LDAP search failed (ldapsearch exit \(search.status)\(search.errors.isEmpty ? "" : ": \(search.errors)"))")
         }
         guard let found = LDIF.values(of: "dn", in: search.output).first else {
             throw Failure.step("\(binding.trustAccount) was not found on \(server)")
