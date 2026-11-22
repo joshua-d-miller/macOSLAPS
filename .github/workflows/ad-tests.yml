@@ -13,7 +13,7 @@ on:
   pull_request:
     paths-ignore:
       # Documentation only: built by docs.yml, and skipping it here keeps
-      # test build numbers (845 + run number) from piling up.
+      # test build numbers (1000 + run number) from piling up.
       - 'docs/**'
       - 'zensical.toml'
       - '**.md'
