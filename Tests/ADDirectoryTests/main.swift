@@ -28,7 +28,8 @@
  4.0.0     2026-11-22   joshua    Writability.ensure with fake backends: a
                         claude    refusing bound DC falls back to the first
                                   candidate that takes the write; a chosen
-                                  DC never does.
+                                  DC never does; an RODC that accepts a
+                                  no-change write is still caught.
  4.0.0     2026-11-17   joshua    New file.
                         claude
 ===============================================================================
@@ -109,17 +110,22 @@ final class FakeDC: ADBackend {
     let name : String
     let followsBinding : Bool
     let refuses : Bool
+    /// Like a Samba RODC: a write that changes nothing is accepted.
+    let acceptsNoChange : Bool
     var values : [String: String]
     var writes : [(String, String)] = []
     var description : String { name }
     init(_ name: String, followsBinding: Bool = false, refuses: Bool = false,
-         values: [String: String] = [:]) {
+         acceptsNoChange: Bool = false, values: [String: String] = [:]) {
         self.name = name; self.followsBinding = followsBinding
-        self.refuses = refuses; self.values = values
+        self.refuses = refuses; self.acceptsNoChange = acceptsNoChange
+        self.values = values
     }
     func value(_ attribute: String) -> Any? { values[attribute] }
     func write(_ attribute: String, _ value: String) throws {
-        if refuses { throw Refused(why: "\(name) is read-only") }
+        if refuses && !(acceptsNoChange && values[attribute] == value) {
+            throw Refused(why: "\(name) is read-only")
+        }
         writes.append((attribute, value)); values[attribute] = value
     }
 }
@@ -138,8 +144,10 @@ let r1 = Writability.ensure(c1, attributes: expAttrs, placeholder: "0",
                             open: { _ in FakeDC("unused") }, explain: why)
 expect(r1 == .writable && asked == 0 && (c1.backend as? FakeDC) === bound1,
        "a writable bound DC is kept; DNS is never asked")
-expect(bound1.writes.map { $0.1 } == ["134000000000000000", "0"],
-       "the current expiration is written back; a missing one gets the placeholder")
+expect(bound1.writes.map { $0.1 } == ["134000000000000001", "134000000000000000", "0"],
+       "a real change (time + 1) then the time put back; a missing one gets the placeholder")
+expect(bound1.values["ms-Mcs-AdmPwdExpirationTime"] == "134000000000000000",
+       "the expiration ends where it started")
 
 // 2. The bound DC is an RODC: the first candidate that takes the write wins.
 let rodc2 = FakeDC("rodc2", refuses: true)
@@ -163,10 +171,20 @@ expect(r2 == .switched(server: "dc1", refusal: "rodc1 is read-only",
        "an RODC binding falls back to the first DC that takes the write, noting the others")
 expect(opened == ["unreachable", "rodc2", "dc1"], "candidates are tried in order, stopping at the first that works")
 expect((c2.backend as? FakeDC) === dc1, "the computer now reads and writes through that DC")
-expect(dc1.writes.map { $0.1 } == ["135000000000000000", "0"],
+expect(dc1.writes.map { $0.1 } == ["135000000000000001", "135000000000000000", "0"],
        "the fallback DC's own values are written back, not the RODC's")
 try? c2.write("ms-Mcs-AdmPwd", "new")
 expect(dc1.values["ms-Mcs-AdmPwd"] == "new", "later writes go to the fallback DC")
+
+// 2b. An RODC that accepts a write changing nothing (Samba) is still caught.
+let samba = FakeDC("rodc1", refuses: true, acceptsNoChange: true,
+                   values: ["ms-Mcs-AdmPwdExpirationTime": "134000000000000000",
+                            "msLAPS-PasswordExpirationTime": "134000000000000000"])
+let rs = Writability.ensure(ADComputer(backend: samba, binding: fakeBinding),
+                            attributes: expAttrs, placeholder: "0",
+                            candidates: { [] }, open: { _ in samba }, explain: why)
+expect(rs == .refused(reason: "rodc1 is read-only"),
+       "an RODC that accepts a no-change write is refused: the check changes the time")
 
 // 3. A DC macOSLAPS chose (PreferredDC) refuses: no fallback, DNS isn't asked.
 asked = 0

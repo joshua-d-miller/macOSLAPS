@@ -27,7 +27,9 @@
  4.0.0     2026-11-22   joshua    The writability check and the fallback to
                         claude    a writable DC are in Writability.ensure,
                                   away from logging and exit, so unit tests
-                                  drive them with fake backends.
+                                  drive them with fake backends. The check
+                                  makes a real change (time + 1, then back):
+                                  a Samba RODC accepted the same value.
  4.0.0     2026-11-17   joshua    New file. PreferredDC works (it never did:
                         claude    the setting went to an unused
                                   configuration), and a read-only bound DC
@@ -95,12 +97,19 @@ enum Writability {
         case noWritableDC(refusal: String, skipped: [Attempt])
     }
 
-    /// Writes each attribute back with its current value, or `placeholder`
-    /// when it has none.
+    /// Proves each attribute can be written with a real change: a time is
+    /// moved 100 ns later and put back; a missing or unreadable one gets
+    /// `placeholder`. Writing the same value isn't proof: a read-only DC
+    /// (Samba) accepts a modify that changes nothing.
     static func rewrite(_ target: ADBackend, _ attributes: [String],
                         placeholder: String) throws {
         for attribute in attributes {
-            try target.write(attribute, (target.value(attribute) as? String) ?? placeholder)
+            if let current = target.value(attribute) as? String, let time = Int64(current) {
+                try target.write(attribute, String(time &+ 1))
+                try target.write(attribute, current)
+            } else {
+                try target.write(attribute, placeholder)
+            }
         }
     }
 

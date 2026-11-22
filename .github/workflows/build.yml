@@ -592,14 +592,17 @@ jobs:
           sudo -E bash .github/scripts/samba/provision-dc.sh
           echo "Listening on the Tailscale address:"
           sudo ss -ltnu | grep -F "$DC_HOST_IP" | awk '{print "  " $1, $5}' | sort -u
-          # A second name for this DC, listed after dc1 in DNS. The Mac points
-          # dc1's name at nothing for one test, so only macOSLAPS's fallback
-          # (DNS, then LDAP) can reach a writable DC, through this name.
+          # A second name for this DC, listed after dc1 in DNS, on its Tailscale
+          # IPv6 address only. For one test the Mac blocks IPv4 LDAP to dc1, so
+          # macOS can't follow the RODC's referral and only macOSLAPS's fallback
+          # (DNS, then LDAP) can reach a writable DC: through this name.
+          DC_HOST_IP6=$(tailscale ip -6)
           auth=(-U Administrator --password="$ADMINPASS")
-          sudo samba-tool dns add 127.0.0.1 laps.test dcw A "$DC_HOST_IP" "${auth[@]}" >/dev/null
+          sudo samba-tool dns add 127.0.0.1 laps.test dcw AAAA "$DC_HOST_IP6" "${auth[@]}" >/dev/null
           sudo samba-tool dns add 127.0.0.1 _msdcs.laps.test _ldap._tcp.dc SRV "dcw.laps.test 389 10 100" "${auth[@]}" >/dev/null
           sudo samba-tool spn add ldap/dcw.laps.test 'DC1$' >/dev/null
-          echo "Second name: dcw.laps.test (SRV priority 10, SPN ldap/dcw.laps.test)"
+          echo "Second name: dcw.laps.test -> $DC_HOST_IP6 (SRV priority 10, SPN ldap/dcw.laps.test)"
+          sudo ss -ltn | awk '$4 ~ /:389$/ {print "  LDAP listening: " $4}' | sort -u
       - name: Wait for the Mac
         if: env.HAS_TS == 'true'
         env:
