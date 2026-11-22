@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-15
+ Updated:   2026-11-22
 
  Purpose:
      Writes docs/settings.md, the settings reference on the docs site,
@@ -22,6 +22,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Section for AllowRead and AllowNewPassword.
+                        claude
  4.0.0     2026-11-12   joshua    New file. Repository links point at main
                         claude    (4.0 is on main since 2026-11-14).
 ===============================================================================
@@ -58,6 +60,8 @@ SECTIONS = [
     ("Admin group protection", ["ApprovedAdmins", "AdminGroupPolicy",
                                 "AllowMDMManagedAccount"]),
     ("Active Directory", ["ADSchema", "PreferredDC"]),
+    ("Plaintext on this Mac (profile only)", ["AllowRead",
+                                              "AllowNewPassword"]),
 ]
 
 

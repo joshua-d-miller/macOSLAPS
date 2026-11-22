@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Reads the settings. macOSLAPS is moving from the original
@@ -16,11 +16,17 @@
      /Library/Preferences, then the built-in defaults. Values are coerced
      to the expected type, so one written with the wrong type is converted
      or replaced by the default with a warning instead of crashing (#86).
+     AllowRead and AllowNewPassword are read from a configuration profile
+     only: root can write /Library/Preferences, so a local value is
+     ignored.
 ===============================================================================
  CHANGELOG
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    AllowRead and AllowNewPassword (default
+                        claude    false), honored only from a configuration
+                                  profile.
  4.0.0     2026-11-17   joshua    Method defaults to auto: AD when bound to
                         claude    Active Directory, else Local; -showConfig
                                   says which.
@@ -76,6 +82,8 @@ var defaultpreferences : [ String : Any ] = [
     "RevealAction"           :       "rotateAndLogout",
     "ADRevealCode"           :       false,
     "AllowMDMManagedAccount" :       true,
+    "AllowRead"              :       false,
+    "AllowNewPassword"       :       false,
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,
@@ -104,6 +112,11 @@ let requirementKeyAliases : [ String : String ] = [
 
 // Keys whose values must never be printed.
 let secretPreferenceKeys : Set<String> = ["FirstPass"]
+
+// Keys honored only from a configuration profile. They let root on this Mac
+// read or choose the password in plaintext, and root can write
+// /Library/Preferences, so only the MDM can turn them on.
+let managedOnlyPreferenceKeys : Set<String> = ["AllowRead", "AllowNewPassword"]
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // --------------------------- //
@@ -194,12 +207,18 @@ final class PreferenceStore {
         }
     }
 
-    /// First layer that has a value for `key` (or a known misspelling of it).
+    /// First layer with a value for `key` (or a known misspelling of it).
+    /// A profile-only key skips /Library/Preferences, warning if set there.
     private func lookup(_ key: String) -> (value: Any, layer: Layer, alias: String?)? {
         let aliases = preferenceKeyAliases.filter { $0.value == key }.map { $0.key }
+        let managedOnly = managedOnlyPreferenceKeys.contains(key)
         for layer in layers {
             for name in [key] + aliases {
                 if let value = layer.store.object(forKey: name), layer.store.objectIsForced(forKey: name) == layer.managed {
+                    if managedOnly && !layer.managed {
+                        warnOnce("local-\(key)", "\(key) in /Library/Preferences is ignored: only a configuration profile from your MDM can set it.")
+                        continue
+                    }
                     return (value, layer, name == key ? nil : name)
                 }
             }

@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-08
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      macOSLAPS smoke test for GitHub-hosted macOS runners. Exercises the
@@ -24,6 +24,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    -read and -newPassword are off by default
+                        claude    and ignore AllowRead / AllowNewPassword in
+                                  /Library/Preferences; the tests turn them
+                                  on through a managed profile.
  4.0.0     2026-11-17   joshua    Reveal wait (backoff) instead of the lock;
                         claude    elevation tools must be signed.
                                   -read, -rotate, -currentPassword,
@@ -702,41 +706,65 @@ echo "::endgroup::"
 ### ------------------------------------------------- ###
 ### | -read, -rotate, -currentPassword, -newPassword | ###
 ### ------------------------------------------------- ###
-### -read prints only the password and never counts as a collection;       ###
-### the new names work like the old ones; a chosen password is read from   ###
-### stdin only and must meet the password settings.                        ###
+### -read and -newPassword are off unless a profile sets AllowRead /      ###
+### AllowNewPassword (a local value is ignored). -read prints only the     ###
+### password and never counts as a collection; the new names work like     ###
+### the old ones; a chosen password is read from stdin only and must meet  ###
+### the password settings.                                                 ###
 echo "::group::-read, -rotate, -currentPassword, -newPassword"
 CUR=$(get_pw)
-[ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] && pass "-read prints only the current password" || fail "-read output"
-defaults write "$DOMAIN" StagedRotation -string on
-"$LAPS" -rotate >/dev/null 2>&1
-BEFORE_READ=$(jget "$("$LAPS" -status)" pendingExports)
-"$LAPS" -read >/dev/null 2>&1; "$LAPS" -read >/dev/null 2>&1
-[ -n "$BEFORE_READ" ] && [ "$(jget "$("$LAPS" -status)" pendingExports)" = "$BEFORE_READ" ] && [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] \
-    && pass "-rotate stages; -read prints the password in use and doesn't count as a collection" || fail "-read with a staged password: $("$LAPS" -status)"
-defaults write "$DOMAIN" StagedRotation -string off
-"$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied
-CUR=$(get_pw)
-CHOSEN='Chosen-Pass-2468-xyz'
-OUT=$("$LAPS" -rotate -newPassword "$CHOSEN" 2>&1); RC=$?
-[ "$RC" -eq 64 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword on the command line is refused" || fail "-newPassword in argv: rc $RC"
-printf '%s\n' 'short-1' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a too-short chosen password was accepted" \
-    || { [ "$(get_pw)" = "$CUR" ] && pass "a chosen password shorter than PasswordLength is refused, nothing changed" || fail "password changed after a refused -newPassword"; }
-printf '%s\n' 'Chosen-Pass-|-2468' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a chosen password with an excluded character was accepted" \
-    || pass "a chosen password with a RemovePassChars character is refused"
-printf '%s\n' "$CHOSEN" | "$LAPS" -rotate -newPassword - >/dev/null 2>&1
-[ "$(get_pw)" = "$CHOSEN" ] && dscl . -authonly "$ACCT" "$CHOSEN" >/dev/null 2>&1 && pass "-rotate -newPassword - sets the chosen password" || fail "chosen password not set"
-# Changed outside macOSLAPS: -rotate -currentPassword - takes the account back.
-dscl . -passwd "/Users/$ACCT" "$CHOSEN" 'Outside-Pass-1357' >/dev/null 2>&1
-"$LAPS" >/dev/null 2>&1
-printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
-NOW=$(get_pw)
-[ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
-# Both from stdin, in the order of the options.
-printf '%s\n%s\n' "$NOW" "$CHOSEN-2" | "$LAPS" -rotate -currentPassword - -newPassword - >/dev/null 2>&1
-[ "$(get_pw)" = "$CHOSEN-2" ] && dscl . -authonly "$ACCT" "$CHOSEN-2" >/dev/null 2>&1 && pass "-currentPassword - and -newPassword - read two lines in order" || fail "two passwords from stdin"
-"$LAPS" -rotate >/dev/null 2>&1
-[ "$(get_pw)" != "$CHOSEN-2" ] && pass "the next rotation generates a password again" || fail "-newPassword stuck"
+OUT=$("$LAPS" -read 2>/dev/null); RC=$?
+[ "$RC" -eq 78 ] && [ -z "$OUT" ] && pass "-read is off by default (exit 78, nothing printed)" || fail "-read without AllowRead: rc $RC"
+printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC=$?
+[ "$RC" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC"
+defaults write "$DOMAIN" AllowRead -bool true; defaults write "$DOMAIN" AllowNewPassword -bool true
+"$LAPS" -read >/dev/null 2>&1; RC=$?
+printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
+[ "$RC" -eq 78 ] && [ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
+    && pass "AllowRead / AllowNewPassword in /Library/Preferences are ignored" || fail "local Allow keys were honored: -read rc $RC, -newPassword rc $RC2"
+grep -q "AllowRead in /Library/Preferences is ignored" "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" \
+    && pass "the ignored local key is logged" || fail "no log line for the ignored local AllowRead"
+defaults delete "$DOMAIN" AllowRead >/dev/null 2>&1; defaults delete "$DOMAIN" AllowNewPassword >/dev/null 2>&1
+# The MDM's acknowledgement: a managed profile turns both on.
+MANAGED="/Library/Managed Preferences/com.joshua-d-miller.macoslaps"
+mkdir -p "/Library/Managed Preferences"
+defaults write "$MANAGED" AllowRead -bool true; defaults write "$MANAGED" AllowNewPassword -bool true
+killall cfprefsd 2>/dev/null; sleep 1
+if ! "$LAPS" -showConfig 2>/dev/null | grep -q "AllowRead = true  \[profile, new domain\]"; then
+    echo "::notice::Managed preferences written by hand weren't treated as managed on this runner; the enabled -read / -newPassword checks were skipped."
+else
+    [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] && pass "-read prints only the current password" || fail "-read output"
+    defaults write "$DOMAIN" StagedRotation -string on
+    "$LAPS" -rotate >/dev/null 2>&1
+    BEFORE_READ=$(jget "$("$LAPS" -status)" pendingExports)
+    "$LAPS" -read >/dev/null 2>&1; "$LAPS" -read >/dev/null 2>&1
+    [ -n "$BEFORE_READ" ] && [ "$(jget "$("$LAPS" -status)" pendingExports)" = "$BEFORE_READ" ] && [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] \
+        && pass "-rotate stages; -read prints the password in use and doesn't count as a collection" || fail "-read with a staged password: $("$LAPS" -status)"
+    defaults write "$DOMAIN" StagedRotation -string off
+    "$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied
+    CUR=$(get_pw)
+    CHOSEN='Chosen-Pass-2468-xyz'
+    OUT=$("$LAPS" -rotate -newPassword "$CHOSEN" 2>&1); RC=$?
+    [ "$RC" -eq 64 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword on the command line is refused" || fail "-newPassword in argv: rc $RC"
+    printf '%s\n' 'short-1' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a too-short chosen password was accepted" \
+        || { [ "$(get_pw)" = "$CUR" ] && pass "a chosen password shorter than PasswordLength is refused, nothing changed" || fail "password changed after a refused -newPassword"; }
+    printf '%s\n' 'Chosen-Pass-|-2468' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a chosen password with an excluded character was accepted" \
+        || pass "a chosen password with a RemovePassChars character is refused"
+    printf '%s\n' "$CHOSEN" | "$LAPS" -rotate -newPassword - >/dev/null 2>&1
+    [ "$(get_pw)" = "$CHOSEN" ] && dscl . -authonly "$ACCT" "$CHOSEN" >/dev/null 2>&1 && pass "-rotate -newPassword - sets the chosen password" || fail "chosen password not set"
+    # Changed outside macOSLAPS: -rotate -currentPassword - takes it back.
+    dscl . -passwd "/Users/$ACCT" "$CHOSEN" 'Outside-Pass-1357' >/dev/null 2>&1
+    "$LAPS" >/dev/null 2>&1
+    printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
+    NOW=$(get_pw)
+    [ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
+    # Both from stdin, in the order of the options.
+    printf '%s\n%s\n' "$NOW" "$CHOSEN-2" | "$LAPS" -rotate -currentPassword - -newPassword - >/dev/null 2>&1
+    [ "$(get_pw)" = "$CHOSEN-2" ] && dscl . -authonly "$ACCT" "$CHOSEN-2" >/dev/null 2>&1 && pass "-currentPassword - and -newPassword - read two lines in order" || fail "two passwords from stdin"
+    "$LAPS" -rotate >/dev/null 2>&1
+    [ "$(get_pw)" != "$CHOSEN-2" ] && pass "the next rotation generates a password again" || fail "-newPassword stuck"
+fi
+rm -f "$MANAGED.plist"; killall cfprefsd 2>/dev/null; sleep 1
 echo "::endgroup::"
 
 if [ "$HAS_TOKEN" -eq 1 ]; then

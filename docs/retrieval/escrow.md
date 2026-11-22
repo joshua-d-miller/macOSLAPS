@@ -39,7 +39,7 @@ So your MDM always holds the password the Mac is using. Keep both values: if the
 
 **When it's applied:** on the first macOSLAPS run after the last collection, not at the moment of it. The LaunchDaemon runs every 90 minutes. If you don't load it and rotate from MDM policies instead, a staged password waits for your next `-rotate`, unless the inventory hook confirms it in the same run (below).
 
-**Scripts on the Mac** that need the password (XCreds, a macOS installer) should use `macOSLAPS -read`, not `-escrow`: it prints only the current password and never counts as a collection.
+**Scripts on the Mac** that need the password (XCreds, a macOS installer) should use `macOSLAPS -read`, not `-escrow`: it prints only the current password and never counts as a collection. `-read` prints plaintext, so it only runs when your MDM's profile sets `AllowRead true` (see [Command line](../command-line.md#plaintext-commands-are-opt-in)).
 
 `StagedRotation auto` (the default) stages only on Macs where `-escrow` ran in the last 14 days. `on` always stages, `off` never does. A first rotation with `-firstPass`, or a Mac with no stored password, always rotates immediately.
 

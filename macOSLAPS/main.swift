@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      The macOSLAPS command. Reads the arguments, moves a password stored
@@ -21,6 +21,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    -read and -newPassword run only when the
+                        claude    MDM's profile sets AllowRead /
+                                  AllowNewPassword (exit 78 otherwise).
  4.0.0     2026-11-17   joshua    One path for the AD and Local methods;
                         claude    -getPassword and -firstPass parsing
                                   shortened; -rotateNow handled once;
@@ -275,6 +278,16 @@ func initializeWithoutRotating() -> Never {
 // | -read and -newPassword | //
 // -------------------------- //
 // The password for scripts on this Mac, and a password chosen by a person.  //
+/// -read and -newPassword hand root on this Mac the password in plaintext,
+/// or let it choose one, so each runs only when the MDM's profile sets its
+/// Allow key: the admin's acknowledgement of the risk. Off: exit 78.
+func requireAllowed(_ key: String, for command: String, because reason: String) {
+    guard (GetPreference(preference_key: key) as? Bool) == true else {
+        laps_log.print("\(command) is turned off: it \(reason). To allow it, set \(key) to true in your macOSLAPS configuration profile (a value in /Library/Preferences is ignored).", .error)
+        exit(78)
+    }
+}
+
 /// -read: the current password on one line, for scripts on this Mac (XCreds, the macOS
 /// installer). Unlike -escrow it never counts as the MDM collecting a staged password,
 /// and it prints even with EscrowCertificates, because it stays on this Mac.
@@ -499,8 +512,10 @@ func macOSLAPS() {
             Escrow.run()
         case "-read":
             verify_root()
+            requireAllowed("AllowRead", for: "-read", because: "prints the password in plaintext on this Mac")
             readForScripts()
         case "-newpassword":
+            requireAllowed("AllowNewPassword", for: "-newPassword", because: "sets a password a person chose")
             Constants.pw_reset = true
             Constants.new_password = chosenPassword()
         case "-reveal":
@@ -544,7 +559,8 @@ func macOSLAPS() {
                                     on the command line; it must meet the password
                                     settings. With -currentPassword - as well, give
                                     the passwords on separate lines, in the order of
-                                    the options.
+                                    the options. Off unless your MDM's profile sets
+                                    AllowNewPassword.
                   
                   -status           One line of JSON describing the account, secureToken,
                                     FileVault, stored password and escrow settings, for an
@@ -556,7 +572,8 @@ func macOSLAPS() {
 
                   -read             Prints the current password, alone on one line, for
                                     scripts on this Mac. Never counts as the MDM
-                                    collecting a staged password (-escrow does).
+                                    collecting a staged password (-escrow does). Off
+                                    unless your MDM's profile sets AllowRead.
 
                   -initialize       With -firstPass <password> (or the FirstPass key):
                                     verify that password and store it WITHOUT rotating.
