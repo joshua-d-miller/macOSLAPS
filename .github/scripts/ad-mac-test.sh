@@ -366,6 +366,10 @@ else
     fail "dc1 doesn't answer LDAP on its IPv6 address $dc6"
   else
     rc=1; new_log=""
+    # Pinned like dc1 and rodc1: macOS may not ask DNS for AAAA records.
+    sed -i '' "/[[:space:]]$dcw/d" /etc/hosts
+    echo "$dc6 $dcw dcw" >> /etc/hosts
+    dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
     pf_rules=$(mktemp)
     echo "block return out quick proto tcp from any to $DC_IP port 389" > "$pf_rules"
     pfctl -a com.apple/macoslaps-ci -f "$pf_rules" 2>/dev/null

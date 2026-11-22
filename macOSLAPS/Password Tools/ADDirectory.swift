@@ -32,7 +32,9 @@
                                   makes a real change (time + 1, then back):
                                   a Samba RODC accepted the same value.
                                   A DC picked from DNS when Open Directory
-                                  can't reach AD may itself fall back.
+                                  can't reach AD may itself fall back. An
+                                  unreachable DC is no longer reported as
+                                  "not found".
  4.0.0     2026-11-17   joshua    New file. PreferredDC works (it never did:
                         claude    the setting went to an unused
                                   configuration), and a read-only bound DC
@@ -241,8 +243,11 @@ final class LDAPBackend: ADBackend {
         let filter = "(sAMAccountName=\(ldapEscape(binding.trustAccount)))"
         let search = run("/usr/bin/ldapsearch", ["-LLL", "-Q", "-Y", "GSSAPI", "-H", "ldap://\(server)",
                                                  "-b", binding.baseDN, filter, "dn"], cache: cache)
-        guard search.status == 0, let found = LDIF.values(of: "dn", in: search.output).first else {
-            throw Failure.step("\(binding.trustAccount) was not found on \(server) (ldapsearch exit \(search.status)\(search.errors.isEmpty ? "" : ": \(search.errors)"))")
+        guard search.status == 0 else {
+            throw Failure.step("\(server) can't be searched over LDAP (ldapsearch exit \(search.status)\(search.errors.isEmpty ? "" : ": \(search.errors)"))")
+        }
+        guard let found = LDIF.values(of: "dn", in: search.output).first else {
+            throw Failure.step("\(binding.trustAccount) was not found on \(server)")
         }
         return LDAPBackend(host: server, dn: found, cache: cache, followsBinding: fromDNS)
     }
