@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-09
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Installs the last published release, rotates with it, then installs
@@ -25,6 +25,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Gatekeeper is checked only for notarized
+                        claude    builds (NOTARIZED; pull requests aren't).
  4.0.0     2026-11-17   joshua    The scripts' new paths under integrations/.
                         claude
  4.0.0     2026-11-12   joshua    Migration from 845, the required/recovery
@@ -296,7 +298,9 @@ installer -pkg "$NEW_FULL" -applyChoiceChangesXML /tmp/laps-skip-daemon.xml -tar
 [ ! -f "$PLIST" ] && ! pkgutil --pkgs | grep -qx "$LABEL" \
     && pass "LaunchDaemon skipped when installer_choice_2 is off" || fail "LaunchDaemon was installed despite installer_choice_2 off"
 [ -x "$LAPS" ] && pass "binary installed with the daemon skipped" || fail "binary missing after choice install"
-if [ "$SIGNED" = "true" ]; then
+if [ "$SIGNED" = "true" ] && [ "${NOTARIZED:-true}" != "true" ]; then
+    echo "::notice::Not notarized (a pull request build): Gatekeeper is checked on main and releases."
+elif [ "$SIGNED" = "true" ]; then
     for p in "$NEW_FULL" "$NEW_BIN" "$NEW_LD"; do
         spctl --assess --type install -vv "$p" 2>&1 | grep -q "accepted" && pass "Gatekeeper accepts $(basename "$p")" || fail "Gatekeeper rejects $(basename "$p"): $(spctl --assess --type install -vv "$p" 2>&1 | tr '\n' ' ')"
     done

@@ -1,7 +1,8 @@
 name: Build & Test
 
 # Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
-# smoke-tests the pkgs on macOS 15 (arm64 + Intel) / 26, upgrades over the previous release,
+# smoke-tests the pkgs on macOS 27 / 26 / 15 (Apple silicon and Intel; pull requests
+# use 27 and 26 Intel, main, releases and a weekly run use all), upgrades over the previous release,
 # runs macOSLAPS against a Samba AD domain over Tailscale (when the secrets are set),
 # opens the CMS escrow on Windows, and attaches everything to a published release.
 #
@@ -33,6 +34,10 @@ on:
       - '.github/workflows/docs.yml'
       - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
+  # The full macOS matrix weekly, so a problem on an OS that pull requests
+  # skip shows up even between releases.
+  schedule:
+    - cron: '23 7 * * 1'
 
 # A new push to a pull request cancels that PR's older run, so superseded runs
 # don't hold the macOS runners. Pushes to main, tags and releases always finish.
@@ -310,7 +315,9 @@ jobs:
           echo "app=$APP" >> "$GITHUB_OUTPUT"
 
       - name: Notarize and staple macOSLAPS.app
-        if: steps.sign.outputs.signed == 'true'
+        # Pull request builds are signed but not notarized: Apple's queue has
+        # held runs for up to 26 minutes. main, tags and releases notarize.
+        if: steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -383,7 +390,7 @@ jobs:
           done
 
       - name: Notarize pkgs
-        if: steps.sign.outputs.signed == 'true'
+        if: steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -445,7 +452,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel, macos-26, macos-26-intel, xcode-27]
+        # macOS n-2 (27, 26, 15). Pull requests: the newest on Apple silicon
+        # and the newest on Intel; main, releases and the weekly run: all.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-15-intel", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -460,10 +469,10 @@ jobs:
         # The full 25-rotation stress loop on one runner; 8 elsewhere (the
         # generator itself is unit-tested in generator-tests).
         env:
-          ROUNDS: ${{ matrix.os == 'macos-26' && 25 || 8 }}
+          ROUNDS: ${{ matrix.os == 'xcode-27' && 25 || 8 }}
         run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" ROUNDS="$ROUNDS" bash .github/scripts/smoke-test.sh
       - uses: actions/upload-artifact@v7
-        if: matrix.os == 'macos-26'
+        if: matrix.os == 'macos-26-intel'   # in both matrices; windows-decrypt needs it
         with:
           name: cms-escrow-sample
           path: ${{ runner.temp }}/cms
@@ -475,7 +484,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-26-intel, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -490,7 +499,11 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}/releases/download/4.0.0%28845%29/macOSLAPS-4.0.0.845.pkg"
           pkgutil --check-signature "$RUNNER_TEMP/previous.pkg" | head -4
       - name: Upgrade test
-        run: sudo bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
+        # Pull request builds aren't notarized, so Gatekeeper is checked on
+        # main and releases only.
+        env:
+          NOTARIZED: ${{ needs.build.outputs.signed == 'true' && github.event_name != 'pull_request' }}
+        run: sudo NOTARIZED="$NOTARIZED" bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
 
   # Upgrade from the last 3.x release (3.0.4): migration from 3.x's keychain item.
   upgrade-test-3x:
@@ -498,7 +511,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-26-intel, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -523,7 +536,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27"]' || '["macos-26", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -551,7 +564,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27"]' || '["macos-15", "macos-26", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
