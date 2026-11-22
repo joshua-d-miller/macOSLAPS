@@ -29,7 +29,8 @@
                         claude    refusing bound DC falls back to the first
                                   candidate that takes the write; a chosen
                                   DC never does; an RODC that accepts a
-                                  no-change write is still caught.
+                                  no-change write is still caught; a DC
+                                  picked from DNS isn't tried twice.
  4.0.0     2026-11-17   joshua    New file.
                         claude
 ===============================================================================
@@ -112,13 +113,17 @@ final class FakeDC: ADBackend {
     let refuses : Bool
     /// Like a Samba RODC: a write that changes nothing is accepted.
     let acceptsNoChange : Bool
+    /// Set for a DC reached directly (LDAP); nil for Open Directory.
+    let server : String?
     var values : [String: String]
     var writes : [(String, String)] = []
     var description : String { name }
     init(_ name: String, followsBinding: Bool = false, refuses: Bool = false,
-         acceptsNoChange: Bool = false, values: [String: String] = [:]) {
+         acceptsNoChange: Bool = false, ldap: Bool = false,
+         values: [String: String] = [:]) {
         self.name = name; self.followsBinding = followsBinding
         self.refuses = refuses; self.acceptsNoChange = acceptsNoChange
+        self.server = ldap ? name : nil
         self.values = values
     }
     func value(_ attribute: String) -> Any? { values[attribute] }
@@ -185,6 +190,25 @@ let rs = Writability.ensure(ADComputer(backend: samba, binding: fakeBinding),
                             candidates: { [] }, open: { _ in samba }, explain: why)
 expect(rs == .refused(reason: "rodc1 is read-only"),
        "an RODC that accepts a no-change write is refused: the check changes the time")
+
+// 2c. Open Directory couldn't reach AD, so an RODC was picked from DNS; it
+// refuses, and the fallback moves on without trying it again.
+let dcw = FakeDC("dcw", ldap: true)
+var opened2c : [String] = []
+let c2c = ADComputer(backend: FakeDC("rodc1", followsBinding: true, refuses: true, ldap: true),
+                     binding: fakeBinding)
+let r2c = Writability.ensure(c2c, attributes: expAttrs, placeholder: "0",
+                             candidates: { ["dc1", "rodc1", "dcw"] },
+                             open: { server in
+                                 opened2c.append(server)
+                                 if server == "dcw" { return dcw }
+                                 throw Refused(why: "\(server) can't be reached")
+                             }, explain: why)
+expect(r2c == .switched(server: "dcw", refusal: "rodc1 is read-only",
+                        skipped: [.init(server: "dc1", reason: "dc1 can't be reached")]),
+       "a read-only DC picked from DNS falls back to the next writable one")
+expect(opened2c == ["dc1", "dcw"], "the DC already in use isn't tried again")
+expect((c2c.backend as? FakeDC) === dcw, "the computer now uses dcw")
 
 // 3. A DC macOSLAPS chose (PreferredDC) refuses: no fallback, DNS isn't asked.
 asked = 0

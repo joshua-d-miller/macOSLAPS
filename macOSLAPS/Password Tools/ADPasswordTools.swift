@@ -17,8 +17,10 @@
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-22   joshua    The writability check and fallback go
-                        claude    through Writability.ensure (unit-tested);
-                                  the log messages are unchanged.
+                        claude    through Writability.ensure (unit-tested).
+                                  When Open Directory can't reach AD, the
+                                  first DC in DNS that answers is used over
+                                  LDAP; if it is read-only, the next one.
  4.0.0     2026-11-17   joshua    No crash on an incomplete binding or an
                         claude    unreadable expiration time (treated as
                                   expired); TimeConversion.expired.
@@ -124,7 +126,13 @@ public class ADTools: NSObject {
             computer_record = (try query.resultsAllowingPartial(false) as? [ODRecord]) ?? []
         }
         catch {
-            laps_log.print("Active Directory Node not available (\(describe(error))). Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
+            // Open Directory can't reach AD (the DC it wants is down?):
+            // try the domain's DCs from DNS over LDAP before giving up.
+            if let ldap = firstDCFromDNS(bound) {
+                laps_log.print("Open Directory can't reach Active Directory (\(describe(error))). Using \(ldap.host) from DNS instead (LDAP as \(bound.trustAccount)). Set PreferredDC to choose the domain controller.", .warn)
+                return ADComputer(backend: ldap, binding: bound)
+            }
+            laps_log.print("Active Directory Node not available (\(describe(error))), and no domain controller in DNS answered over LDAP. Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
             exit(1)
         }
         guard let record = computer_record.first else {
@@ -132,6 +140,18 @@ public class ADTools: NSObject {
             exit(1)
         }
         return ADComputer(backend: ODBackend(record: record), binding: bound)
+    }
+    /// The first DC in DNS macOSLAPS can sign in to as the computer. It
+    /// may be read-only; the writability check then moves on.
+    private static func firstDCFromDNS(_ bound: ADBinding) -> LDAPBackend? {
+        for server in DomainControllers.fromDNS(domain: bound.domain) {
+            do {
+                return try LDAPBackend.open(server: server, binding: bound, fromDNS: true)
+            } catch {
+                laps_log.print("\(server): \(explain(error)).", .info)
+            }
+        }
+        return nil
     }
     /// The expiration time AD holds (Windows time). Missing or unreadable: already expired.
     class func check_pw_expiration(computer_record computer: ADComputer) -> String {
@@ -151,10 +171,11 @@ public class ADTools: NSObject {
     /// replaced by the first writable DC in DNS, reached over LDAP. Exits when none works.
     class func verify_dc_writability(computer_record computer: ADComputer) {
         let attributes = (writesLegacy ? [legacyExpiration] : []) + (writesWindowsLAPS ? [windowsExpiration] : [])
+        let first = computer.backend.server ?? "The domain controller this Mac's binding uses"
         let outcome = Writability.ensure(
             computer, attributes: attributes, placeholder: TimeConversion.expired,
             candidates: { DomainControllers.fromDNS(domain: computer.binding.domain) },
-            open: { try LDAPBackend.open(server: $0, binding: computer.binding) },
+            open: { try LDAPBackend.open(server: $0, binding: computer.binding, fromDNS: true) },
             explain: explain)
         switch outcome {
         case .writable:
@@ -163,16 +184,16 @@ public class ADTools: NSObject {
             laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) through \(computer.backend.description) (\(reason)). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
             exit(1)
         case .switched(let server, let refusal, let skipped):
-            logRefusal(refusal, skipped)
+            logRefusal(first, refusal, skipped)
             laps_log.print("Writing to \(server) instead (LDAP as \(computer.binding.trustAccount)). Set PreferredDC to choose the domain controller.", .info)
         case .noWritableDC(let refusal, let skipped):
-            logRefusal(refusal, skipped)
+            logRefusal(first, refusal, skipped)
             laps_log.print("No writable domain controller took the LAPS expiration attribute(s) for ADSchema \(schema). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or no writable domain controller is reachable (set PreferredDC to one).", .error)
             exit(1)
         }
     }
-    private static func logRefusal(_ refusal: String, _ skipped: [Writability.Attempt]) {
-        laps_log.print("The domain controller this Mac's binding uses didn't take the write (\(refusal)); it may be read-only. Looking for a writable domain controller.", .warn)
+    private static func logRefusal(_ first: String, _ refusal: String, _ skipped: [Writability.Attempt]) {
+        laps_log.print("\(first) didn't take the write (\(refusal)); it may be read-only. Looking for a writable domain controller.", .warn)
         for attempt in skipped {
             laps_log.print("\(attempt.server): \(attempt.reason).", .info)
         }

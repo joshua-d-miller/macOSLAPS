@@ -54,7 +54,7 @@
     },
     "PreferredDC": {
       "title": "Preferred domain controller",
-      "description": "Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only.",
+      "description": "Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only or Open Directory can't reach AD.",
       "property_order": 30,
       "type": "string",
       "default": ""

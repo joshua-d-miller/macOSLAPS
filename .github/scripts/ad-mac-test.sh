@@ -28,11 +28,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-22   joshua    The LDAP fallback from an RODC binding,
-                        claude    end to end: pf blocks IPv4 LDAP to dc1 so
-                                  macOS can't follow the referral, and the
-                                  write must reach dcw (dc1's second name,
-                                  IPv6 only, from DNS) over LDAP.
+ 4.0.0     2026-11-22   joshua    The LDAP fallback, end to end: pf blocks
+                        claude    IPv4 LDAP to dc1, Open Directory can't
+                                  reach AD, rodc1 (from DNS) refuses, and
+                                  the write must reach dcw (dc1's second
+                                  name, IPv6 only, from DNS) over LDAP.
  4.0.0     2026-11-21   joshua    The DNS check counts only an SRV answer
                         claude    (not dig's timeout message), keeps
                                   retrying, and says whether TCP works.
@@ -353,10 +353,11 @@ else
   fi
   before_ad="$now_ad"
 
-  # 2b. As 2, but macOS can't follow the referral: pf blocks IPv4 LDAP to
-  # dc1 (open connections too), so the RODC's refusal reaches macOSLAPS.
-  # DNS also lists dcw, dc1's second name on its IPv6 address only (SRV
-  # priority 10, its own SPN), which must take the write over LDAP.
+  # 2b. As 2, but pf blocks IPv4 LDAP to dc1 (open connections too), so
+  # Open Directory can't reach AD. macOSLAPS goes to DNS: dc1 (blocked),
+  # rodc1 (priority 5: answers, but refuses the write), then dcw, dc1's
+  # second name on its IPv6 address only (priority 10, its own SPN), which
+  # must take the write over LDAP.
   dcw="dcw.$DOMAIN_DNS"
   dc6=$(dig +short +time=3 @"$DC_IP" "$dcw" AAAA | grep ':' | head -1)
   if [ -z "$dc6" ]; then
@@ -381,14 +382,17 @@ else
     now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
     if [ "$rc" -eq 0 ] && [ -n "$now_ad" ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" \
        && [ "$now_ad" = "$(stored)" ] && grep -q "Writing to $dcw instead (LDAP as" <<< "$new_log"; then
-      pass "binding on the RODC, referral unreachable: macOSLAPS fell back to $dcw over LDAP"
-      grep -q "didn't take the write" <<< "$new_log" \
+      pass "binding on the RODC, dc1 unreachable over IPv4: macOSLAPS fell back to $dcw over LDAP"
+      grep -q "Open Directory can't reach Active Directory" <<< "$new_log" \
+        && pass "Open Directory's failure led macOSLAPS to the DCs in DNS" \
+        || echo "::notice::Open Directory still reached AD; the fallback came from the RODC's refusal alone"
+      grep -q "$RODC_FQDN didn't take the write\|binding uses didn't take the write" <<< "$new_log" \
         && pass "the RODC's refusal is logged before the fallback" \
-        || fail "the fallback happened without logging the RODC's refusal"
+        || fail "the fallback happened without the RODC refusing first"
     elif [ "$rc" -eq 0 ] && [ "$now_ad" != "$before_ad" ]; then
-      fail "binding on the RODC, referral unreachable: the write landed without the LDAP fallback"
+      fail "binding on the RODC, dc1 unreachable over IPv4: the write landed without the LDAP fallback"
     else
-      fail "binding on the RODC, referral unreachable: no fallback to $dcw (exit $rc)"
+      fail "binding on the RODC, dc1 unreachable over IPv4: no fallback to $dcw (exit $rc)"
     fi
     [ -n "$now_ad" ] && before_ad="$now_ad"
   fi

@@ -13,8 +13,9 @@
      controller the Mac's binding uses (as in every earlier release). Over
      LDAP to a domain controller macOSLAPS chooses when:
        - PreferredDC is set: always that DC, or
-       - the bound DC can't be written (a read-only DC): the first
-         writable DC found in DNS.
+       - Open Directory can't reach AD: the first DC in DNS that answers,
+       - the bound DC (or that one) can't be written (a read-only DC):
+         the first writable DC found in DNS.
      LDAP runs as the computer account: its password is in the System
      keychain under the binding's node name, kinit gets a ticket into a
      private cache, and ldapsearch / ldapmodify use it (GSSAPI, signed and
@@ -30,6 +31,8 @@
                                   drive them with fake backends. The check
                                   makes a real change (time + 1, then back):
                                   a Samba RODC accepted the same value.
+                                  A DC picked from DNS when Open Directory
+                                  can't reach AD may itself fall back.
  4.0.0     2026-11-17   joshua    New file. PreferredDC works (it never did:
                         claude    the setting went to an unused
                                   configuration), and a read-only bound DC
@@ -53,9 +56,11 @@ protocol ADBackend {
     func value(_ attribute: String) -> Any?
     /// Replaces the attribute's value.
     func write(_ attribute: String, _ value: String) throws
-    /// True when it reaches whichever DC the binding picks, so another DC may
-    /// be tried if that one refuses. False for a DC macOSLAPS chose itself.
+    /// True when the binding (or DNS) picked the DC, so another may be
+    /// tried if that one refuses. False for PreferredDC.
     var followsBinding: Bool { get }
+    /// The DC's name when macOSLAPS talks to one DC directly (LDAP), else nil.
+    var server: String? { get }
 }
 
 /// The computer's object in AD, and the way to it. A class, so a fallback to another
@@ -127,7 +132,7 @@ enum Writability {
         }
         guard computer.backend.followsBinding else { return .refused(reason: refusal) }
         var skipped : [Attempt] = []
-        for server in candidates() {
+        for server in candidates() where server != computer.backend.server {
             do {
                 let other = try open(server)
                 try rewrite(other, attributes, placeholder: placeholder)
@@ -167,6 +172,7 @@ struct ODBackend: ADBackend {
     let record : ODRecord
     var description : String { "Open Directory (the domain controller this Mac's binding uses)" }
     var followsBinding : Bool { true }
+    var server : String? { nil }
     func value(_ attribute: String) -> Any? {
         (try? record.values(forAttribute: "dsAttrTypeNative:\(attribute)"))?.first
     }
@@ -188,25 +194,28 @@ final class LDAPBackend: ADBackend {
         }
     }
 
-    let server : String
+    let host : String
     let dn : String
     private let cache : String
-    var description : String { "LDAP to \(server)" }
-    var followsBinding : Bool { false }
+    let followsBinding : Bool
+    var server : String? { host }
+    var description : String { "LDAP to \(host)" }
 
     /// Folder for the private Kerberos ticket caches (root only); emptied at exit.
     static let cacheFolder = "/var/run/macoslaps"
     private static var caches : [String] = []
     private static var cleanupRegistered = false
 
-    private init(server: String, dn: String, cache: String) {
-        self.server = server
+    private init(host: String, dn: String, cache: String, followsBinding: Bool) {
+        self.host = host
         self.dn = dn
         self.cache = cache
+        self.followsBinding = followsBinding
     }
 
     /// Signs in to `server` as the computer and finds the computer's object there.
-    static func open(server: String, binding: ADBinding) throws -> LDAPBackend {
+    /// `fromDNS`: picked from DNS (not PreferredDC), so it may fall back too.
+    static func open(server: String, binding: ADBinding, fromDNS: Bool = false) throws -> LDAPBackend {
         // 1. The computer's password, kept by the AD plugin in the System keychain.
         let secret = Shell.execute(launchPath: "/usr/bin/security",
                                    arguments: ["find-generic-password", "-s", binding.nodeName, "-w",
@@ -235,12 +244,12 @@ final class LDAPBackend: ADBackend {
         guard search.status == 0, let found = LDIF.values(of: "dn", in: search.output).first else {
             throw Failure.step("\(binding.trustAccount) was not found on \(server) (ldapsearch exit \(search.status)\(search.errors.isEmpty ? "" : ": \(search.errors)"))")
         }
-        return LDAPBackend(server: server, dn: found, cache: cache)
+        return LDAPBackend(host: server, dn: found, cache: cache, followsBinding: fromDNS)
     }
 
     func value(_ attribute: String) -> Any? {
         let result = LDAPBackend.run("/usr/bin/ldapsearch",
-                                     ["-LLL", "-Q", "-Y", "GSSAPI", "-H", "ldap://\(server)", "-b", dn, "-s", "base",
+                                     ["-LLL", "-Q", "-Y", "GSSAPI", "-H", "ldap://\(host)", "-b", dn, "-s", "base",
                                       "(objectClass=*)", attribute], cache: cache)
         guard result.status == 0 else { return nil }
         return LDIF.values(of: attribute, in: result.output).first
@@ -248,11 +257,11 @@ final class LDAPBackend: ADBackend {
 
     func write(_ attribute: String, _ value: String) throws {
         let change = LDIF.replace(dn: dn, attribute: attribute, value: value)
-        let result = LDAPBackend.run("/usr/bin/ldapmodify", ["-Q", "-Y", "GSSAPI", "-H", "ldap://\(server)"],
+        let result = LDAPBackend.run("/usr/bin/ldapmodify", ["-Q", "-Y", "GSSAPI", "-H", "ldap://\(host)"],
                                      cache: cache, input: Data(change.utf8))
         guard result.status == 0 else {
             // e.g. 10 (referral: a read-only DC), 50 (insufficient access).
-            throw Failure.step("ldapmodify \(attribute) on \(server) exited \(result.status)\(result.errors.isEmpty ? "" : ": \(result.errors)")")
+            throw Failure.step("ldapmodify \(attribute) on \(host) exited \(result.status)\(result.errors.isEmpty ? "" : ": \(result.errors)")")
         }
     }
 

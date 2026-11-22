@@ -27,6 +27,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-22   joshua    Waits up to a minute for LDAP: it can
                         claude    start a few seconds after smbd answers.
+                                  Listed in the domain's DNS (SRV priority
+                                  5, after dc1) so macOSLAPS can pick it.
  4.0.0     2026-11-17   joshua    New file.
                         claude
 ===============================================================================
@@ -94,6 +96,14 @@ if ! ss -ltn | grep -q ':389 '; then
   ss -ltn | awk 'NR > 1 {print "  listening: " $4}' | sort -u
   exit 1
 fi
+# In the domain's DNS after dc1 (priority 5), as a real RODC would be, so
+# the Mac's fallback test meets a read-only DC among its candidates.
+auth=(-U Administrator --password="$ADMINPASS")
+samba-tool dns add "$DC_HOSTNAME.$DNS_DOMAIN" "$DNS_DOMAIN" "$RODC_HOSTNAME" A "$RODC_HOST_IP" \
+  "${auth[@]}" >/dev/null 2>&1 || echo "::warning::could not add $RODC_HOSTNAME to DNS"
+samba-tool dns add "$DC_HOSTNAME.$DNS_DOMAIN" "_msdcs.$DNS_DOMAIN" _ldap._tcp.dc SRV \
+  "$RODC_HOSTNAME.$DNS_DOMAIN 389 5 100" "${auth[@]}" >/dev/null 2>&1 \
+  || echo "::warning::could not add $RODC_HOSTNAME's SRV record"
 echo "Samba RODC $RODC_HOSTNAME.$DNS_DOMAIN up (writable DC: $DC_HOSTNAME.$DNS_DOMAIN)"
 # The domain lists it as read-only.
 ldbsearch -H /var/lib/samba/private/sam.ldb -b "CN=Sites,CN=Configuration,$(echo "$DNS_DOMAIN" | sed 's/^/DC=/; s/\./,DC=/g')" \

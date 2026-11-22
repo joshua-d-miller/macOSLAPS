@@ -65,4 +65,4 @@ The same list is in the repository as a [Jamf Pro custom schema and an iMazing P
 | Key | Type | Default | Values | What it does |
 |---|---|---|---|---|
 | `ADSchema` | string | `legacy` | `legacy`, `windowsLAPS`, `both` | legacy: ms-Mcs-AdmPwd. windowsLAPS: msLAPS-Password (ADUC LAPS tab, Get-LapsADPassword). both: write both. windowsLAPS and both are experimental. |
-| `PreferredDC` | string | (empty) |  | Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only. |
+| `PreferredDC` | string | (empty) |  | Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only or Open Directory can't reach AD. |
