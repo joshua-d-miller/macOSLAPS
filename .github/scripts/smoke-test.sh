@@ -24,6 +24,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    ROUNDS from the environment (default 25);
+                        claude    the reveal wait is skipped through the
+                                  state file instead of sleeping 61 s.
  4.0.0     2026-11-22   joshua    -read and -newPassword are off by default
                         claude    and ignore AllowRead / AllowNewPassword in
                                   /Library/Preferences; the tests turn them
@@ -64,7 +67,7 @@ ACCT=lapstest
 FIRST='Initial-Pass-1234'
 LEN=16
 EXCLUDED='{}[]|_'
-ROUNDS=25
+ROUNDS=${ROUNDS:-25}
 DOMAIN=/Library/Preferences/edu.psu.macoslaps
 SYSKC=/Library/Keychains/System.keychain
 FAILURES=0
@@ -847,8 +850,15 @@ OUT=$(rev "$GOOD" "$LAPS" 2>&1) && fail "reveal worked while waiting" || { grep 
 ST=$("$LAPS" -status)
 python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["revealRetryAt"]); s=(r-D.datetime.now(r.tzinfo)).total_seconds(); assert d["revealLocked"] is True and 50 < s <= 60, (s, d)' "$ST" \
     && pass "-status: revealLocked with revealRetryAt about a minute away" || fail "backoff in -status: $ST"
-# After the wait the right code works again (a wait, not a lock until rotation).
-sleep 61
+# After the wait the right code works again (a wait, not a lock until
+# rotation). The wait is made to have passed instead of sleeping a minute.
+python3 - <<'PY'
+import plistlib, datetime as D
+p = "/var/db/macoslaps/state.plist"
+d = plistlib.load(open(p, "rb"))
+d["revealRetryAt"] = (D.datetime.now().astimezone() - D.timedelta(seconds=1)).isoformat(timespec="seconds")
+plistlib.dump(d, open(p, "wb"))
+PY
 [ "$(reveal_pw "$GOOD")" != "" ] && [ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && pass "after the wait the right code reveals again" || fail "still waiting after a minute: $("$LAPS" -status)"
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline that reveal set
 # Each further wrong code doubles the wait; a rotation starts over.

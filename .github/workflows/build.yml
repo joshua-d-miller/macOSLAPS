@@ -34,6 +34,12 @@ on:
       - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
 
+# A new push to a pull request cancels that PR's older run, so superseded runs
+# don't hold the macOS runners. Pushes to main, tags and releases always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Read-only by default; only the release job can write (it attaches assets to a release).
 permissions:
   contents: read
@@ -451,7 +457,11 @@ jobs:
       - name: Install pkg
         run: sudo installer -pkg "artifact/dist/${{ needs.build.outputs.pkg }}" -target /
       - name: Run smoke test
-        run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" bash .github/scripts/smoke-test.sh
+        # The full 25-rotation stress loop on one runner; 8 elsewhere (the
+        # generator itself is unit-tested in generator-tests).
+        env:
+          ROUNDS: ${{ matrix.os == 'macos-26' && 25 || 8 }}
+        run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" ROUNDS="$ROUNDS" bash .github/scripts/smoke-test.sh
       - uses: actions/upload-artifact@v7
         if: matrix.os == 'macos-26'
         with:
