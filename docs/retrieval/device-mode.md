@@ -32,7 +32,7 @@ With `EscrowCertificates` set, the code is [encrypted](encrypted-escrow.md) like
 
 **5. They use it to elevate:** an authentication prompt, System Settings, an installer. The same code keeps working until the grace period ends, so re-elevating needs no new code.
 
-**6. The menu bar counts down** the time left, in orange for the last 15 minutes. Notifications go out when the password is revealed, 15 minutes before it changes, and when it has changed. **Done — Rotate Now**, in the window or the menu, ends the grace period early.
+**6. The menu bar counts down** the time left, in orange for the last 15 minutes. Notifications go out when the password is revealed, 15 minutes before it changes, and when it has changed. **Done — Rotate Now**, in the window or the menu, ends the grace period early. Opening macOSLAPS again during the grace period brings the window back.
 
 ![The whole screen: the window and the countdown in the menu bar](../images/reveal-4-screen.png)
 

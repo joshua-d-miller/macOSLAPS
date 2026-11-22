@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      The macOSLAPS app: the window a technician uses to reveal the
@@ -30,6 +30,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Opening the app while the menu bar agent
+                        claude    runs shows the window: the agent (same
+                                  bundle) gets the reopen and starts a
+                                  window instance.
  4.0.0     2026-11-17   joshua    Copy stays on this Mac (no Universal
                         claude    Clipboard) and is marked concealed for
                                   clipboard managers; the reveal wait message.
@@ -360,6 +364,19 @@ final class AgentDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCe
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
         tick()
         timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.tick() }
+    }
+
+    /// Opening macOSLAPS from Finder or Launchpad while the agent runs reaches
+    /// the agent (the same bundle), which has no window. Start a window
+    /// instance.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        config.activates = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: config) { _, error in
+            if let error { NSLog("macOSLAPS: couldn't open the window: \(error)") }
+        }
+        return false
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,

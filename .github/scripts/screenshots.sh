@@ -37,7 +37,8 @@
                                   frame (the agent's last menu bar: it has
                                   only the status items); the app and the
                                   agent have quit before the app is opened
-                                  again in escrow mode.
+                                  again in escrow mode. Opening the app
+                                  while the agent runs must show the window.
  4.0.0     2026-11-12   joshua    New file.
                         claude
 ===============================================================================
@@ -345,6 +346,21 @@ shot 08-screen
 ### | The icon and escrow mode | ###
 ### ---------------------------- ###
 ### The app in Finder, then the window in escrow mode.                      ###
+# Opening the app while the agent runs (the grace period) must show the
+# window: the agent, from the same bundle, gets the request and starts one.
+kill "$APP_PID" 2>/dev/null
+wait_for 15 app_gone || { kill -9 "$APP_PID" 2>/dev/null; sleep 1; }
+if has_agent; then
+    as_gui open "$APP"
+    if wait_for 30 has_app && wait_for 30 has_window; then
+        pass "opening the app while the menu bar agent runs shows the window"
+    else
+        fail "opening the app while the menu bar agent runs showed no window"; agent_facts "$(agent_pid)"
+    fi
+    APP_PID=$(app_pid)
+else
+    fail "the menu bar agent quit before the reopen check"
+fi
 as_gui osascript -e 'tell application "Finder" to quit' >/dev/null 2>&1; sleep 2
 as_gui open -R "$APP"; sleep 4
 FINDER_PID=$(pgrep -u "$GUI_UID" -x Finder | head -1)
