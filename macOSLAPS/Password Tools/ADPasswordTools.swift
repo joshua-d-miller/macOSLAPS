@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Reads and writes the password and its expiration in Active Directory,
@@ -16,6 +16,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    The writability check and fallback go
+                        claude    through Writability.ensure (unit-tested);
+                                  the log messages are unchanged.
  4.0.0     2026-11-17   joshua    No crash on an incomplete binding or an
                         claude    unreadable expiration time (treated as
                                   expired); TimeConversion.expired.
@@ -148,35 +151,31 @@ public class ADTools: NSObject {
     /// replaced by the first writable DC in DNS, reached over LDAP. Exits when none works.
     class func verify_dc_writability(computer_record computer: ADComputer) {
         let attributes = (writesLegacy ? [legacyExpiration] : []) + (writesWindowsLAPS ? [windowsExpiration] : [])
-        func rewrite(_ target: ADBackend) throws {
-            for attribute in attributes {
-                try target.write(attribute, (target.value(attribute) as? String) ?? TimeConversion.expired)
-            }
-        }
-        do {
-            try rewrite(computer.backend)
+        let outcome = Writability.ensure(
+            computer, attributes: attributes, placeholder: TimeConversion.expired,
+            candidates: { DomainControllers.fromDNS(domain: computer.binding.domain) },
+            open: { try LDAPBackend.open(server: $0, binding: computer.binding) },
+            explain: explain)
+        switch outcome {
+        case .writable:
             return
-        } catch {
-            let reason = explain(error)
-            guard computer.backend is ODBackend else {
-                laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) through \(computer.backend.description) (\(reason)). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
-                exit(1)
-            }
-            laps_log.print("The domain controller this Mac's binding uses didn't take the write (\(reason)); it may be read-only. Looking for a writable domain controller.", .warn)
+        case .refused(let reason):
+            laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) through \(computer.backend.description) (\(reason)). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
+            exit(1)
+        case .switched(let server, let refusal, let skipped):
+            logRefusal(refusal, skipped)
+            laps_log.print("Writing to \(server) instead (LDAP as \(computer.binding.trustAccount)). Set PreferredDC to choose the domain controller.", .info)
+        case .noWritableDC(let refusal, let skipped):
+            logRefusal(refusal, skipped)
+            laps_log.print("No writable domain controller took the LAPS expiration attribute(s) for ADSchema \(schema). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or no writable domain controller is reachable (set PreferredDC to one).", .error)
+            exit(1)
         }
-        for server in DomainControllers.fromDNS(domain: computer.binding.domain) {
-            do {
-                let ldap = try LDAPBackend.open(server: server, binding: computer.binding)
-                try rewrite(ldap)
-                computer.use(ldap)
-                laps_log.print("Writing to \(server) instead (LDAP as \(computer.binding.trustAccount)). Set PreferredDC to choose the domain controller.", .info)
-                return
-            } catch {
-                laps_log.print("\(server): \(explain(error)).", .info)
-            }
+    }
+    private static func logRefusal(_ refusal: String, _ skipped: [Writability.Attempt]) {
+        laps_log.print("The domain controller this Mac's binding uses didn't take the write (\(refusal)); it may be read-only. Looking for a writable domain controller.", .warn)
+        for attempt in skipped {
+            laps_log.print("\(attempt.server): \(attempt.reason).", .info)
         }
-        laps_log.print("No writable domain controller took the LAPS expiration attribute(s) for ADSchema \(schema). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or no writable domain controller is reachable (set PreferredDC to one).", .error)
-        exit(1)
     }
 
     /// An error from either backend, readable.

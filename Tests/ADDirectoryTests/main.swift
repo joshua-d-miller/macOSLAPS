@@ -5,14 +5,15 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-17
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Unit tests for the LDAP helpers in
      macOSLAPS/Password Tools/ADDirectory.swift: reading ldapsearch
      output, writing a change, escaping a search filter, and reading and
-     ordering the domain controllers DNS returns. No domain, Xcode project or root
-     needed.
+     ordering the domain controllers DNS returns, and the writability
+     check with its fallback to a writable DC (fake backends). No domain,
+     Xcode project or root needed.
 
  Usage:
      swiftc macOSLAPS/Extensions/Shell.swift \
@@ -24,6 +25,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Writability.ensure with fake backends: a
+                        claude    refusing bound DC falls back to the first
+                                  candidate that takes the write; a chosen
+                                  DC never does.
  4.0.0     2026-11-17   joshua    New file.
                         claude
 ===============================================================================
@@ -93,6 +98,98 @@ expect(parsed?.priority == 0 && parsed?.weight == 100 && parsed?.target == "dc1.
 expect([UInt8]([0, 0, 0, 1, 1, 133, 9, 65]).withUnsafeBytes { DomainControllers.parse($0) } == nil, "a truncated RDATA is rejected")
 // A real lookup through the system resolver (no answer expected for this name).
 expect(DomainControllers.query("_ldap._tcp.dc._msdcs.invalid", timeout: 3).isEmpty, "a lookup with no answer returns nothing")
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// ---------------------------------- //
+// | Writability and the fallback   | //
+// ---------------------------------- //
+// Fake domain controllers: one that refuses writes stands for an RODC.      //
+struct Refused: Error { let why: String }
+final class FakeDC: ADBackend {
+    let name : String
+    let followsBinding : Bool
+    let refuses : Bool
+    var values : [String: String]
+    var writes : [(String, String)] = []
+    var description : String { name }
+    init(_ name: String, followsBinding: Bool = false, refuses: Bool = false,
+         values: [String: String] = [:]) {
+        self.name = name; self.followsBinding = followsBinding
+        self.refuses = refuses; self.values = values
+    }
+    func value(_ attribute: String) -> Any? { values[attribute] }
+    func write(_ attribute: String, _ value: String) throws {
+        if refuses { throw Refused(why: "\(name) is read-only") }
+        writes.append((attribute, value)); values[attribute] = value
+    }
+}
+let fakeBinding = ADBinding(nodeName: "/Active Directory/LAPS", domain: "laps.test",
+                            trustAccount: "CIMAC42$")
+let expAttrs = ["ms-Mcs-AdmPwdExpirationTime", "msLAPS-PasswordExpirationTime"]
+let why : (Error) -> String = { ($0 as? Refused)?.why ?? "\($0)" }
+
+// 1. The bound DC takes the write: nothing else is asked.
+var asked = 0
+let bound1 = FakeDC("bound", followsBinding: true,
+                    values: ["ms-Mcs-AdmPwdExpirationTime": "134000000000000000"])
+let c1 = ADComputer(backend: bound1, binding: fakeBinding)
+let r1 = Writability.ensure(c1, attributes: expAttrs, placeholder: "0",
+                            candidates: { asked += 1; return ["dc1"] },
+                            open: { _ in FakeDC("unused") }, explain: why)
+expect(r1 == .writable && asked == 0 && (c1.backend as? FakeDC) === bound1,
+       "a writable bound DC is kept; DNS is never asked")
+expect(bound1.writes.map { $0.1 } == ["134000000000000000", "0"],
+       "the current expiration is written back; a missing one gets the placeholder")
+
+// 2. The bound DC is an RODC: the first candidate that takes the write wins.
+let rodc2 = FakeDC("rodc2", refuses: true)
+let dc1 = FakeDC("dc1", values: ["ms-Mcs-AdmPwdExpirationTime": "135000000000000000"])
+var opened : [String] = []
+let c2 = ADComputer(backend: FakeDC("rodc1", followsBinding: true, refuses: true),
+                    binding: fakeBinding)
+let r2 = Writability.ensure(c2, attributes: expAttrs, placeholder: "0",
+                            candidates: { ["unreachable", "rodc2", "dc1", "dc9"] },
+                            open: { server in
+                                opened.append(server)
+                                switch server {
+                                case "rodc2": return rodc2
+                                case "dc1": return dc1
+                                default: throw Refused(why: "\(server) can't be reached")
+                                }
+                            }, explain: why)
+expect(r2 == .switched(server: "dc1", refusal: "rodc1 is read-only",
+                       skipped: [.init(server: "unreachable", reason: "unreachable can't be reached"),
+                                 .init(server: "rodc2", reason: "rodc2 is read-only")]),
+       "an RODC binding falls back to the first DC that takes the write, noting the others")
+expect(opened == ["unreachable", "rodc2", "dc1"], "candidates are tried in order, stopping at the first that works")
+expect((c2.backend as? FakeDC) === dc1, "the computer now reads and writes through that DC")
+expect(dc1.writes.map { $0.1 } == ["135000000000000000", "0"],
+       "the fallback DC's own values are written back, not the RODC's")
+try? c2.write("ms-Mcs-AdmPwd", "new")
+expect(dc1.values["ms-Mcs-AdmPwd"] == "new", "later writes go to the fallback DC")
+
+// 3. A DC macOSLAPS chose (PreferredDC) refuses: no fallback, DNS isn't asked.
+asked = 0
+let c3 = ADComputer(backend: FakeDC("rodc1", refuses: true), binding: fakeBinding)
+let r3 = Writability.ensure(c3, attributes: expAttrs, placeholder: "0",
+                            candidates: { asked += 1; return ["dc1"] },
+                            open: { _ in dc1 }, explain: why)
+expect(r3 == .refused(reason: "rodc1 is read-only") && asked == 0,
+       "a refusing PreferredDC stops the run without trying other DCs")
+
+// 4. Nothing takes the write.
+let c4 = ADComputer(backend: FakeDC("rodc1", followsBinding: true, refuses: true),
+                    binding: fakeBinding)
+let r4 = Writability.ensure(c4, attributes: expAttrs, placeholder: "0",
+                            candidates: { ["rodc2"] }, open: { _ in rodc2 }, explain: why)
+expect(r4 == .noWritableDC(refusal: "rodc1 is read-only",
+                           skipped: [.init(server: "rodc2", reason: "rodc2 is read-only")]),
+       "no writable DC: every refusal is reported")
+let r5 = Writability.ensure(c4, attributes: expAttrs, placeholder: "0",
+                            candidates: { [] }, open: { _ in rodc2 }, explain: why)
+expect(r5 == .noWritableDC(refusal: "rodc1 is read-only", skipped: []),
+       "no DCs in DNS: reported as no writable DC")
+expect((c4.backend as? FakeDC)?.name == "rodc1", "the computer keeps its backend when nothing works")
 
 print("\(checks) checks, \(failures) failures")
 exit(failures == 0 ? 0 : 1)

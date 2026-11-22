@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-17
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Where macOSLAPS reads and writes the computer's LAPS attributes in
@@ -24,6 +24,10 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    The writability check and the fallback to
+                        claude    a writable DC are in Writability.ensure,
+                                  away from logging and exit, so unit tests
+                                  drive them with fake backends.
  4.0.0     2026-11-17   joshua    New file. PreferredDC works (it never did:
                         claude    the setting went to an unused
                                   configuration), and a read-only bound DC
@@ -47,6 +51,9 @@ protocol ADBackend {
     func value(_ attribute: String) -> Any?
     /// Replaces the attribute's value.
     func write(_ attribute: String, _ value: String) throws
+    /// True when it reaches whichever DC the binding picks, so another DC may
+    /// be tried if that one refuses. False for a DC macOSLAPS chose itself.
+    var followsBinding: Bool { get }
 }
 
 /// The computer's object in AD, and the way to it. A class, so a fallback to another
@@ -61,6 +68,68 @@ final class ADComputer {
     func value(_ attribute: String) -> Any? { backend.value(attribute) }
     func write(_ attribute: String, _ value: String) throws { try backend.write(attribute, value) }
     func use(_ other: ADBackend) { backend = other }
+}
+
+// ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
+// --------------- //
+// | Writability | //
+// --------------- //
+// Before the local password changes: rewrite the current expiration         //
+// time(s) to prove the DC takes writes. A DC that follows the binding and   //
+// refuses (a read-only DC) is replaced by the first candidate that takes    //
+// the rewrite. No logging and no exit here; ADTools does both.              //
+enum Writability {
+    /// A domain controller that was tried and didn't work, and why.
+    struct Attempt: Equatable {
+        let server : String
+        let reason : String
+    }
+    enum Outcome: Equatable {
+        /// The current backend took the rewrite.
+        case writable
+        /// It refused and may not be replaced (a DC macOSLAPS chose).
+        case refused(reason: String)
+        /// It refused; `server` took the rewrite and the computer now uses it.
+        case switched(server: String, refusal: String, skipped: [Attempt])
+        /// It refused, and no candidate took the rewrite.
+        case noWritableDC(refusal: String, skipped: [Attempt])
+    }
+
+    /// Writes each attribute back with its current value, or `placeholder`
+    /// when it has none.
+    static func rewrite(_ target: ADBackend, _ attributes: [String],
+                        placeholder: String) throws {
+        for attribute in attributes {
+            try target.write(attribute, (target.value(attribute) as? String) ?? placeholder)
+        }
+    }
+
+    /// `candidates` (asked only after a refusal): DCs in the order to try.
+    /// `open` reaches one of them.
+    static func ensure(_ computer: ADComputer, attributes: [String], placeholder: String,
+                       candidates: () -> [String], open: (String) throws -> ADBackend,
+                       explain: (Error) -> String) -> Outcome {
+        let refusal : String
+        do {
+            try rewrite(computer.backend, attributes, placeholder: placeholder)
+            return .writable
+        } catch {
+            refusal = explain(error)
+        }
+        guard computer.backend.followsBinding else { return .refused(reason: refusal) }
+        var skipped : [Attempt] = []
+        for server in candidates() {
+            do {
+                let other = try open(server)
+                try rewrite(other, attributes, placeholder: placeholder)
+                computer.use(other)
+                return .switched(server: server, refusal: refusal, skipped: skipped)
+            } catch {
+                skipped.append(Attempt(server: server, reason: explain(error)))
+            }
+        }
+        return .noWritableDC(refusal: refusal, skipped: skipped)
+    }
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -88,6 +157,7 @@ struct ADBinding {
 struct ODBackend: ADBackend {
     let record : ODRecord
     var description : String { "Open Directory (the domain controller this Mac's binding uses)" }
+    var followsBinding : Bool { true }
     func value(_ attribute: String) -> Any? {
         (try? record.values(forAttribute: "dsAttrTypeNative:\(attribute)"))?.first
     }
@@ -113,6 +183,7 @@ final class LDAPBackend: ADBackend {
     let dn : String
     private let cache : String
     var description : String { "LDAP to \(server)" }
+    var followsBinding : Bool { false }
 
     /// Folder for the private Kerberos ticket caches (root only); emptied at exit.
     static let cacheFolder = "/var/run/macoslaps"
