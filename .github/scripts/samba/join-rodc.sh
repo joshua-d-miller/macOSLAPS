@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-17
- Updated:   2026-11-17
+ Updated:   2026-11-22
 
  Purpose:
      Joins a throwaway Samba server to the CI domain as a read-only
@@ -25,6 +25,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Waits up to a minute for LDAP: it can
+                        claude    start a few seconds after smbd answers.
  4.0.0     2026-11-17   joshua    New file.
                         claude
 ===============================================================================
@@ -83,7 +85,15 @@ samba -D
 for i in $(seq 1 30); do
   smbclient -L localhost -N >/dev/null 2>&1 && break; sleep 2
 done
-ss -ltn | grep -q ':389 ' || { echo "::error::the RODC isn't listening on LDAP"; exit 1; }
+# Samba's LDAP server can come up a few seconds after smbd answers.
+for i in $(seq 1 30); do
+  ss -ltn | grep -q ':389 ' && break; sleep 2
+done
+if ! ss -ltn | grep -q ':389 '; then
+  echo "::error::the RODC isn't listening on LDAP after a minute"
+  ss -ltn | awk 'NR > 1 {print "  listening: " $4}' | sort -u
+  exit 1
+fi
 echo "Samba RODC $RODC_HOSTNAME.$DNS_DOMAIN up (writable DC: $DC_HOSTNAME.$DNS_DOMAIN)"
 # The domain lists it as read-only.
 ldbsearch -H /var/lib/samba/private/sam.ldb -b "CN=Sites,CN=Configuration,$(echo "$DNS_DOMAIN" | sed 's/^/DC=/; s/\./,DC=/g')" \
