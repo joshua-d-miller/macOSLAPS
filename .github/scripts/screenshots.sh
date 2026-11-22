@@ -34,8 +34,10 @@
                                   fail the job when missing (with the
                                   windows on screen); the menu bar item and
                                   its menu fall back to their Accessibility
-                                  frame; the app has exited before it is
-                                  opened again in escrow mode.
+                                  frame (the agent's last menu bar: it has
+                                  only the status items); the app and the
+                                  agent have quit before the app is opened
+                                  again in escrow mode.
  4.0.0     2026-11-12   joshua    New file.
                         claude
 ===============================================================================
@@ -307,7 +309,9 @@ wait_for 45 has_agent; AGENT_PID=$(agent_pid)
 [ -n "$AGENT_PID" ] && pass "the menu bar agent is running" || fail "the menu bar agent is not running"
 # The status item: its own window when listed, else its Accessibility frame
 # (with some menu bar either side) cut from the screen.
-STATUS_ITEM="menu bar item 1 of menu bar 2"
+# A background-only agent has one menu bar, its status items (a regular app's
+# would be menu bar 2, after the main menu), so: the last one.
+STATUS_ITEM="menu bar item 1 of last menu bar"
 [ -n "$AGENT_PID" ] && wait_for 15 has_agent_window "$AGENT_PID" 1
 ITEM=$([ -n "$AGENT_PID" ] && agent_window "$AGENT_PID" 1)
 if [ -n "$ITEM" ]; then shot 05-menubar-item "$ITEM"
@@ -352,7 +356,7 @@ wait_for 15 app_gone || { kill -9 "$APP_PID" 2>/dev/null; sleep 1; }
 defaults write "$DOM" RetrievalMode -string escrow
 # The agent (same bundle) quits a few seconds after the deadline is gone.
 # While it runs, open may hand the request to it instead of starting the app.
-A=$(agent_pid); echo "  agent before reopening: ${A:+pid $A}${A:-none running}"
+A=$(agent_pid); echo "  agent before reopening: ${A:-none running}"
 wait_for 20 agent_gone || echo "::warning::the menu bar agent is still running after 20 s"
 as_gui open "$APP"
 wait_for 30 has_app; wait_for 30 has_window; sleep 1
