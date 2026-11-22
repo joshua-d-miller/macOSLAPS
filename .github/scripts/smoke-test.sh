@@ -24,9 +24,12 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
- 4.0.0     2026-11-22   joshua    -getPassword needs AllowRead too: the
-                        claude    setup turns it on through a managed
-                                  profile (fails if the runner ignores it).
+ 4.0.0     2026-11-22   joshua    -getPassword needs AllowRead too. CI can't
+                        claude    install a real profile (a hand-written
+                                  managed plist isn't honored), so get_pw
+                                  reads -escrow and puts the state file
+                                  back; the opt-in checks cover off,
+                                  ignored local keys and refusals.
  4.0.0     2026-11-22   joshua    ROUNDS from the environment (default 25);
                         claude    the reveal wait is skipped through the
                                   state file instead of sleeping 61 s.
@@ -175,24 +178,29 @@ defaults write "$DOMAIN" DaysTillExpiration -int 30
 defaults write "$DOMAIN" StagedRotation -string off
 defaults write "$DOMAIN" RemovePassChars -string "$EXCLUDED"
 defaults read "$DOMAIN"
-# get_pw reads the password with -getPassword, which needs AllowRead from a
-# configuration profile: written here as a managed preference, as an MDM's
-# profile would be.
 MANAGED="/Library/Managed Preferences/com.joshua-d-miller.macoslaps"
-managed_on()  { mkdir -p "/Library/Managed Preferences"; for k in "$@"; do defaults write "$MANAGED" "$k" -bool true; done; killall cfprefsd 2>/dev/null; sleep 1; }
-managed_off() { for k in "$@"; do defaults delete "$MANAGED" "$k" >/dev/null 2>&1; done; killall cfprefsd 2>/dev/null; sleep 1; }
-managed_on AllowRead
-"$LAPS" -showConfig 2>/dev/null | grep -q "AllowRead = true  \[profile, new domain\]" \
-    || { echo "::error::A managed preference written to /Library/Managed Preferences isn't honored on this runner, so AllowRead can't be turned on: $("$LAPS" -showConfig 2>/dev/null | grep AllowRead)"; exit 1; }
 echo "::endgroup::"
 
 jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
-get_pw() {
-    "$LAPS" -getPassword >&2 || return 1
-    local export_name
-    export_name=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
-    security find-generic-password -w -s "$export_name" "$SYSKC"
+# The stored password, read from -escrow (-read and -getPassword need
+# AllowRead from a real configuration profile, which CI can't install).
+# lastEscrow and pendingExports are put back, so reading never counts as a
+# collection or as -escrow having run.
+escrow_quietly() {   # -escrow, then lastEscrow / pendingExports put back
+    local st=/var/db/macoslaps/state.plist before out
+    before=$(python3 -c 'import json,os,plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")) if os.path.exists(p) else {}; print(json.dumps({k: d.get(k) for k in ("lastEscrow","pendingExports")}))' "$st")
+    out=$("$LAPS" -escrow 2>/dev/null)
+    python3 -c 'import json,os,plistlib,sys
+p, before = sys.argv[1], json.loads(sys.argv[2])
+if os.path.exists(p):
+    d = plistlib.load(open(p, "rb"))
+    for k, v in before.items():
+        if v is None: d.pop(k, None)
+        else: d[k] = v
+    plistlib.dump(d, open(p, "wb"))' "$st" "$before"
+    python3 -c 'import json,sys; p=json.loads(sys.argv[1] or "{}").get("password"); sys.exit(1) if p is None else print(p)' "$out"
 }
+get_pw() { escrow_quietly; }
 
 check_pw() {
     local pw="$1" label="$2"
@@ -386,6 +394,7 @@ echo "$CFG" | grep -q "Method = Local  \[/Library/Preferences, legacy domain\]" 
 "$LAPS" -resetPassword >/dev/null 2>&1 && P20=$(get_pw) && [ "${#P20}" -eq 20 ] && dscl . -authonly "$ACCT" "$P20" >/dev/null 2>&1 \
     && pass "rotation with split settings uses the right account and the new length" || fail "rotation with split settings (length ${#P20})"
 # A managed profile in the new domain beats both local files.
+mkdir -p "/Library/Managed Preferences"
 defaults write "$MANAGED" PasswordLength -int 24
 killall cfprefsd 2>/dev/null; sleep 1
 if "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = 24  \[profile, new domain\]"; then
@@ -393,7 +402,7 @@ if "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = 24  \[profile, ne
 else
     echo "::notice::Managed preferences written by hand weren't treated as managed on this runner: $("$LAPS" -showConfig 2>/dev/null | grep PasswordLength)"
 fi
-defaults delete "$MANAGED" PasswordLength >/dev/null 2>&1; killall cfprefsd 2>/dev/null; sleep 1
+rm -f "$MANAGED.plist"; killall cfprefsd 2>/dev/null; sleep 1
 defaults delete "$NEWDOM" >/dev/null 2>&1; rm -f "$NEWDOM.plist"
 # Method unset: the default auto picks Local on a Mac that isn't bound to AD.
 defaults delete "$DOMAIN" Method >/dev/null 2>&1
@@ -719,83 +728,51 @@ defaults delete "$DOMAIN" PasswordStyle
 echo "::endgroup::"
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
-### ------------------------------------------------- ###
-### | -read, -rotate, -currentPassword, -newPassword | ###
-### ------------------------------------------------- ###
-### -read and -newPassword are off unless a profile sets AllowRead /      ###
-### AllowNewPassword (a local value is ignored). -read prints only the     ###
-### password and never counts as a collection; the new names work like     ###
-### the old ones; a chosen password is read from stdin only and must meet  ###
-### the password settings.                                                 ###
-echo "::group::-read, -rotate, -currentPassword, -newPassword"
+### ----------------------------------------------------- ###
+### | -read, -getPassword, -newPassword, -currentPassword | ###
+### ----------------------------------------------------- ###
+### The plaintext commands need AllowRead / AllowNewPassword from a real   ###
+### configuration profile, which CI can't install: checked here are that  ###
+### they are off, that local keys are ignored, and that certificates and   ###
+### device mode refuse them for their own reason.                          ###
+echo "::group::-read, -getPassword, -newPassword, -currentPassword"
+LOGF="/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log"
 CUR=$(get_pw)
-managed_off AllowRead
 OUT=$("$LAPS" -read 2>/dev/null); RC=$?
-GP=$("$LAPS" -getPassword 2>/dev/null); RC3=$?
+"$LAPS" -getPassword >/dev/null 2>&1; RC3=$?
 printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
 [ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC3" -eq 78 ] && pass "-read and -getPassword are off by default (exit 78, nothing printed)" || fail "without AllowRead: -read rc $RC, -getPassword rc $RC3"
-defaults write "$DOMAIN" AllowRead -bool true; defaults write "$DOMAIN" AllowNewPassword -bool true
+[ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC2"
+# Root can write /Library/Preferences, so the keys set there count for nothing.
+for D in "$DOMAIN" "$NEWDOM"; do defaults write "$D" AllowRead -bool true; defaults write "$D" AllowNewPassword -bool true; done
 "$LAPS" -read >/dev/null 2>&1; RC4=$?
 "$LAPS" -getPassword >/dev/null 2>&1; RC5=$?
 printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC6=$?
-grep -q "AllowRead in /Library/Preferences is ignored" "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" \
-    && pass "the ignored local key is logged" || fail "no log line for the ignored local AllowRead"
-defaults delete "$DOMAIN" AllowRead >/dev/null 2>&1; defaults delete "$DOMAIN" AllowNewPassword >/dev/null 2>&1
-managed_on AllowRead
-[ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC2"
+for D in "$DOMAIN" "$NEWDOM"; do defaults delete "$D" AllowRead >/dev/null 2>&1; defaults delete "$D" AllowNewPassword >/dev/null 2>&1; done
+rm -f "$NEWDOM.plist"
 [ "$RC4" -eq 78 ] && [ "$RC5" -eq 78 ] && [ "$RC6" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
     && pass "AllowRead / AllowNewPassword in /Library/Preferences are ignored" || fail "local Allow keys were honored: -read rc $RC4, -getPassword rc $RC5, -newPassword rc $RC6"
-# The MDM's acknowledgement: the profile turns -newPassword on too.
-managed_on AllowNewPassword
-if ! "$LAPS" -showConfig 2>/dev/null | grep -q "AllowNewPassword = true  \[profile, new domain\]"; then
-    fail "AllowNewPassword from the managed profile isn't in effect"
-else
-    [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] && pass "-read prints only the current password" || fail "-read output"
-    defaults write "$DOMAIN" StagedRotation -string on
-    "$LAPS" -rotate >/dev/null 2>&1
-    BEFORE_READ=$(jget "$("$LAPS" -status)" pendingExports)
-    "$LAPS" -read >/dev/null 2>&1; "$LAPS" -read >/dev/null 2>&1
-    [ -n "$BEFORE_READ" ] && [ "$(jget "$("$LAPS" -status)" pendingExports)" = "$BEFORE_READ" ] && [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] \
-        && pass "-rotate stages; -read prints the password in use and doesn't count as a collection" || fail "-read with a staged password: $("$LAPS" -status)"
-    defaults write "$DOMAIN" StagedRotation -string off
-    "$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied
-    CUR=$(get_pw)
-    CHOSEN='Chosen-Pass-2468-xyz'
-    OUT=$("$LAPS" -rotate -newPassword "$CHOSEN" 2>&1); RC=$?
-    [ "$RC" -eq 64 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword on the command line is refused" || fail "-newPassword in argv: rc $RC"
-    printf '%s\n' 'short-1' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a too-short chosen password was accepted" \
-        || { [ "$(get_pw)" = "$CUR" ] && pass "a chosen password shorter than PasswordLength is refused, nothing changed" || fail "password changed after a refused -newPassword"; }
-    printf '%s\n' 'Chosen-Pass-|-2468' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1 && fail "a chosen password with an excluded character was accepted" \
-        || pass "a chosen password with a RemovePassChars character is refused"
-    printf '%s\n' "$CHOSEN" | "$LAPS" -rotate -newPassword - >/dev/null 2>&1
-    [ "$(get_pw)" = "$CHOSEN" ] && dscl . -authonly "$ACCT" "$CHOSEN" >/dev/null 2>&1 && pass "-rotate -newPassword - sets the chosen password" || fail "chosen password not set"
-    # Changed outside macOSLAPS: -rotate -currentPassword - takes it back.
-    dscl . -passwd "/Users/$ACCT" "$CHOSEN" 'Outside-Pass-1357' >/dev/null 2>&1
-    "$LAPS" >/dev/null 2>&1
-    printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
-    NOW=$(get_pw)
-    [ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
-    # Both from stdin, in the order of the options.
-    printf '%s\n%s\n' "$NOW" "$CHOSEN-2" | "$LAPS" -rotate -currentPassword - -newPassword - >/dev/null 2>&1
-    [ "$(get_pw)" = "$CHOSEN-2" ] && dscl . -authonly "$ACCT" "$CHOSEN-2" >/dev/null 2>&1 && pass "-currentPassword - and -newPassword - read two lines in order" || fail "two passwords from stdin"
-    "$LAPS" -rotate >/dev/null 2>&1
-    [ "$(get_pw)" != "$CHOSEN-2" ] && pass "the next rotation generates a password again" || fail "-newPassword stuck"
-    # The keys are for plain escrow only: with certificates or in device mode
-    # nothing hands the password out in plaintext, whatever they say.
-    CUR=$(get_pw)
-    for MODE in certificates device; do
-        if [ "$MODE" = certificates ]; then defaults write "$DOMAIN" EscrowCertificates -array "not a certificate"
-        else defaults write "$DOMAIN" RetrievalMode -string device; fi
-        OUT=$("$LAPS" -read 2>/dev/null); RC=$?
-        printf '%s\n' 'Chosen-Pass-2468-mode' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
-        GP=$("$LAPS" -getPassword 2>/dev/null); RC3=$?
-        defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
-        [ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC2" -eq 78 ] && [ "$RC3" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
-            && pass "$MODE: -read, -newPassword and -getPassword refused despite AllowRead / AllowNewPassword" \
-            || fail "$MODE: plaintext path open (-read rc $RC, -newPassword rc $RC2, -getPassword rc $RC3)"
-    done
-fi
-managed_off AllowNewPassword   # AllowRead stays on: get_pw needs it
+grep -q "AllowRead in /Library/Preferences is ignored" "$LOGF" && pass "the ignored local key is logged" || fail "no log line for the ignored local AllowRead"
+# With certificates or in device mode the password is never handed out in
+# plaintext; the refusal names that reason, not a missing key.
+for MODE in certificates device; do
+    if [ "$MODE" = certificates ]; then defaults write "$DOMAIN" EscrowCertificates -array "not a certificate"; WANT="isn't available with EscrowCertificates"
+    else defaults write "$DOMAIN" RetrievalMode -string device; WANT="isn't available in device mode"; fi
+    E1=$("$LAPS" -read 2>&1 >/dev/null); R1=$?
+    E2=$("$LAPS" -getPassword 2>&1); R2=$?
+    E3=$(printf '%s\n' 'Chosen-Pass-2468-mode' | "$LAPS" -rotate -newPassword - 2>&1); R3=$?
+    defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
+    [ "$R1" -eq 78 ] && [ "$R2" -eq 78 ] && [ "$R3" -eq 78 ] && grep -qF "$WANT" <<< "$E1" && grep -qF "$WANT" <<< "$E2" && grep -qF "$WANT" <<< "$E3" \
+        && [ "$(get_pw)" = "$CUR" ] && pass "$MODE: -read, -getPassword and -newPassword refused because of $MODE" \
+        || fail "$MODE: -read rc $R1, -getPassword rc $R2, -newPassword rc $R3"
+done
+echo "::notice::-read, -getPassword and -newPassword with AllowRead / AllowNewPassword turned on need a configuration profile from an MDM, which CI can't install; that path isn't run here."
+# Changed outside macOSLAPS: -rotate -currentPassword - takes the account back.
+dscl . -passwd "/Users/$ACCT" "$CUR" 'Outside-Pass-1357' >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
+NOW=$(get_pw)
+[ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
 echo "::endgroup::"
 
 if [ "$HAS_TOKEN" -eq 1 ]; then

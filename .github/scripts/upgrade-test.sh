@@ -27,8 +27,9 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-22   joshua    Gatekeeper is checked only for notarized
                         claude    builds (NOTARIZED; pull requests aren't).
-                                  AllowRead from a managed profile, for
-                                  -getPassword.
+                                  get_pw reads this build's -escrow (and
+                                  puts the state file back): -getPassword
+                                  needs AllowRead from a real profile.
  4.0.0     2026-11-17   joshua    The scripts' new paths under integrations/.
                         claude
  4.0.0     2026-11-12   joshua    Migration from 845, the required/recovery
@@ -75,7 +76,29 @@ stop_daemon() {
 }
 status_field() { "$LAPS" -status | python3 -c 'import json,sys; v=json.load(sys.stdin).get(sys.argv[1]); print("" if v is None else str(v).lower() if isinstance(v,bool) else v)' "$1"; }
 comment_of() { security find-generic-password -s "$1" "$SYSKC" 2>/dev/null | grep '"icmt"'; }
+# The stored password. This build: from -escrow (-getPassword needs
+# AllowRead from a real configuration profile, which CI can't install), with
+# lastEscrow and pendingExports put back so reading never counts as a
+# collection. 845 has no -escrow: its -getPassword export.
+escrow_quietly() {   # -escrow, then lastEscrow / pendingExports put back
+    local st=/var/db/macoslaps/state.plist before out
+    before=$(python3 -c 'import json,os,plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")) if os.path.exists(p) else {}; print(json.dumps({k: d.get(k) for k in ("lastEscrow","pendingExports")}))' "$st")
+    out=$("$LAPS" -escrow 2>/dev/null)
+    python3 -c 'import json,os,plistlib,sys
+p, before = sys.argv[1], json.loads(sys.argv[2])
+if os.path.exists(p):
+    d = plistlib.load(open(p, "rb"))
+    for k, v in before.items():
+        if v is None: d.pop(k, None)
+        else: d[k] = v
+    plistlib.dump(d, open(p, "wb"))' "$st" "$before"
+    python3 -c 'import json,sys; p=json.loads(sys.argv[1] or "{}").get("password"); sys.exit(1) if p is None else print(p)' "$out"
+}
 get_pw() {
+    if "$LAPS" -help 2>/dev/null | grep -q -- "-escrow"; then
+        escrow_quietly
+        return
+    fi
     "$LAPS" -getPassword >&2 || return 1
     security find-generic-password -w -s "$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)" "$SYSKC"
 }
@@ -106,12 +129,6 @@ defaults write "$DOMAIN" PasswordLength -int 16
 defaults write "$DOMAIN" DaysTillExpiration -int 30
 # Most checks expect -resetPassword to rotate immediately; staging has its own tests.
 defaults write "$DOMAIN" StagedRotation -string off
-# The new build's -getPassword (get_pw) needs AllowRead from a configuration
-# profile: written as a managed preference, as an MDM's would be. 845
-# doesn't know the key.
-mkdir -p "/Library/Managed Preferences"
-defaults write "/Library/Managed Preferences/com.joshua-d-miller.macoslaps" AllowRead -bool true
-killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -resetPassword || fatal "previous release could not rotate"
 OLD_PW=$(get_pw) || fatal "previous release could not export"
 dscl . -authonly "$ACCT" "$OLD_PW" >/dev/null 2>&1 && pass "previous release rotated and exported" || fatal "previous release's password does not authenticate"
