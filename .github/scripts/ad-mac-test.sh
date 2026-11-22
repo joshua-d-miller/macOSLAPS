@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-14
- Updated:   2026-11-21
+ Updated:   2026-11-22
 
  Purpose:
      AD stage 2: binds a macOS runner to the throwaway Samba domain from
@@ -28,6 +28,11 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    The LDAP fallback from an RODC binding,
+                        claude    end to end: dc1's name points nowhere so
+                                  macOS can't follow the referral, and the
+                                  write must reach dcw (dc1's second name,
+                                  from DNS) over LDAP.
  4.0.0     2026-11-21   joshua    The DNS check counts only an SRV answer
                         claude    (not dig's timeout message), keeps
                                   retrying, and says whether TCP works.
@@ -347,6 +352,38 @@ else
     fail "binding on the RODC: the new password didn't reach the writable DC (exit $rc)"
   fi
   before_ad="$now_ad"
+
+  # 2b. As 2, but macOS can't follow the referral: dc1.laps.test points at
+  # 127.0.0.1, so the RODC's refusal reaches macOSLAPS. DNS also lists dcw,
+  # dc1's second name (SRV priority 10, its own SPN), which must take the
+  # write over LDAP. The KDC is pinned by address for macOSLAPS's kinit.
+  dcw="dcw.$DOMAIN_DNS"
+  if ! dig +short +time=3 @"$DC_IP" "$dcw" A | grep -qx "$DC_IP"; then
+    fail "$dcw isn't in the domain's DNS (see the ad-dc job)"
+  else
+    krb="$(mktemp -d)/krb5.conf"
+    printf '[libdefaults]\n\tdefault_realm = %s\n\tdns_lookup_kdc = false\n[realms]\n\t%s = {\n\t\tkdc = %s\n\t}\n' \
+      "$REALM" "$REALM" "$DC_IP" > "$krb"
+    cp /etc/hosts /etc/hosts.ci-backup
+    sed -i '' "s/^$DC_IP $DC_FQDN /127.0.0.1 $DC_FQDN /" /etc/hosts
+    dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+    KRB5_CONFIG="$krb" run_log -rotate
+    mv /etc/hosts.ci-backup /etc/hosts
+    dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+    now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+    if [ $rc -eq 0 ] && [ -n "$now_ad" ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" \
+       && [ "$now_ad" = "$(stored)" ] && grep -q "Writing to $dcw instead (LDAP as" <<< "$new_log"; then
+      pass "binding on the RODC, referral unreachable: macOSLAPS fell back to $dcw over LDAP"
+      grep -q "didn't take the write" <<< "$new_log" \
+        && pass "the RODC's refusal is logged before the fallback" \
+        || fail "the fallback happened without logging the RODC's refusal"
+    elif [ $rc -eq 0 ] && [ "$now_ad" != "$before_ad" ]; then
+      fail "binding on the RODC, referral unreachable: the write landed without the LDAP fallback (macOS reached dc1 anyway?)"
+    else
+      fail "binding on the RODC, referral unreachable: no fallback to $dcw (exit $rc)"
+    fi
+    [ -n "$now_ad" ] && before_ad="$now_ad"
+  fi
 
   # 3. The binding prefers the RODC; PreferredDC = the writable DC: works.
   defaults write "$DOM" PreferredDC -string "$DC_FQDN"
