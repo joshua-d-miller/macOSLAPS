@@ -21,6 +21,12 @@ on:
       - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
 
+# A new push to a pull request cancels that PR's older run, so superseded runs
+# don't hold the macOS runners. Pushes to main, tags and releases always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 

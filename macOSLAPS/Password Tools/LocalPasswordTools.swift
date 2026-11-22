@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      Changes the local admin's password. Rotation is done in a fixed order
@@ -19,6 +19,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    get_expiration_date returns a date;
+                        claude    KeychainItem.
  4.0.0     2026-11-12   joshua    Fixed rotation order with revert; secureToken
                         claude    fail-closed; stop signals held off between
                                   change and store; staged rotation; an outside
@@ -93,26 +95,23 @@ class LocalTools: NSObject {
             exit(1)
         }
     }
-    class func get_expiration_date() -> Date? {
-        let (_, creation_date) = KeychainService.loadPassword(service: KeychainNames.current)
-        // Convert the date we received to an acceptable format
-        if creation_date == nil || creation_date == "Not Found" {
-            return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
-        } else {
-            guard let formatted_date = Constants.dateFormatter.date(from: creation_date!) else {
-                laps_log.print("Unable to read the creation date on the macOSLAPS keychain item. Treating the password as expired.", .warn)
-                return(Calendar.current.date(byAdding: .day, value: -7, to: Date()))
-            }
-            let exp_date = Calendar.current.date(byAdding: .day, value: Constants.days_till_expiration, to: formatted_date)!
-            return exp_date
+    /// When the stored password expires: its creation date plus DaysTillExpiration.
+    /// Without a stored password or a readable date, it expired a week ago.
+    class func get_expiration_date() -> Date {
+        let expired = Date().addingTimeInterval(-7 * 24 * 3600)
+        guard let created = KeychainService.current?.created else { return expired }
+        guard let date = Constants.dateFormatter.date(from: created) else {
+            laps_log.print("Unable to read the creation date on the macOSLAPS keychain item. Treating the password as expired.", .warn)
+            return expired
         }
+        return Calendar.current.date(byAdding: .day, value: Constants.days_till_expiration, to: date) ?? expired
     }
 
     /// Changes the local admin's password to `newPassword` and verifies it.
     /// Returns the previous password when known (used to revert). Exits on failure.
     class func changeAndVerify(record: ODRecord, to newPassword: String) -> String? {
         let needs_old_password = Determine_secureToken()   // false only when confirmed DISABLED
-        let (stored_password, _) = KeychainService.loadPassword(service: KeychainNames.current)
+        let stored_password = KeychainService.current?.password
         var previous_password : String? = stored_password
         var source = "the password stored in the keychain"
         if Constants.use_firstpass || stored_password == nil {
@@ -238,7 +237,7 @@ class LocalTools: NSObject {
         Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
-        RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
+        RunState.noteVerified(true, created: KeychainService.current?.created)
         removeAdminKeychainIfEnabled(record: record)
         InventoryHook.run(reason: "password change")
     }

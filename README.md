@@ -38,8 +38,7 @@ The site is built from [`docs/`](docs) and published by GitHub Actions. To previ
 |---|---|
 | [`Profile Manifests/`](Profile%20Manifests) | Jamf Pro custom schema and iMazing Profile Editor manifest for every setting |
 | [`PLIST Example/`](PLIST%20Example) | An example settings file |
-| [`integrations/`](integrations) | Escrow and status scripts for Jamf Pro, Intune, Workspace ONE and other MDMs |
-| [`jamf Extension Attributes/`](jamf%20Extension%20Attributes), [`MDM Scripts/`](MDM%20Scripts) | More Jamf extension attributes, and install and reporting scripts for any MDM |
+| [`integrations/`](integrations) | Escrow, status and password scripts for Jamf Pro, Intune, Workspace ONE and other MDMs, and an MDM install script |
 | [`.github/release-notes/`](.github/release-notes) | Release notes |
 
 ### Preference domain

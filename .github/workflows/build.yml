@@ -1,7 +1,8 @@
 name: Build & Test
 
 # Builds macOSLAPS on a GitHub-hosted Mac (no local Xcode needed), packages it,
-# smoke-tests the pkgs on macOS 15 (arm64 + Intel) / 26, upgrades over the previous release,
+# smoke-tests the pkgs on macOS 27 / 26 / 15 (Apple silicon and Intel; pull requests
+# use 27 and 26 Intel, main, releases and a weekly run use all), upgrades over the previous release,
 # runs macOSLAPS against a Samba AD domain over Tailscale (when the secrets are set),
 # opens the CMS escrow on Windows, and attaches everything to a published release.
 #
@@ -33,6 +34,16 @@ on:
       - '.github/workflows/docs.yml'
       - '.github/scripts/gen-settings-doc.py'
   workflow_dispatch:
+  # The full macOS matrix weekly, so a problem on an OS that pull requests
+  # skip shows up even between releases.
+  schedule:
+    - cron: '23 7 * * 1'
+
+# A new push to a pull request cancels that PR's older run, so superseded runs
+# don't hold the macOS runners. Pushes to main, tags and releases always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Read-only by default; only the release job can write (it attaches assets to a release).
 permissions:
@@ -109,6 +120,10 @@ jobs:
         run: |
           swiftc macOSLAPS/Extensions/MDMAccountsParser.swift Tests/MDMAccountsTests/main.swift -o mdm-tests
           ./mdm-tests
+      - name: Compile and run AD directory (LDAP) helper tests
+        run: |
+          swiftc macOSLAPS/Extensions/Shell.swift "macOSLAPS/Password Tools/ADDirectory.swift" Tests/ADDirectoryTests/main.swift -o ad-tests
+          ./ad-tests
 
   build:
     # The Developer ID secrets can live in the "signing" environment (Settings →
@@ -225,7 +240,9 @@ jobs:
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           APP_ID=$(security find-identity -v -p codesigning "$KC" | awk -F'"' '/Developer ID Application/{print $2; exit}')
           INST_ID=$(security find-identity -v "$KC" | awk -F'"' '/Developer ID Installer/{print $2; exit}')
-          codesign --force --timestamp --options runtime --identifier com.joshua-d-miller.macoslaps --sign "$APP_ID" "$BIN"
+          # Apple's timestamp server sometimes fails for a while; try again before giving up.
+          retry() { for n in 1 2 3 4 5; do "$@" && return 0; echo "::warning::$1 failed (try $n of 5); retrying in 30 s"; sleep 30; done; return 1; }
+          retry codesign --force --timestamp --options runtime --identifier com.joshua-d-miller.macoslaps --sign "$APP_ID" "$BIN"
           codesign --verify --strict --verbose=2 "$BIN"
           echo "KC=$KC" >> "$GITHUB_ENV"
           echo "APP_ID=$APP_ID" >> "$GITHUB_ENV"
@@ -276,9 +293,11 @@ jobs:
           }, open(path, "wb"))
           PY
           plutil -lint "$APP/Contents/Info.plist"
+          # Apple's timestamp server sometimes fails for a while; try again before giving up.
+          retry() { for n in 1 2 3 4 5; do "$@" && return 0; echo "::warning::$1 failed (try $n of 5); retrying in 30 s"; sleep 30; done; return 1; }
           # Inside-out: the helper first, then the bundle (which signs the main executable).
-          codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
-          codesign --force --options runtime "${sign[@]}" "$APP"
+          retry codesign --force --options runtime "${sign[@]}" --identifier edu.psu.macOSLAPS "$APP/Contents/Helpers/macOSLAPS-legacy"
+          retry codesign --force --options runtime "${sign[@]}" "$APP"
           codesign --verify --strict --deep --verbose=2 "$APP"
           for f in "$APP" "$APP/Contents/Helpers/macOSLAPS-legacy"; do
             echo "$f: $(codesign -dv "$f" 2>&1 | grep -E '^Identifier|^TeamIdentifier' | tr '\n' ' ')"
@@ -296,7 +315,9 @@ jobs:
           echo "app=$APP" >> "$GITHUB_OUTPUT"
 
       - name: Notarize and staple macOSLAPS.app
-        if: steps.sign.outputs.signed == 'true'
+        # Pull request builds are signed but not notarized: Apple's queue has
+        # held runs for up to 26 minutes. main, tags and releases notarize.
+        if: steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -369,7 +390,7 @@ jobs:
           done
 
       - name: Notarize pkgs
-        if: steps.sign.outputs.signed == 'true'
+        if: steps.sign.outputs.signed == 'true' && github.event_name != 'pull_request'
         env:
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
@@ -431,7 +452,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel, macos-26, macos-26-intel, xcode-27]
+        # macOS n-2 (27, 26, 15). Pull requests: the newest on Apple silicon
+        # and the newest on Intel; main, releases and the weekly run: all.
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-15-intel", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -443,9 +466,13 @@ jobs:
       - name: Install pkg
         run: sudo installer -pkg "artifact/dist/${{ needs.build.outputs.pkg }}" -target /
       - name: Run smoke test
-        run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" bash .github/scripts/smoke-test.sh
+        # The full 25-rotation stress loop on one runner; 8 elsewhere (the
+        # generator itself is unit-tested in generator-tests).
+        env:
+          ROUNDS: ${{ matrix.os == 'xcode-27' && 25 || 8 }}
+        run: sudo CMS_ARTIFACT_DIR="$RUNNER_TEMP/cms" ROUNDS="$ROUNDS" bash .github/scripts/smoke-test.sh
       - uses: actions/upload-artifact@v7
-        if: matrix.os == 'macos-26'
+        if: matrix.os == 'macos-26-intel'   # in both matrices; windows-decrypt needs it
         with:
           name: cms-escrow-sample
           path: ${{ runner.temp }}/cms
@@ -457,7 +484,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-26-intel, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -472,7 +499,11 @@ jobs:
             "https://github.com/${GITHUB_REPOSITORY}/releases/download/4.0.0%28845%29/macOSLAPS-4.0.0.845.pkg"
           pkgutil --check-signature "$RUNNER_TEMP/previous.pkg" | head -4
       - name: Upgrade test
-        run: sudo bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
+        # Pull request builds aren't notarized, so Gatekeeper is checked on
+        # main and releases only.
+        env:
+          NOTARIZED: ${{ needs.build.outputs.signed == 'true' && github.event_name != 'pull_request' }}
+        run: sudo NOTARIZED="$NOTARIZED" bash .github/scripts/upgrade-test.sh "$RUNNER_TEMP/previous.pkg" artifact/dist "${{ needs.build.outputs.signed }}"
 
   # Upgrade from the last 3.x release (3.0.4): migration from 3.x's keychain item.
   upgrade-test-3x:
@@ -480,7 +511,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-26-intel, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27", "macos-26-intel"]' || '["macos-15", "macos-26", "macos-26-intel", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -505,7 +536,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-26, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27"]' || '["macos-26", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -533,7 +564,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, xcode-27]
+        os: ${{ fromJSON(github.event_name == 'pull_request' && '["xcode-27"]' || '["macos-15", "macos-26", "xcode-27"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
@@ -584,11 +615,88 @@ jobs:
           sudo -E bash .github/scripts/samba/provision-dc.sh
           echo "Listening on the Tailscale address:"
           sudo ss -ltnu | grep -F "$DC_HOST_IP" | awk '{print "  " $1, $5}' | sort -u
+          # A second name for this DC, listed after dc1 in DNS, on its Tailscale
+          # IPv6 address only. For one test the Mac blocks IPv4 LDAP to dc1, so
+          # macOS can't follow the RODC's referral and only macOSLAPS's fallback
+          # (DNS, then LDAP) can reach a writable DC: through this name.
+          DC_HOST_IP6=$(tailscale ip -6)
+          auth=(-U Administrator --password="$ADMINPASS")
+          sudo samba-tool dns add 127.0.0.1 laps.test dcw AAAA "$DC_HOST_IP6" "${auth[@]}" >/dev/null
+          sudo samba-tool dns add 127.0.0.1 _msdcs.laps.test _ldap._tcp.dc SRV "dcw.laps.test 389 10 100" "${auth[@]}" >/dev/null
+          sudo samba-tool spn add ldap/dcw.laps.test 'DC1$' >/dev/null
+          echo "Second name: dcw.laps.test -> $DC_HOST_IP6 (SRV priority 10, SPN ldap/dcw.laps.test)"
+          sudo ss -ltn | awk '$4 ~ /:389$/ {print "  LDAP listening: " $4}' | sort -u
       - name: Wait for the Mac
         if: env.HAS_TS == 'true'
         env:
           MAC_HOST: ${{ env.TS_MAC }}
         run: sudo -E bash .github/scripts/samba/wait-for-mac.sh
+
+  # A read-only DC next to the writable one, joined over Tailscale. The Mac points
+  # its binding and PreferredDC at it; it stays up until the Mac has left.
+  ad-rodc:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      HAS_TS: ${{ secrets.TS_OAUTH_CLIENT_ID != '' }}
+      ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
+      TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_RODC: laps-rodc-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Skip without Tailscale
+        if: env.HAS_TS != 'true'
+        run: 'echo "::notice::RODC skipped: no TS_OAUTH_CLIENT_ID secret"'
+      - uses: actions/checkout@v7
+        if: env.HAS_TS == 'true'
+      - uses: tailscale/github-action@v4
+        if: env.HAS_TS == 'true'
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          hostname: ${{ env.TS_RODC }}
+          args: --accept-dns=false
+      - name: Wait for the writable DC
+        if: env.HAS_TS == 'true'
+        run: |
+          sudo tailscale set --accept-routes=false
+          for i in $(seq 1 90); do
+            # Unknown until the DC joins the tailnet; bash -e must not stop on that.
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null || true)
+            [ -n "$ip" ] && nc -z -w 3 "$ip" 389 2>/dev/null && break
+            ip=""; sleep 10
+          done
+          [ -n "$ip" ] || { echo "::error::$TS_DC never answered on LDAP"; exit 1; }
+          echo "Writable DC: $ip"
+          echo "DC_IP=$ip" >> "$GITHUB_ENV"
+      - name: Join the domain as a read-only DC
+        if: env.HAS_TS == 'true'
+        run: |
+          export RODC_HOST_IP=$(tailscale ip -4) RODC_HOSTNAME=rodc1 DC_HOSTNAME=dc1
+          sudo -E bash .github/scripts/samba/join-rodc.sh
+      - name: Stay up until the Mac is done
+        if: env.HAS_TS == 'true'
+        run: |
+          # The Mac's result is reported by ad-dc; this only waits for it to leave.
+          present() { tailscale status --json | python3 -c 'import json,sys
+          d=json.load(sys.stdin); h=sys.argv[1]
+          sys.exit(0 if any(p.get("HostName")==h for p in (d.get("Peer") or {}).values()) else 1)' "$1"; }
+          # Pull changes from the writable DC every 30 s (an RODC replicates on a schedule
+          # otherwise), so the Mac's new computer object and its writes show up here.
+          base=$(echo laps.test | sed 's/^/DC=/; s/\./,DC=/g')
+          sync() { sudo samba-tool drs replicate rodc1.laps.test dc1.laps.test "$base" --local \
+                     -U Administrator --password="$ADMINPASS" >/dev/null 2>&1 || true; }
+          seen=0; gone=0
+          for i in $(seq 1 300); do
+            [ $((i % 3)) -eq 1 ] && sync
+            if present "$TS_MAC"; then seen=1; gone=0
+            elif [ "$seen" -eq 1 ]; then gone=$((gone + 1)); [ "$gone" -ge 12 ] && break
+            fi
+            sleep 10
+          done
+          echo "The Mac has left (or the wait ended); stopping the RODC."
 
   ad-mac:
     needs: build
@@ -599,6 +707,7 @@ jobs:
       ADMINPASS: ${{ format('Ci-{0}-Adm!', github.run_id) }}
       TS_DC: laps-dc-${{ github.run_id }}-${{ github.run_attempt }}
       TS_MAC: laps-mac-${{ github.run_id }}-${{ github.run_attempt }}
+      TS_RODC: laps-rodc-${{ github.run_id }}-${{ github.run_attempt }}
       COMPUTER: CIMAC${{ github.run_number }}
     steps:
       - name: Skip without Tailscale
@@ -635,7 +744,7 @@ jobs:
               if p.get("HostName","").startswith("laps-"):
                   print(" ", p["HostName"], (p.get("TailscaleIPs") or ["?"])[0], "online" if p.get("Online") else "offline", p.get("CurAddr") or p.get("Relay") or "")'; }
           for i in $(seq 1 60); do
-            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null)
+            ip=$(tailscale ip -4 "$TS_DC" 2>/dev/null || true)
             if [ -n "$ip" ] && nc -z -G 3 "$ip" 389 2>/dev/null; then break; fi
             if [ $((i % 6)) -eq 1 ]; then
               echo "--- $(date -u +%T) DC address: ${ip:-unknown}"
@@ -652,6 +761,18 @@ jobs:
           fi
           echo "Domain controller: $ip"
           echo "DC_IP=$ip" >> "$GITHUB_ENV"
+          # The read-only DC joins after the writable one is up.
+          for i in $(seq 1 60); do
+            rip=$(tailscale ip -4 "$TS_RODC" 2>/dev/null || true)
+            [ -n "$rip" ] && nc -z -G 3 "$rip" 389 2>/dev/null && break
+            rip=""; sleep 10
+          done
+          if [ -n "$rip" ]; then
+            echo "Read-only domain controller: $rip"
+            echo "RODC_IP=$rip" >> "$GITHUB_ENV"
+          else
+            echo "::error::$TS_RODC never answered on LDAP (see the ad-rodc job)"
+          fi
       - name: Bind to AD and run macOSLAPS with Method AD
         if: env.HAS_TS == 'true'
         run: sudo -E bash .github/scripts/ad-mac-test.sh "artifact/dist/${{ needs.build.outputs.pkg }}"

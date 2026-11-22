@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-12
+ Updated:   2026-11-22
 
  Purpose:
      Reads the settings. macOSLAPS is moving from the original
@@ -16,11 +16,20 @@
      /Library/Preferences, then the built-in defaults. Values are coerced
      to the expected type, so one written with the wrong type is converted
      or replaced by the default with a warning instead of crashing (#86).
+     AllowRead and AllowNewPassword are read from a configuration profile
+     only: root can write /Library/Preferences, so a local value is
+     ignored.
 ===============================================================================
  CHANGELOG
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    AllowRead and AllowNewPassword (default
+                        claude    false), honored only from a configuration
+                                  profile.
+ 4.0.0     2026-11-17   joshua    Method defaults to auto: AD when bound to
+                        claude    Active Directory, else Local; -showConfig
+                                  says which.
  4.0.0     2026-11-12   joshua    New domain com.joshua-d-miller.macoslaps, per
                         claude    key over the legacy one; type coercion;
                                   -showconfig; ApprovedAdmins, AdminGroupPolicy
@@ -33,6 +42,7 @@
 */
 
 import Foundation
+import SystemConfiguration
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // ------------------------ //
@@ -56,7 +66,7 @@ var defaultpreferences : [ String : Any ] = [
     "ExclusionSets"          :       [String](),
     "PreferredDC"            :       "",
     "FirstPass"              :       "",
-    "Method"                 :       "AD",
+    "Method"                 :       "auto",
     "ADSchema"               :       "legacy",
     "PasswordStyle"          :       "random",
     "InventoryHook"          :       "",
@@ -72,6 +82,8 @@ var defaultpreferences : [ String : Any ] = [
     "RevealAction"           :       "rotateAndLogout",
     "ADRevealCode"           :       false,
     "AllowMDMManagedAccount" :       true,
+    "AllowRead"              :       false,
+    "AllowNewPassword"       :       false,
     "PasswordRequirements"   :       [
         "Uppercase"          :       0,
         "Lowercase"          :       0,
@@ -100,6 +112,11 @@ let requirementKeyAliases : [ String : String ] = [
 
 // Keys whose values must never be printed.
 let secretPreferenceKeys : Set<String> = ["FirstPass"]
+
+// Keys honored only from a configuration profile. They let root on this Mac
+// read or choose the password in plaintext, and root can write
+// /Library/Preferences, so only the MDM can turn them on.
+let managedOnlyPreferenceKeys : Set<String> = ["AllowRead", "AllowNewPassword"]
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
 // --------------------------- //
@@ -190,12 +207,18 @@ final class PreferenceStore {
         }
     }
 
-    /// First layer that has a value for `key` (or a known misspelling of it).
+    /// First layer with a value for `key` (or a known misspelling of it).
+    /// A profile-only key skips /Library/Preferences, warning if set there.
     private func lookup(_ key: String) -> (value: Any, layer: Layer, alias: String?)? {
         let aliases = preferenceKeyAliases.filter { $0.value == key }.map { $0.key }
+        let managedOnly = managedOnlyPreferenceKeys.contains(key)
         for layer in layers {
             for name in [key] + aliases {
                 if let value = layer.store.object(forKey: name), layer.store.objectIsForced(forKey: name) == layer.managed {
+                    if managedOnly && !layer.managed {
+                        warnOnce("local-\(key)", "\(key) in /Library/Preferences is ignored: only a configuration profile from your MDM can set it.")
+                        continue
+                    }
                     return (value, layer, name == key ? nil : name)
                 }
             }
@@ -291,12 +314,21 @@ private func coerceRequirements(_ raw: Any) -> [String : Int]? {
     return result
 }
 
+/// AD, Local, or auto (the default): AD when this Mac is bound to Active Directory,
+/// Local when it isn't. Sites that relied on the old default (AD) keep it on bound Macs.
 private func normalizeMethod(_ value: String) -> String {
     switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
     case "ad", "activedirectory", "active directory": return "AD"
     case "local": return "Local"
+    case "auto", "": return isBoundToActiveDirectory() ? "AD" : "Local"
     default: return value   // main.swift rejects unknown methods with an error
     }
+}
+
+/// Whether this Mac has an Active Directory binding (the AD plugin's configuration).
+func isBoundToActiveDirectory() -> Bool {
+    let store = SCDynamicStoreCreate(nil, "macOSLAPS" as CFString, nil, nil)
+    return SCDynamicStoreCopyValue(store, "com.apple.opendirectoryd.ActiveDirectory" as CFString) != nil
 }
 
 // ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: //
@@ -308,7 +340,10 @@ private func normalizeMethod(_ value: String) -> String {
 /// The returned value always has the same type as the key's default, so callers' casts are safe.
 func GetPreference(preference_key key: String) -> Any? {
     let fallback = defaultpreferences[key]
-    guard let raw = PreferenceStore.shared.rawValue(forKey: key) else { return fallback }
+    guard let raw = PreferenceStore.shared.rawValue(forKey: key) else {
+        // Method's default, auto, still has to be resolved to AD or Local.
+        return key == "Method" ? normalizeMethod(fallback as? String ?? "auto") : fallback
+    }
     guard let fallback = fallback else { return raw }
 
     // Match on the default's exact type (not `is`, which can bridge numbers and booleans).
@@ -347,6 +382,9 @@ func printEffectiveConfiguration() {
     for key in defaultpreferences.keys.sorted() {
         let value = GetPreference(preference_key: key)
         var shown = value.map { "\($0)" } ?? "nil"
+        if key == "Method", ((prefs.rawValue(forKey: key) as? String) ?? "auto").lowercased().trimmingCharacters(in: .whitespaces) == "auto" {
+            shown += " (auto: \(isBoundToActiveDirectory() ? "bound to Active Directory" : "not bound to Active Directory"))"
+        }
         if secretPreferenceKeys.contains(key) {
             shown = ((value as? String) ?? "").isEmpty ? "(not set)" : "(set, redacted)"
         }

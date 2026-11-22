@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-12
+ Updated:   2026-11-22
 
  Purpose:
      Screenshots of device mode the way a technician uses it, taken on a
@@ -25,6 +25,20 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Waits for each step instead of fixed
+                        claude    sleeps: the app, its window, the reveal,
+                                  the agent and its menu. Typed fields are
+                                  read back (and retyped) before Reveal is
+                                  pressed, and Reveal is pressed again once
+                                  if nothing was recorded. Required shots
+                                  fail the job when missing (with the
+                                  windows on screen); the menu bar item and
+                                  its menu fall back to their Accessibility
+                                  frame (the agent's last menu bar: it has
+                                  only the status items); the app and the
+                                  agent have quit before the app is opened
+                                  again in escrow mode. Opening the app
+                                  while the agent runs must show the window.
  4.0.0     2026-11-12   joshua    New file.
                         claude
 ===============================================================================
@@ -72,12 +86,101 @@ shot() {
     if [ -n "${2:-}" ]; then as_gui screencapture -x -o -l"$2" "$file"; else as_gui screencapture -x "$file"; fi
     [ -s "$file" ] && echo "captured $1" || echo "::warning::no image for $1"
 }
+# need <name>: fail when a required screenshot is missing, and show what
+# was on screen to find out why.
+need() {
+    [ -s "$OUT/$1.png" ] && return 0
+    fail "no screenshot $1"
+    echo "  windows on screen (id, layer, pid, x, y, w, h, owner):"
+    as_gui /tmp/wininfo | sed 's/^/    /'
+}
+# shot_rect <name> <x,y,w,h>: that area of the screen.
+shot_rect() {
+    local file="$OUT/$1.png"
+    as_gui screencapture -x -R"$2" "$file"
+    [ -s "$file" ] && echo "captured $1 (area $2)" || echo "::warning::no image for $1 (area $2)"
+}
+# ax_rect <pid> <element>: the element's frame as x,y,w,h, padded by $3 px
+# left and right, from Accessibility.
+ax_rect() {
+    as_gui osascript -e "tell application \"System Events\" to tell (first process whose unix id is $1)
+        set {px, py} to position of $2
+        set {sx, sy} to size of $2
+        return ((px - $3) as integer as text) & \",\" & (py as integer as text) & \",\" & ((sx + 2 * $3) as integer as text) & \",\" & (sy as integer as text)
+    end tell" 2>/dev/null
+}
 # window_of <pid> <layer>: the first on-screen window of that process at that layer.
 window_of() { as_gui /tmp/wininfo | awk -F'\t' -v p="$1" -v l="$2" '$3==p && $2==l && $6>20 {print $1; exit}'; }
 # AppleScript as the signed-in user; errors go to the log (e.g. no Accessibility access).
 ui() { as_gui osascript -e "$1" 2>&1 | sed 's/^/  osascript: /'; }
 keys() { ui "tell application \"System Events\" to keystroke \"$1\""; }
 key_code() { ui "tell application \"System Events\" to key code $1"; }
+# wait_for <seconds> <command...>: polls every half second until it succeeds.
+wait_for() {
+    local limit=$(( $1 * 2 )) i=0; shift
+    until "$@" >/dev/null 2>&1; do
+        i=$((i + 1)); [ "$i" -ge "$limit" ] && return 1
+        sleep 0.5
+    done
+}
+app_pid() { pgrep -u "$GUI_UID" -f "^$APP/Contents/MacOS/macOSLAPS$" | head -1; }
+has_app() { [ -n "$(app_pid)" ]; }
+app_gone() { [ -z "$(app_pid)" ]; }
+has_window() { [ -n "$(window_of "$(app_pid)" 0)" ]; }
+# The text of the nth text field in the app's window.
+field_value() {
+    as_gui osascript -e "tell application \"System Events\" to tell (first process whose unix id is $1)
+        set hits to {}
+        repeat with e in (get entire contents of window 1)
+            if role of e is \"AXTextField\" then set end of hits to e
+        end repeat
+        return value of item $2 of hits
+    end tell" 2>/dev/null
+}
+# enter <pid> <field index> <text>: focus, replace the contents, read back;
+# up to three tries, so a keystroke lost to focus never reaches Reveal.
+enter() {
+    local try
+    for try in 1 2 3; do
+        ax_find "$1" AXTextField "$2" focus; sleep 0.3
+        ui "tell application \"System Events\" to keystroke \"a\" using command down"; sleep 0.2
+        keys "$3"; sleep 0.3
+        [ "$(field_value "$1" "$2")" = "$3" ] && return 0
+        echo "  field $2 holds '$(field_value "$1" "$2")' (try $try); typing it again"
+    done
+    return 1
+}
+revealed_by() {   # the state file records a reveal by $1 with reason $2
+    python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); sys.exit(0 if any(sys.argv[1] in x and sys.argv[2] in x for x in h) else 1)' "$1" "$2"
+}
+window_text() {
+    as_gui osascript -e "tell application \"System Events\" to tell (first process whose unix id is $1)
+        set out to \"\"
+        repeat with e in (get entire contents of window 1)
+            try
+                set out to out & (value of e as text) & linefeed
+            end try
+        end repeat
+        return out
+    end tell" 2>&1
+}
+shows_deadline() { window_text "$1" | grep -q "works until"; }
+has_deadline() { [ -n "$(jget "$("$LAPS" -status)" rotatesAt)" ]; }
+agent_pid() { pgrep -u "$GUI_UID" -f "macOSLAPS -agent" | head -1; }
+has_agent() { [ -n "$(agent_pid)" ]; }
+agent_gone() { [ -z "$(agent_pid)" ]; }
+# What the agent looks like to launchd and Accessibility, when its status
+# item can't be found.
+agent_facts() {
+    echo "  macOSLAPS processes:"; pgrep -lf macOSLAPS | sed 's/^/    /'
+    echo "  launchd (gui/$GUI_UID):"
+    launchctl print "gui/$GUI_UID/com.joshua-d-miller.macoslaps.agent" 2>&1 \
+        | grep -E "state =|session|program|arguments|pid =|last exit" | sed 's/^/    /'
+    [ -n "${1:-}" ] && echo "  Accessibility menu bars of $1: $(as_gui osascript -e "tell application \"System Events\" to tell (first process whose unix id is $1) to get {name, background only, count of menu bars}" 2>&1)"
+}
+agent_window() { as_gui /tmp/wininfo | awk -F'\t' -v p="$1" -v l="$2" '$3==p && $2>=l {print $1; exit}'; }
+has_agent_window() { [ -n "$(agent_window "$1" "$2")" ]; }
+
 # SwiftUI nests controls in groups, so search the whole window by role.
 ax_find() {  # $1 pid, $2 role, $3 index or name, $4 action (focus/press)
     ui "tell application \"System Events\" to tell (first process whose unix id is $1)
@@ -142,12 +245,12 @@ CODE=$(jget "$("$LAPS" -escrow 2>/dev/null)" revealCode)
 ### --------------------------- ###
 ### Opened as the signed-in user, the code typed with keystrokes.           ###
 as_gui open "$APP"
-sleep 6
-APP_PID=$(pgrep -u "$GUI_UID" -f "^$APP/Contents/MacOS/macOSLAPS$" | head -1)
+wait_for 30 has_app; APP_PID=$(app_pid)
 [ -n "$APP_PID" ] && pass "the app opened as $GUI_USER" || fail "the app did not open"
-WIN=$(window_of "$APP_PID" 0)
+wait_for 30 has_window; WIN=$(window_of "$APP_PID" 0)
 [ -n "$WIN" ] && pass "the app window is on screen" || fail "no app window"
-shot 01-window-empty "$WIN"
+sleep 1   # let the first frame settle before the screenshot
+shot 01-window-empty "$WIN"; need 01-window-empty
 PROC="(first process whose unix id is $APP_PID)"
 ui "tell application \"System Events\" to set frontmost of $PROC to true"
 echo "Frontmost: $(as_gui osascript -e 'tell application "System Events" to get name of first process whose frontmost is true' 2>&1)"
@@ -163,56 +266,77 @@ echo "Window controls: $(as_gui osascript -e "tell application \"System Events\"
     end repeat
     return out
 end tell" 2>&1)"
-ax_find "$APP_PID" AXTextField 1 focus; sleep 0.5
-keys "$CODE"; sleep 0.5
-ax_find "$APP_PID" AXTextField 2 focus; sleep 0.5
-keys "TICKET-4021"; sleep 1
-shot 02-window-code-entered "$WIN"
+enter "$APP_PID" 1 "$CODE" && pass "the code is in the code field" || fail "the code field holds '$(field_value "$APP_PID" 1)'"
+enter "$APP_PID" 2 "TICKET-4021" && pass "the ticket is in the reason field" || fail "the reason field holds '$(field_value "$APP_PID" 2)'"
+sleep 0.5
+shot 02-window-code-entered "$WIN"; need 02-window-code-entered
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------------- ###
 ### | The app: reveal | ###
 ### ------------------- ###
 ### Return presses Reveal Password; macOSLAPS must record the reveal.       ###
-ax_find "$APP_PID" AXButton 1 press; sleep 6   # Reveal Password
-shot 03-window-revealed "$WIN"
-python3 -c 'import plistlib,sys; h=plistlib.load(open("/var/db/macoslaps/state.plist","rb")).get("revealHistory",[]); assert any(sys.argv[1] in x and "TICKET-4021" in x for x in h), h' "$GUI_USER" \
+# Reveal Password. A press lost to focus is pressed once more, after checking
+# the fields still hold the right code (a wrong code would count against us).
+ax_find "$APP_PID" AXButton 1 press
+if ! wait_for 20 revealed_by "$GUI_USER" "TICKET-4021"; then
+    echo "  no reveal recorded after 20 s; pressing Reveal Password again"
+    [ "$(field_value "$APP_PID" 1)" = "$CODE" ] && ax_find "$APP_PID" AXButton 1 press
+    wait_for 20 revealed_by "$GUI_USER" "TICKET-4021"
+fi
+revealed_by "$GUI_USER" "TICKET-4021" \
     && pass "revealed through the window by $GUI_USER with the ticket" || fail "the window did not reveal the password (revealHistory: $(plutil -extract revealHistory json -o - /var/db/macoslaps/state.plist 2>&1))"
-WIN_TEXT=$(as_gui osascript -e "tell application \"System Events\" to tell $PROC
-    set out to \"\"
-    repeat with e in (get entire contents of window 1)
-        try
-            set out to out & (value of e as text) & linefeed
-        end try
-    end repeat
-    return out
-end tell" 2>&1)
+wait_for 15 shows_deadline "$APP_PID"
+shot 03-window-revealed "$WIN"; need 03-window-revealed
+WIN_TEXT=$(window_text "$APP_PID")
 echo "$WIN_TEXT" | grep -q "logged out" \
     && fail "the window warns of a logout though ladmin isn't logged in" \
     || pass "the window doesn't warn of a logout (ladmin isn't logged in)"
 echo "$WIN_TEXT" | grep -q "works until" \
     && pass "the window shows when the password stops working" \
     || fail "the window text: $WIN_TEXT"
-ST=$("$LAPS" -status)
-[ -n "$(jget "$ST" rotatesAt)" ] && pass "the grace period started" || fail "no deadline after the reveal"
+wait_for 15 has_deadline && pass "the grace period started" || fail "no deadline after the reveal"
 ax_find "$APP_PID" AXButton 2 press   # Copy, Show Phonetic, Done
 sleep 2
-shot 04-window-phonetic "$WIN"
+shot 04-window-phonetic "$WIN"; need 04-window-phonetic
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------------------------ ###
 ### | Menu bar and notifications | ###
 ### ------------------------------ ###
 ### The agent's countdown, its menu, and whatever notification shows.       ###
-sleep 4
-AGENT_PID=$(pgrep -u "$GUI_UID" -f "macOSLAPS -agent" | head -1)
+# The agent starts through the root service after the reveal: wait for it.
+wait_for 45 has_agent; AGENT_PID=$(agent_pid)
 [ -n "$AGENT_PID" ] && pass "the menu bar agent is running" || fail "the menu bar agent is not running"
-ITEM=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>0 {print $1; exit}')
-[ -n "$ITEM" ] && shot 05-menubar-item "$ITEM" || echo "::warning::no menu bar item window"
-[ -n "$AGENT_PID" ] && ui "tell application \"System Events\" to click menu bar item 1 of menu bar 2 of (first process whose unix id is $AGENT_PID)"
-sleep 2
-MENU=$(as_gui /tmp/wininfo | awk -F'\t' -v p="$AGENT_PID" '$3==p && $2>=101 {print $1; exit}')
-[ -n "$MENU" ] && shot 06-menubar-menu "$MENU" || echo "::warning::no menu window"
+# The status item: its own window when listed, else its Accessibility frame
+# (with some menu bar either side) cut from the screen.
+# A background-only agent has one menu bar, its status items (a regular app's
+# would be menu bar 2, after the main menu), so: the last one.
+STATUS_ITEM="menu bar item 1 of last menu bar"
+[ -n "$AGENT_PID" ] && wait_for 15 has_agent_window "$AGENT_PID" 1
+ITEM=$([ -n "$AGENT_PID" ] && agent_window "$AGENT_PID" 1)
+if [ -n "$ITEM" ]; then shot 05-menubar-item "$ITEM"
+elif [ -n "$AGENT_PID" ]; then
+    wait_for 15 ax_rect "$AGENT_PID" "$STATUS_ITEM" 0
+    RECT=$(ax_rect "$AGENT_PID" "$STATUS_ITEM" 120)
+    echo "  status item frame (padded): ${RECT:-none}"
+    [ -n "$RECT" ] || agent_facts "$AGENT_PID"
+    [ -n "$RECT" ] && shot_rect 05-menubar-item "$RECT"
+fi
+need 05-menubar-item
+# Its menu: clicked until it opens (up to three times), then its window or
+# its Accessibility frame.
+MENU=""; MENU_RECT=""
+for try in 1 2 3; do
+    [ -n "$AGENT_PID" ] || break
+    ui "tell application \"System Events\" to click $STATUS_ITEM of (first process whose unix id is $AGENT_PID)"
+    wait_for 5 has_agent_window "$AGENT_PID" 101 && { MENU=$(agent_window "$AGENT_PID" 101); break; }
+    MENU_RECT=$(ax_rect "$AGENT_PID" "menu 1 of $STATUS_ITEM" 0)
+    [ -n "$MENU_RECT" ] && break
+done
+if [ -n "$MENU" ]; then shot 06-menubar-menu "$MENU"
+elif [ -n "$MENU_RECT" ]; then echo "  menu frame: $MENU_RECT"; shot_rect 06-menubar-menu "$MENU_RECT"; fi
+need 06-menubar-menu
 shot 07-screen-with-menu
 key_code 53; sleep 1        # Escape closes the menu
 shot 08-screen
@@ -222,18 +346,42 @@ shot 08-screen
 ### | The icon and escrow mode | ###
 ### ---------------------------- ###
 ### The app in Finder, then the window in escrow mode.                      ###
+# Opening the app while the agent runs (the grace period) must show the
+# window: the agent, from the same bundle, gets the request and starts one.
+kill "$APP_PID" 2>/dev/null
+wait_for 15 app_gone || { kill -9 "$APP_PID" 2>/dev/null; sleep 1; }
+if has_agent; then
+    as_gui open "$APP"
+    if wait_for 30 has_app && wait_for 30 has_window; then
+        pass "opening the app while the menu bar agent runs shows the window"
+    else
+        fail "opening the app while the menu bar agent runs showed no window"; agent_facts "$(agent_pid)"
+    fi
+    APP_PID=$(app_pid)
+else
+    fail "the menu bar agent quit before the reopen check"
+fi
 as_gui osascript -e 'tell application "Finder" to quit' >/dev/null 2>&1; sleep 2
 as_gui open -R "$APP"; sleep 4
 FINDER_PID=$(pgrep -u "$GUI_UID" -x Finder | head -1)
 FWIN=$(window_of "$FINDER_PID" 0)
 [ -n "$FWIN" ] && shot 09-finder-icon "$FWIN"
-kill "$APP_PID" 2>/dev/null; sleep 2
+kill "$APP_PID" 2>/dev/null
+wait_for 15 app_gone || { kill -9 "$APP_PID" 2>/dev/null; sleep 1; }
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
 defaults write "$DOM" RetrievalMode -string escrow
-as_gui open "$APP"; sleep 6
-APP_PID=$(pgrep -u "$GUI_UID" -f "^$APP/Contents/MacOS/macOSLAPS$" | head -1)
+# The agent (same bundle) quits a few seconds after the deadline is gone.
+# While it runs, open may hand the request to it instead of starting the app.
+A=$(agent_pid); echo "  agent before reopening: ${A:-none running}"
+wait_for 20 agent_gone || echo "::warning::the menu bar agent is still running after 20 s"
+as_gui open "$APP"
+wait_for 30 has_app; wait_for 30 has_window; sleep 1
+APP_PID=$(app_pid)
+echo "  escrow mode: app pid ${APP_PID:-none}"
+[ -n "$APP_PID" ] || agent_facts
 WIN=$(window_of "$APP_PID" 0)
 [ -n "$WIN" ] && shot 10-window-escrow-mode "$WIN"
+need 10-window-escrow-mode
 kill "$APP_PID" 2>/dev/null
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #

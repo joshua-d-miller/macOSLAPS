@@ -1,22 +1,23 @@
 #!/bin/zsh
 : <<'HEADER'
 ===============================================================================
- macOSLAPS | MDM Scripts | macoslaps4-mdm-password-simple.sh
+ macOSLAPS | Integrations | generic/macOSLAPS-Password-Expiration.sh
 ===============================================================================
  Version:   4.0.0
  Author:    Henri Kovanen (Decens Oy), Joshua D. Miller, Claude
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
-     Prints the macOSLAPS password of the managed local admin and when it
-     expires, as one line for an MDM script result:
-     <password> (expires yyyy-MM-dd HH:mm:ss)
-     While a new password is staged, " (pending: <password>)" is added:
-     the Mac switches to it once the MDM has collected it. With
-     EscrowCertificates set, the encrypted CMS block is printed instead.
+     Password grab for Intune (and other MDMs) that rotates the password
+     first when it expires within rotateThresholdDays, then prints:
+     Successfully retrieved following password: <password> (expires
+     yyyy-MM-dd HH:mm:ss)
+     While a new password is staged, " (pending: <password>)" is added.
+     With EscrowCertificates set, the encrypted CMS block is printed
+     instead.
 
  Usage:
-     Run as root by the MDM.
+     Run as root by the MDM. Set rotateThresholdDays below.
 
  Credits:
      Written by Henri Kovanen, Decens Oy (https://www.decens.fi). Versions
@@ -26,6 +27,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Moved here from MDM Scripts/
+                        claude    (macoslaps4-mdm-password-and-expiration.sh).
  v2        2024-08-06   henri     Takes into account the new keychain method
                                   introduced in macOSLAPS 4.0.0. First version
                                   with a changelog.
@@ -131,21 +134,57 @@ password_line () {
 }
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------ ###
+### | Settings | ###
+### ------------ ###
+### If the password expires in fewer than this many days, rotate it now, so ###
+### the MDM never holds a password that changes soon after it was           ###
+### collected. Intune devices check in only every 8 hours or so.            ###
+rotateThresholdDays=7
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### -------- ###
 ### | Main | ###
 ### -------- ###
-### Prints the password and its expiry, or a line starting with Error!.     ###
-### Exits 1 on an error.                                                    ###
-fail () {
-    print -r -- "Error! $1"
+### Every exit except the root check is 0: Intune shows no output when a    ###
+### script fails, and only the last line printed matters.                   ###
+if [[ $(id -u) != 0 ]]; then
+    echo "Script must be run with root privileges."
     exit 1
-}
-[[ -x "$LAPS" ]] || fail "macOSLAPS not installed."
-[[ "$(laps_method)" != "AD" ]] || fail "macOSLAPS in AD mode, can't read password locally."
-read_password || fail "Running macOSLAPS returned an error."
+fi
+if [[ ! -x "$LAPS" ]]; then
+    echo "macOSLAPS not installed."
+    exit 0
+fi
+if [[ "$(laps_method)" == "AD" ]]; then
+    echo "macOSLAPS running in AD mode."
+    exit 0
+fi
+if ! read_password; then
+    echo "Error running macOSLAPS"
+    exit 0
+fi
 if [[ -n "$escrowCMS" ]]; then
     print -r -- "$escrowCMS"
     exit 0
 fi
-password_line
+
+## Rotate now if the password expires soon ##
+currentDate=$(date +%s)
+expiryDate=$(date -j -f "%Y-%m-%d %H:%M:%S" "$currentAdminExpiration" +%s 2>/dev/null || echo 0)
+timeDiffDays=$(( (expiryDate - currentDate) / 86400 ))
+if [[ "$timeDiffDays" -lt "$rotateThresholdDays" ]]; then
+    echo "Password expiry ($timeDiffDays) below threshold ($rotateThresholdDays), rotating the password..."
+    if ! "$LAPS" -resetPassword > /dev/null 2>&1; then
+        echo "Error rotating the password!"
+        exit 0
+    fi
+    if ! read_password; then
+        echo "Error running macOSLAPS"
+        exit 0
+    fi
+else
+    echo "Password expiry ($timeDiffDays) over threshold ($rotateThresholdDays), will not rotate."
+fi
+print -r -- "Successfully retrieved following password: $(password_line)"
 exit 0

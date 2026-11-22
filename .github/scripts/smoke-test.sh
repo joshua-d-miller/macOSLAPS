@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-08
- Updated:   2026-11-12
+ Updated:   2026-11-22
 
  Purpose:
      macOSLAPS smoke test for GitHub-hosted macOS runners. Exercises the
@@ -24,6 +24,25 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    -getPassword needs AllowRead too. CI can't
+                        claude    install a real profile (a hand-written
+                                  managed plist isn't honored), so get_pw
+                                  reads -escrow and puts the state file
+                                  back; the opt-in checks cover off,
+                                  ignored local keys and refusals.
+ 4.0.0     2026-11-22   joshua    ROUNDS from the environment (default 25);
+                        claude    the reveal wait is skipped through the
+                                  state file instead of sleeping 61 s.
+ 4.0.0     2026-11-22   joshua    -read and -newPassword are off by default
+                        claude    and ignore AllowRead / AllowNewPassword in
+                                  /Library/Preferences; the tests turn them
+                                  on through a managed profile. With
+                                  certificates or in device mode they stay
+                                  refused (and -getPassword too).
+ 4.0.0     2026-11-17   joshua    Reveal wait (backoff) instead of the lock;
+                        claude    elevation tools must be signed.
+                                  -read, -rotate, -currentPassword,
+                                  -newPassword; Method auto.
  4.0.0     2026-11-12   joshua    Tests for every 4.0 feature: app layout, new
                         claude    label and receipts, Login Items attribution,
                                   migration status, staging, -firstPass never
@@ -54,7 +73,7 @@ ACCT=lapstest
 FIRST='Initial-Pass-1234'
 LEN=16
 EXCLUDED='{}[]|_'
-ROUNDS=25
+ROUNDS=${ROUNDS:-25}
 DOMAIN=/Library/Preferences/edu.psu.macoslaps
 SYSKC=/Library/Keychains/System.keychain
 FAILURES=0
@@ -159,15 +178,29 @@ defaults write "$DOMAIN" DaysTillExpiration -int 30
 defaults write "$DOMAIN" StagedRotation -string off
 defaults write "$DOMAIN" RemovePassChars -string "$EXCLUDED"
 defaults read "$DOMAIN"
+MANAGED="/Library/Managed Preferences/com.joshua-d-miller.macoslaps"
 echo "::endgroup::"
 
 jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
-get_pw() {
-    "$LAPS" -getPassword >&2 || return 1
-    local export_name
-    export_name=$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)
-    security find-generic-password -w -s "$export_name" "$SYSKC"
+# The stored password, read from -escrow (-read and -getPassword need
+# AllowRead from a real configuration profile, which CI can't install).
+# lastEscrow and pendingExports are put back, so reading never counts as a
+# collection or as -escrow having run.
+escrow_quietly() {   # -escrow, then lastEscrow / pendingExports put back
+    local st=/var/db/macoslaps/state.plist before out
+    before=$(python3 -c 'import json,os,plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")) if os.path.exists(p) else {}; print(json.dumps({k: d.get(k) for k in ("lastEscrow","pendingExports")}))' "$st")
+    out=$("$LAPS" -escrow 2>/dev/null)
+    python3 -c 'import json,os,plistlib,sys
+p, before = sys.argv[1], json.loads(sys.argv[2])
+if os.path.exists(p):
+    d = plistlib.load(open(p, "rb"))
+    for k, v in before.items():
+        if v is None: d.pop(k, None)
+        else: d[k] = v
+    plistlib.dump(d, open(p, "wb"))' "$st" "$before"
+    python3 -c 'import json,sys; p=json.loads(sys.argv[1] or "{}").get("password"); sys.exit(1) if p is None else print(p)' "$out"
 }
+get_pw() { escrow_quietly; }
 
 check_pw() {
     local pw="$1" label="$2"
@@ -362,15 +395,20 @@ echo "$CFG" | grep -q "Method = Local  \[/Library/Preferences, legacy domain\]" 
     && pass "rotation with split settings uses the right account and the new length" || fail "rotation with split settings (length ${#P20})"
 # A managed profile in the new domain beats both local files.
 mkdir -p "/Library/Managed Preferences"
-defaults write "/Library/Managed Preferences/com.joshua-d-miller.macoslaps" PasswordLength -int 24
+defaults write "$MANAGED" PasswordLength -int 24
 killall cfprefsd 2>/dev/null; sleep 1
 if "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = 24  \[profile, new domain\]"; then
     pass "a managed new-domain value beats local settings"
 else
     echo "::notice::Managed preferences written by hand weren't treated as managed on this runner: $("$LAPS" -showConfig 2>/dev/null | grep PasswordLength)"
 fi
-rm -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist"
+rm -f "$MANAGED.plist"; killall cfprefsd 2>/dev/null; sleep 1
 defaults delete "$NEWDOM" >/dev/null 2>&1; rm -f "$NEWDOM.plist"
+# Method unset: the default auto picks Local on a Mac that isn't bound to AD.
+defaults delete "$DOMAIN" Method >/dev/null 2>&1
+"$LAPS" -showConfig 2>/dev/null | grep -q "Method = Local (auto: not bound to Active Directory)  \[default\]" \
+    && "$LAPS" -status | grep -q '"method":"Local"' && pass "Method defaults to auto: Local when not bound" || fail "Method auto: $("$LAPS" -showConfig 2>/dev/null | grep Method)"
+defaults write "$DOMAIN" Method -string Local
 killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = $LEN  \[/Library/Preferences, legacy domain\]" && pass "back to legacy-only settings" || fail "settings not restored to legacy only"
 echo "::endgroup::"
@@ -689,6 +727,54 @@ dscl . -authonly "$ACCT" "$RP" >/dev/null 2>&1 && pass "readable password authen
 defaults delete "$DOMAIN" PasswordStyle
 echo "::endgroup::"
 
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ----------------------------------------------------- ###
+### | -read, -getPassword, -newPassword, -currentPassword | ###
+### ----------------------------------------------------- ###
+### The plaintext commands need AllowRead / AllowNewPassword from a real   ###
+### configuration profile, which CI can't install: checked here are that  ###
+### they are off, that local keys are ignored, and that certificates and   ###
+### device mode refuse them for their own reason.                          ###
+echo "::group::-read, -getPassword, -newPassword, -currentPassword"
+LOGF="/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log"
+CUR=$(get_pw)
+OUT=$("$LAPS" -read 2>/dev/null); RC=$?
+"$LAPS" -getPassword >/dev/null 2>&1; RC3=$?
+printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
+[ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC3" -eq 78 ] && pass "-read and -getPassword are off by default (exit 78, nothing printed)" || fail "without AllowRead: -read rc $RC, -getPassword rc $RC3"
+[ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC2"
+# Root can write /Library/Preferences, so the keys set there count for nothing.
+for D in "$DOMAIN" "$NEWDOM"; do defaults write "$D" AllowRead -bool true; defaults write "$D" AllowNewPassword -bool true; done
+"$LAPS" -read >/dev/null 2>&1; RC4=$?
+"$LAPS" -getPassword >/dev/null 2>&1; RC5=$?
+printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC6=$?
+for D in "$DOMAIN" "$NEWDOM"; do defaults delete "$D" AllowRead >/dev/null 2>&1; defaults delete "$D" AllowNewPassword >/dev/null 2>&1; done
+rm -f "$NEWDOM.plist"
+[ "$RC4" -eq 78 ] && [ "$RC5" -eq 78 ] && [ "$RC6" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
+    && pass "AllowRead / AllowNewPassword in /Library/Preferences are ignored" || fail "local Allow keys were honored: -read rc $RC4, -getPassword rc $RC5, -newPassword rc $RC6"
+grep -q "AllowRead in /Library/Preferences is ignored" "$LOGF" && pass "the ignored local key is logged" || fail "no log line for the ignored local AllowRead"
+# With certificates or in device mode the password is never handed out in
+# plaintext; the refusal names that reason, not a missing key.
+for MODE in certificates device; do
+    if [ "$MODE" = certificates ]; then defaults write "$DOMAIN" EscrowCertificates -array "not a certificate"; WANT="isn't available with EscrowCertificates"
+    else defaults write "$DOMAIN" RetrievalMode -string device; WANT="isn't available in device mode"; fi
+    E1=$("$LAPS" -read 2>&1 >/dev/null); R1=$?
+    E2=$("$LAPS" -getPassword 2>&1); R2=$?
+    E3=$(printf '%s\n' 'Chosen-Pass-2468-mode' | "$LAPS" -rotate -newPassword - 2>&1); R3=$?
+    defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
+    [ "$R1" -eq 78 ] && [ "$R2" -eq 78 ] && [ "$R3" -eq 78 ] && grep -qF "$WANT" <<< "$E1" && grep -qF "$WANT" <<< "$E2" && grep -qF "$WANT" <<< "$E3" \
+        && [ "$(get_pw)" = "$CUR" ] && pass "$MODE: -read, -getPassword and -newPassword refused because of $MODE" \
+        || fail "$MODE: -read rc $R1, -getPassword rc $R2, -newPassword rc $R3"
+done
+echo "::notice::-read, -getPassword and -newPassword with AllowRead / AllowNewPassword turned on need a configuration profile from an MDM, which CI can't install; that path isn't run here."
+# Changed outside macOSLAPS: -rotate -currentPassword - takes the account back.
+dscl . -passwd "/Users/$ACCT" "$CUR" 'Outside-Pass-1357' >/dev/null 2>&1
+"$LAPS" >/dev/null 2>&1
+printf '%s\n' 'Outside-Pass-1357' | "$LAPS" -rotate -currentPassword - >/dev/null 2>&1
+NOW=$(get_pw)
+[ -n "$NOW" ] && [ "$NOW" != 'Outside-Pass-1357' ] && dscl . -authonly "$ACCT" "$NOW" >/dev/null 2>&1 && pass "-rotate -currentPassword - takes the account back" || fail "-currentPassword alias"
+echo "::endgroup::"
+
 if [ "$HAS_TOKEN" -eq 1 ]; then
     echo "::group::secureToken: -firstPass on the command line (after -resetPassword)"
     KNOWN='Known-Pass-5678'
@@ -709,8 +795,8 @@ fi
 ### ------------------------------ ###
 ### The MDM gets a one-time code, never the password. -reveal shows the     ###
 ### password, replaces the code and starts the grace period; a passed       ###
-### deadline rotates; five wrong codes lock reveals until the next          ###
-### rotation.                                                               ###
+### deadline rotates; after five wrong codes in a row reveals wait (1 min,  ###
+### doubling).                                                              ###
 echo "::group::Device mode (reveal codes)"
 code_now() { jget "$("$LAPS" -escrow 2>/dev/null)" revealCode; }
 # The code goes in on standard input; on the command line it is refused.
@@ -749,10 +835,38 @@ dscl . -authonly "$ACCT" "$BEFORE" >/dev/null 2>&1 && fail "the revealed passwor
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline the last reveal set
 for i in 1 2 3 4 5; do rev ZZZZ-ZZZZ-ZZZZ-ZZZZ "$LAPS" >/dev/null 2>&1; done
 GOOD=$(code_now)
-rev "$GOOD" "$LAPS" >/dev/null 2>&1 && fail "reveal worked while locked" || pass "five wrong codes lock reveals, even for the right one"
-[ "$(jget "$("$LAPS" -status)" revealLocked)" = "True" ] && pass "-status: revealLocked" || fail "revealLocked: $("$LAPS" -status)"
+OUT=$(rev "$GOOD" "$LAPS" 2>&1) && fail "reveal worked while waiting" || { grep -q "Try again after" <<< "$OUT" && pass "five wrong codes make reveals wait, even for the right one" || fail "waiting message: $OUT"; }
+ST=$("$LAPS" -status)
+python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["revealRetryAt"]); s=(r-D.datetime.now(r.tzinfo)).total_seconds(); assert d["revealLocked"] is True and 50 < s <= 60, (s, d)' "$ST" \
+    && pass "-status: revealLocked with revealRetryAt about a minute away" || fail "backoff in -status: $ST"
+# After the wait the right code works again (a wait, not a lock until
+# rotation). The wait is made to have passed instead of sleeping a minute.
+python3 - <<'PY'
+import plistlib, datetime as D
+p = "/var/db/macoslaps/state.plist"
+d = plistlib.load(open(p, "rb"))
+d["revealRetryAt"] = (D.datetime.now().astimezone() - D.timedelta(seconds=1)).isoformat(timespec="seconds")
+plistlib.dump(d, open(p, "wb"))
+PY
+[ "$(reveal_pw "$GOOD")" != "" ] && [ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && pass "after the wait the right code reveals again" || fail "still waiting after a minute: $("$LAPS" -status)"
+"$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1   # clear the deadline that reveal set
+# Each further wrong code doubles the wait; a rotation starts over.
+for i in 1 2 3 4 5; do rev ZZZZ-ZZZZ-ZZZZ-ZZZZ "$LAPS" >/dev/null 2>&1; done
+# Pretend the first wait has passed, then one more wrong code.
+python3 - <<'PY'
+import plistlib, datetime as D
+p = "/var/db/macoslaps/state.plist"
+d = plistlib.load(open(p, "rb"))
+d["revealRetryAt"] = (D.datetime.now().astimezone() - D.timedelta(seconds=1)).isoformat(timespec="seconds")
+plistlib.dump(d, open(p, "wb"))
+PY
+rev ZZZZ-ZZZZ-ZZZZ-ZZZZ "$LAPS" >/dev/null 2>&1
+python3 -c 'import json,sys,datetime as D; d=json.loads(sys.argv[1]); r=D.datetime.fromisoformat(d["revealRetryAt"]); s=(r-D.datetime.now(r.tzinfo)).total_seconds(); assert d["revealFailures"]==6 and 110 < s <= 120, (s, d)' "$("$LAPS" -status)" \
+    && pass "a sixth wrong code waits two minutes" || fail "sixth wrong code: $("$LAPS" -status)"
+GOOD=$(code_now)
 "$LAPS" -resetPassword >/dev/null 2>&1
-[ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && [ "$(code_now)" != "$GOOD" ] && pass "a rotation unlocks reveals with a new code" || fail "still locked after -resetPassword"
+[ "$(jget "$("$LAPS" -status)" revealLocked)" = "False" ] && [ "$(jget "$("$LAPS" -status)" revealFailures)" = "0" ] && [ "$(code_now)" != "$GOOD" ] \
+    && pass "a rotation ends the wait and issues a new code" || fail "still waiting after -resetPassword: $("$LAPS" -status)"
 LAST=$(reveal_pw "$(code_now)")
 "$LAPS" -expireIn 0 >/dev/null 2>&1; "$LAPS" >/dev/null 2>&1
 defaults write "$DOMAIN" RetrievalMode -string escrow
@@ -860,12 +974,20 @@ defaults write "$DOMAIN" AdminGroupPolicy -string report
 is_admin "$EXTRA" && pass "report: unapproved admin kept" || fail "report removed an admin"
 "$LAPS" -status | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d["unapprovedAdmins"]==["lapsextra"] and d["adminGroupPolicy"]=="report", d' \
     && pass "-status lists the unapproved admin" || fail "-status unapprovedAdmins: $("$LAPS" -status)"
-# auto with a fake elevation tool: report only
+# Elevation tools count only when properly signed: not an empty folder, and not
+# another team's app under the tool's name (still report, so nothing is removed).
 mkdir -p /Applications/Privileges.app
+[ "$(jget "$("$LAPS" -status)" elevationTool)" = "" ] && pass "an empty Privileges.app folder is not an elevation tool" || fail "empty folder counted: $("$LAPS" -status)"
+rm -rf /Applications/Privileges.app
+/usr/bin/ditto /System/Applications/Calculator.app /Applications/Privileges.app
+[ "$(jget "$("$LAPS" -status)" elevationTool)" = "" ] && pass "an app from another team named Privileges.app is not SAP Privileges" || fail "wrong team counted: $("$LAPS" -status)"
+rm -rf /Applications/Privileges.app
+# auto with a signed elevation tool (Admin By Request: any Apple-issued signature): report only
+/usr/bin/ditto /System/Applications/Calculator.app "/Applications/Admin By Request.app"
 defaults write "$DOMAIN" AdminGroupPolicy -string auto
 "$LAPS" >/dev/null 2>&1
-is_admin "$EXTRA" && "$LAPS" -status | grep -q '"elevationTool":"SAP Privileges"' && pass "auto + elevation tool: kept and reported" || fail "auto with an elevation tool"
-rm -rf /Applications/Privileges.app
+is_admin "$EXTRA" && "$LAPS" -status | grep -q '"elevationTool":"Admin By Request"' && pass "auto + signed elevation tool: kept and reported" || fail "auto with an elevation tool: $("$LAPS" -status)"
+rm -rf "/Applications/Admin By Request.app"
 # no verified password for the managed admin: nothing is removed
 CUR=$(get_pw 2>/dev/null)
 dscl . -passwd "/Users/$ACCT" "$CUR" 'Not-Stored-Pass-1' >/dev/null 2>&1

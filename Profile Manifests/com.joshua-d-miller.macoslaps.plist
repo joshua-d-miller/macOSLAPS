@@ -136,13 +136,14 @@
 			<key>pfm_title</key>
 			<string>Method</string>
 			<key>pfm_description</key>
-			<string>Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.</string>
+			<string>auto (default): AD when the Mac is bound to Active Directory, otherwise Local. Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.</string>
 			<key>pfm_type</key>
 			<string>string</string>
 			<key>pfm_default</key>
-			<string>AD</string>
+			<string>auto</string>
 			<key>pfm_range_list</key>
 			<array>
+				<string>auto</string>
 				<string>Local</string>
 				<string>AD</string>
 			</array>
@@ -197,7 +198,7 @@
 			<key>pfm_title</key>
 			<string>Preferred domain controller</string>
 			<key>pfm_description</key>
-			<string>Domain controller to use with Method AD.</string>
+			<string>Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only or Open Directory can't reach AD.</string>
 			<key>pfm_type</key>
 			<string>string</string>
 			<key>pfm_default</key>
@@ -600,6 +601,30 @@
 			<string>boolean</string>
 			<key>pfm_default</key>
 			<true/>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>AllowRead</string>
+			<key>pfm_title</key>
+			<string>Allow -read (3.x-style plaintext)</string>
+			<key>pfm_description</key>
+			<string>Plaintext escrow only. Allows the 3.x-style ways of reading the password on this Mac: -read prints only the current password, for scripts (XCreds, a macOS installer), and the deprecated -getPassword copies it to a keychain item. Setting it acknowledges that root on the Mac can then read the password in plaintext. The MDM's -escrow JSON (current and staged password) doesn't need it. Ignored with EscrowCertificates or RetrievalMode device, where the password is never handed out in plaintext. Honored only from a configuration profile: a value in /Library/Preferences is ignored.</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+			<key>pfm_default</key>
+			<false/>
+		</dict>
+		<dict>
+			<key>pfm_name</key>
+			<string>AllowNewPassword</string>
+			<key>pfm_title</key>
+			<string>Allow -newPassword (a chosen password)</string>
+			<key>pfm_description</key>
+			<string>Plaintext escrow only. Allows macOSLAPS -newPassword with -rotate, which sets a password a person chose (from a prompt or stdin) instead of a generated one, until the next rotation. Setting it acknowledges that root on the Mac can then choose the password. Ignored with EscrowCertificates or RetrievalMode device. Honored only from a configuration profile: a value in /Library/Preferences is ignored.</string>
+			<key>pfm_type</key>
+			<string>boolean</string>
+			<key>pfm_default</key>
+			<false/>
 		</dict>
 	</array>
 </dict>

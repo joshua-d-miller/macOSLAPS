@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-14
- Updated:   2026-11-14
+ Updated:   2026-11-22
 
  Purpose:
      AD stage 2: binds a macOS runner to the throwaway Samba domain from
@@ -28,6 +28,18 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    The LDAP fallback, end to end: pf blocks
+                        claude    IPv4 LDAP to dc1, Open Directory can't
+                                  reach AD, rodc1 (from DNS) refuses, and
+                                  the write must reach dcw (dc1's second
+                                  name, IPv6 only, from DNS) over LDAP.
+ 4.0.0     2026-11-21   joshua    The DNS check counts only an SRV answer
+                        claude    (not dig's timeout message), keeps
+                                  retrying, and says whether TCP works.
+ 4.0.0     2026-11-17   joshua    PreferredDC over LDAP as the computer
+                        claude    account; an unreachable PreferredDC; a
+                                  read-only DC (PreferredDC on it, the
+                                  binding on it, and both).
  4.0.0     2026-11-14   joshua    New file.
                         claude
 ===============================================================================
@@ -90,11 +102,30 @@ sed -i '' "/[[:space:]]$DC_FQDN/d" /etc/hosts
 echo "$DC_IP $DC_FQDN $DC_HOSTNAME" >> /etc/hosts
 dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
 
+# dig +short prints ";; connection timed out" on stdout, so only an SRV
+# answer (priority weight port target.) counts.
+srv_of() {
+  dig +short +time=3 +tries=1 "$@" @"$DC_IP" "_ldap._tcp.$DOMAIN_DNS" SRV \
+    2>/dev/null | grep -E '^[0-9]+ [0-9]+ [0-9]+ [^ ]+\.$'
+}
+srv=""
 for i in $(seq 1 30); do
-  srv=$(dig +short @"$DC_IP" "_ldap._tcp.$DOMAIN_DNS" SRV 2>/dev/null)
-  [ -n "$srv" ] && break; sleep 5
+  srv=$(srv_of) && break
+  [ "$i" -eq 1 ] && echo "  no DNS answer from $DC_IP yet; retrying (4 min)"
+  srv=""; sleep 5
 done
-[ -n "${srv:-}" ] && pass "the DC answers DNS for $DOMAIN_DNS ($srv)" || { fail "no SRV record for _ldap._tcp.$DOMAIN_DNS from $DC_IP"; exit 1; }
+if [ -n "$srv" ]; then
+  pass "the DC answers DNS for $DOMAIN_DNS ($srv)"
+else
+  fail "no SRV record for _ldap._tcp.$DOMAIN_DNS from $DC_IP over UDP"
+  if tcp=$(srv_of +tcp); then
+    echo "  over TCP it answers ($tcp): UDP to the DC is lost on the tailnet"
+  else
+    echo "  no answer over TCP either: the DC's DNS service isn't answering"
+  fi
+  tailscale ping -c 1 --timeout 5s "$DC_IP" 2>&1 | sed 's/^/  /' || true
+  exit 1
+fi
 nc -z -G 5 "$DC_IP" 389 && pass "LDAP reachable on $DC_IP" || fail "LDAP (389) not reachable on $DC_IP"
 nc -z -G 5 "$DC_IP" 88 && pass "Kerberos reachable on $DC_IP" || fail "Kerberos (88) not reachable on $DC_IP"
 
@@ -224,6 +255,164 @@ ST=$("$LAPS" -status 2>/dev/null)
 [ "$(jget "$ST" method)" = AD ] && [ "$(jget "$ST" passwordVerifies)" = True ] \
   && pass "-status: method AD, stored password verifies" \
   || fail "-status: $ST"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### --------------- ###
+### | PreferredDC | ###
+### --------------- ###
+### Reads and writes go over LDAP to the chosen DC, as the computer         ###
+### account (its own Kerberos ticket, not the admin's).                     ###
+echo "---- PreferredDC $DC_FQDN, ADSchema both"
+defaults write "$DOM" PreferredDC -string "$DC_FQDN"
+defaults write "$DOM" ADSchema -string both
+lines_before=$(wc -l < /Library/Logs/macOSLAPS.log)
+"$LAPS" -rotate >/dev/null 2>&1; rc=$?
+new_log=$(tail -n +"$((lines_before + 1))" /Library/Logs/macOSLAPS.log)
+echo "  macOSLAPS log:"; sed 's/^/    /' <<< "$new_log"
+grep -qiF "Using PreferredDC $DC_FQDN (LDAP as $COMPUTER\$)" <<< "$new_log" \
+  && pass "PreferredDC: macOSLAPS connects to $DC_FQDN over LDAP as $COMPUTER\$" || fail "PreferredDC: not used"
+legacy_pw=$(ad_value ms-Mcs-AdmPwd); [ -n "$legacy_pw" ] && echo "::add-mask::$legacy_pw"
+win_pw=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["p"])' "$(ad_value msLAPS-Password)" 2>/dev/null)
+[ $rc -eq 0 ] && [ -n "$legacy_pw" ] && [ "$legacy_pw" = "$win_pw" ] && [ "$legacy_pw" != "$previous" ] \
+  && works "$legacy_pw" && [ "$legacy_pw" = "$(stored)" ] \
+  && pass "PreferredDC: the rotation wrote both schemas over LDAP, and the password works" \
+  || fail "PreferredDC: rotation over LDAP (rc $rc)"
+future_filetime "$(ad_attr ms-Mcs-AdmPwdExpirationTime)" && future_filetime "$(ad_attr msLAPS-PasswordExpirationTime)" \
+  && pass "PreferredDC: both expiration times are in the future" || fail "PreferredDC: expiration times"
+before=$(stored)
+"$LAPS" >/dev/null 2>&1
+[ "$before" = "$(stored)" ] && pass "PreferredDC: a scheduled run reads the expiration over LDAP and leaves the password alone" \
+  || fail "PreferredDC: a scheduled run rotated before the expiration"
+ls /var/run/macoslaps/krb5cc_* >/dev/null 2>&1 && fail "PreferredDC: a Kerberos ticket cache was left behind" \
+  || pass "PreferredDC: the computer's ticket cache is removed after the run"
+# A PreferredDC that can't be reached stops the run before anything changes.
+defaults write "$DOM" PreferredDC -string "nodc.$DOMAIN_DNS"
+"$LAPS" -rotate >/dev/null 2>&1 && fail "an unreachable PreferredDC was accepted" \
+  || { [ "$before" = "$(stored)" ] && works "$before" && pass "an unreachable PreferredDC stops the run; nothing changed" || fail "the password changed with an unreachable PreferredDC"; }
+defaults delete "$DOM" PreferredDC
+previous="$before"
+
+# ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
+### ------------------------- ###
+### | A read-only DC (RODC) | ###
+### ------------------------- ###
+### rodc1 is a Samba RODC in the same domain. A write to it is refused, so  ###
+### PreferredDC pointing at it must stop the run; with the binding on it,   ###
+### the password must still reach the writable DC.                          ###
+echo "---- Read-only domain controller"
+if [ -z "${RODC_IP:-}" ]; then
+  fail "no read-only DC to test against (see the ad-rodc job)"
+else
+  RODC_FQDN="rodc1.$DOMAIN_DNS"
+  sed -i '' "/[[:space:]]$RODC_FQDN/d" /etc/hosts
+  echo "$RODC_IP $RODC_FQDN rodc1" >> /etc/hosts
+  dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+  nc -z -G 5 "$RODC_IP" 389 && pass "the RODC answers LDAP at $RODC_FQDN" || fail "the RODC isn't reachable on LDAP"
+  rodc_says=$(ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "" -s base "(objectClass=*)" dsServiceName 2>&1 | head -3)
+  echo "  RODC rootDSE: $rodc_says"
+  run_log() {   # runs macOSLAPS with the given arguments; sets rc and new_log
+    local before_lines; before_lines=$(wc -l < /Library/Logs/macOSLAPS.log)
+    "$LAPS" "$@" >/dev/null 2>&1; rc=$?
+    new_log=$(tail -n +"$((before_lines + 1))" /Library/Logs/macOSLAPS.log)
+    echo "  macOSLAPS $* (exit $rc):"; sed 's/^/    /' <<< "$new_log"
+  }
+  ad_now() { ad_value ms-Mcs-AdmPwd; }   # read on the writable DC, as the domain admin
+  # The RODC pulls from the writable DC every 30 s; wait until it has this computer.
+  for i in $(seq 1 30); do
+    ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "$BASEDN" "(sAMAccountName=$COMPUTER\$)" dn 2>/dev/null | grep -q "^dn:" && break
+    sleep 5
+  done
+  ldapsearch -LLL -Q -Y GSSAPI -H "ldap://$RODC_FQDN" -b "$BASEDN" "(sAMAccountName=$COMPUTER\$)" dn 2>/dev/null | grep -q "^dn:" \
+    && pass "the RODC has replicated $COMPUTER" || fail "the RODC never received $COMPUTER"
+
+  # 1. PreferredDC = the RODC: refused, nothing changes anywhere.
+  defaults write "$DOM" PreferredDC -string "$RODC_FQDN"
+  before=$(stored); before_ad=$(ad_now)
+  run_log -rotate
+  [ $rc -ne 0 ] && [ "$before" = "$(stored)" ] && works "$before" && [ "$before_ad" = "$(ad_now)" ] \
+    && grep -q "Unable to write the LAPS expiration attribute(s) .* through LDAP to $RODC_FQDN" <<< "$new_log" \
+    && pass "PreferredDC on the RODC: the RODC refuses the write and nothing changed" \
+    || fail "PreferredDC on the RODC (exit $rc): not refused by the RODC itself"
+
+  # 2. The binding prefers the RODC; PreferredDC unset: the password still reaches the writable DC.
+  defaults delete "$DOM" PreferredDC
+  out=$(dsconfigad -preferred "$RODC_FQDN" 2>&1) && pass "the binding now prefers $RODC_FQDN" || fail "dsconfigad -preferred: $out"
+  dsconfigad -show | grep -i "preferred" | sed 's/^/  /'
+  sleep 5
+  run_log -rotate
+  now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+  if [ $rc -eq 0 ] && [ -n "$now_ad" ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" && [ "$now_ad" = "$(stored)" ]; then
+    if grep -q "Writing to .* instead (LDAP as" <<< "$new_log"; then
+      pass "binding on the RODC: the write was refused and macOSLAPS fell back to a writable DC over LDAP"
+    else
+      pass "binding on the RODC: the rotation reached the writable DC"
+      echo "::notice::macOS wrote through the RODC itself (it followed the referral), so the LDAP fallback wasn't needed"
+    fi
+  else
+    fail "binding on the RODC: the new password didn't reach the writable DC (exit $rc)"
+  fi
+  before_ad="$now_ad"
+
+  # 2b. As 2, but pf blocks IPv4 LDAP to dc1 (open connections too), so
+  # Open Directory can't reach AD. macOSLAPS goes to DNS: dc1 (blocked),
+  # rodc1 (priority 5: answers, but refuses the write), then dcw, dc1's
+  # second name on its IPv6 address only (priority 10, its own SPN), which
+  # must take the write over LDAP.
+  dcw="dcw.$DOMAIN_DNS"
+  dc6=$(dig +short +time=3 @"$DC_IP" "$dcw" AAAA | grep ':' | head -1)
+  if [ -z "$dc6" ]; then
+    fail "$dcw has no IPv6 address in the domain's DNS (see the ad-dc job)"
+  elif ! nc -6 -z -G 5 "$dc6" 389 2>/dev/null; then
+    fail "dc1 doesn't answer LDAP on its IPv6 address $dc6"
+  else
+    rc=1; new_log=""
+    # Pinned like dc1 and rodc1: macOS may not ask DNS for AAAA records.
+    sed -i '' "/[[:space:]]$dcw/d" /etc/hosts
+    echo "$dc6 $dcw dcw" >> /etc/hosts
+    dscacheutil -flushcache; killall -HUP mDNSResponder 2>/dev/null || true
+    pf_rules=$(mktemp)
+    echo "block return out quick proto tcp from any to $DC_IP port 389" > "$pf_rules"
+    pfctl -a com.apple/macoslaps-ci -f "$pf_rules" 2>/dev/null
+    pf_token=$(pfctl -E 2>&1 | sed -n 's/^Token : //p')
+    pfctl -k 0.0.0.0/0 -k "$DC_IP" >/dev/null 2>&1 || true
+    if nc -z -G 3 "$DC_IP" 389 2>/dev/null; then
+      fail "pf didn't block IPv4 LDAP to dc1; 2b can't run"
+    else
+      run_log -rotate
+    fi
+    pfctl -a com.apple/macoslaps-ci -F all >/dev/null 2>&1 || true
+    [ -n "$pf_token" ] && pfctl -X "$pf_token" >/dev/null 2>&1 || true
+    nc -z -G 5 "$DC_IP" 389 2>/dev/null || fail "IPv4 LDAP to dc1 didn't come back after 2b"
+    now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+    if [ "$rc" -eq 0 ] && [ -n "$now_ad" ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" \
+       && [ "$now_ad" = "$(stored)" ] && grep -q "Writing to $dcw instead (LDAP as" <<< "$new_log"; then
+      pass "binding on the RODC, dc1 unreachable over IPv4: macOSLAPS fell back to $dcw over LDAP"
+      grep -q "Open Directory can't reach Active Directory" <<< "$new_log" \
+        && pass "Open Directory's failure led macOSLAPS to the DCs in DNS" \
+        || echo "::notice::Open Directory still reached AD; the fallback came from the RODC's refusal alone"
+      grep -q "$RODC_FQDN didn't take the write\|binding uses didn't take the write" <<< "$new_log" \
+        && pass "the RODC's refusal is logged before the fallback" \
+        || fail "the fallback happened without the RODC refusing first"
+    elif [ "$rc" -eq 0 ] && [ "$now_ad" != "$before_ad" ]; then
+      fail "binding on the RODC, dc1 unreachable over IPv4: the write landed without the LDAP fallback"
+    else
+      fail "binding on the RODC, dc1 unreachable over IPv4: no fallback to $dcw (exit $rc)"
+    fi
+    [ -n "$now_ad" ] && before_ad="$now_ad"
+  fi
+
+  # 3. The binding prefers the RODC; PreferredDC = the writable DC: works.
+  defaults write "$DOM" PreferredDC -string "$DC_FQDN"
+  run_log -rotate
+  now_ad=$(ad_now); [ -n "$now_ad" ] && echo "::add-mask::$now_ad"
+  [ $rc -eq 0 ] && [ "$now_ad" != "$before_ad" ] && works "$now_ad" && [ "$now_ad" = "$(stored)" ] \
+    && pass "binding on the RODC with PreferredDC on the writable DC: rotation works" \
+    || fail "PreferredDC on the writable DC with the binding on the RODC (exit $rc)"
+
+  defaults delete "$DOM" PreferredDC
+  dsconfigad -nopreferred >/dev/null 2>&1 || true
+  previous="$now_ad"
+fi
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #
 ### ------------------------------- ###

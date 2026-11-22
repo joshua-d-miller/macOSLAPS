@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-09
- Updated:   2026-11-12
+ Updated:   2026-11-22
 
  Purpose:
      Installs the last published release, rotates with it, then installs
@@ -25,6 +25,13 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    Gatekeeper is checked only for notarized
+                        claude    builds (NOTARIZED; pull requests aren't).
+                                  get_pw reads this build's -escrow (and
+                                  puts the state file back): -getPassword
+                                  needs AllowRead from a real profile.
+ 4.0.0     2026-11-17   joshua    The scripts' new paths under integrations/.
+                        claude
  4.0.0     2026-11-12   joshua    Migration from 845, the required/recovery
                         claude    path, 3.x plaintext files never used, new
                                   label and receipts, EAs during staging, the
@@ -69,7 +76,29 @@ stop_daemon() {
 }
 status_field() { "$LAPS" -status | python3 -c 'import json,sys; v=json.load(sys.stdin).get(sys.argv[1]); print("" if v is None else str(v).lower() if isinstance(v,bool) else v)' "$1"; }
 comment_of() { security find-generic-password -s "$1" "$SYSKC" 2>/dev/null | grep '"icmt"'; }
+# The stored password. This build: from -escrow (-getPassword needs
+# AllowRead from a real configuration profile, which CI can't install), with
+# lastEscrow and pendingExports put back so reading never counts as a
+# collection. 845 has no -escrow: its -getPassword export.
+escrow_quietly() {   # -escrow, then lastEscrow / pendingExports put back
+    local st=/var/db/macoslaps/state.plist before out
+    before=$(python3 -c 'import json,os,plistlib,sys; p=sys.argv[1]; d=plistlib.load(open(p,"rb")) if os.path.exists(p) else {}; print(json.dumps({k: d.get(k) for k in ("lastEscrow","pendingExports")}))' "$st")
+    out=$("$LAPS" -escrow 2>/dev/null)
+    python3 -c 'import json,os,plistlib,sys
+p, before = sys.argv[1], json.loads(sys.argv[2])
+if os.path.exists(p):
+    d = plistlib.load(open(p, "rb"))
+    for k, v in before.items():
+        if v is None: d.pop(k, None)
+        else: d[k] = v
+    plistlib.dump(d, open(p, "wb"))' "$st" "$before"
+    python3 -c 'import json,sys; p=json.loads(sys.argv[1] or "{}").get("password"); sys.exit(1) if p is None else print(p)' "$out"
+}
 get_pw() {
+    if "$LAPS" -help 2>/dev/null | grep -q -- "-escrow"; then
+        escrow_quietly
+        return
+    fi
     "$LAPS" -getPassword >&2 || return 1
     security find-generic-password -w -s "$(tr -d '\n' < /var/root/.GeneratedLAPSServiceName)" "$SYSKC"
 }
@@ -225,20 +254,20 @@ redact() { python3 -c 'import sys; print(sys.argv[1].replace(sys.argv[2], "<pass
 ### | Scripts admins already deploy keep working | ###
 ### ---------------------------------------------- ###
 echo "::group::Scripts admins already deploy keep working"
-OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-and-expiration.sh" 2>&1)
+OUT=$(zsh "$REPO/integrations/generic/macOSLAPS-Password-Expiration.sh" 2>&1)
 redact "$OUT"
 echo "$OUT" | grep -qF "Successfully retrieved following password: $NEW_PW (expires 20" && pass "MDM password-and-expiration script" || fail "MDM password-and-expiration script output"
-OUT=$(zsh "$REPO/MDM Scripts/macoslaps4-mdm-password-simple.sh" 2>&1)
+OUT=$(zsh "$REPO/integrations/generic/macOSLAPS-Password.sh" 2>&1)
 echo "$OUT" | grep -qF "$NEW_PW (expires 20" && pass "MDM password-simple script" || fail "MDM password-simple script output: $(redact "$OUT")"
 # The Jamf extension attributes read LocalAdminAccount from a managed profile.
 mkdir -p "/Library/Managed Preferences"
 cp "$DOMAIN.plist" "/Library/Managed Preferences/edu.psu.macoslaps.plist"
-OUT=$(zsh "$REPO/jamf Extension Attributes/Password and Expiration Combined.zsh" 2>&1)
+OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Password-Expiration-EA.zsh" 2>&1)
 echo "$OUT" | grep -qE "^<result>\| Password: .+ \| Expiration: 20[0-9-]+ [0-9:]+ \|</result>$" && echo "$OUT" | grep -qF "Password: $NEW_PW |" \
     && pass "Jamf combined extension attribute" || fail "Jamf combined EA output: $(redact "$OUT")"
-OUT=$(zsh "$REPO/jamf Extension Attributes/Password Only.zsh" 2>&1)
+OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Password-EA.zsh" 2>&1)
 [ "$OUT" = "<result>| Password: $NEW_PW |</result>" ] && pass "Jamf password extension attribute" || fail "Jamf password EA output"
-OUT=$(zsh "$REPO/jamf Extension Attributes/Expiration Only.zsh" 2>&1)
+OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Expiration-EA.zsh" 2>&1)
 echo "$OUT" | grep -qE "^<result>\| Expiration: 20[0-9-]+ [0-9:]+ \|</result>$" && pass "Jamf expiration extension attribute" || fail "Jamf expiration EA output: $OUT"
 OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Escrow-EA.zsh" 2>&1)
 # Compare the parsed JSON: the password may contain characters JSON escapes (" and \).
@@ -250,11 +279,11 @@ dscl . -authonly "$ACCT" "$NEW_PW" >/dev/null 2>&1 && pass "none of the scripts 
 # A staged password must reach Jamf too, or the Mac would switch to a password Jamf never stored.
 defaults write "$DOMAIN" StagedRotation -string on
 "$LAPS" -resetPassword >/dev/null 2>&1
-OUT=$(zsh "$REPO/jamf Extension Attributes/Password and Expiration Combined.zsh" 2>&1)
+OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Password-Expiration-EA.zsh" 2>&1)
 STAGED=$(sed -n 's/.* Pending: \(.*\) |<\/result>$/\1/p' <<< "$OUT")
 echo "$OUT" | grep -qF "Password: $NEW_PW |" && [ -n "$STAGED" ] && [ "$STAGED" != "$NEW_PW" ] \
     && pass "Jamf combined EA shows the staged password next to the current one" || fail "Jamf EA during staging: $(redact "$OUT")"
-OUT=$(zsh "$REPO/jamf Extension Attributes/Password Only.zsh" 2>&1)
+OUT=$(zsh "$REPO/integrations/jamf/macOSLAPS-Password-EA.zsh" 2>&1)
 [ "$OUT" = "<result>| Password: $NEW_PW | Pending: $STAGED |</result>" ] && pass "Jamf password EA shows the staged password" || fail "Jamf password EA during staging"
 defaults write "$DOMAIN" StagedRotation -string off
 "$LAPS" >/dev/null 2>&1   # staging off: the pending password is applied now
@@ -294,7 +323,9 @@ installer -pkg "$NEW_FULL" -applyChoiceChangesXML /tmp/laps-skip-daemon.xml -tar
 [ ! -f "$PLIST" ] && ! pkgutil --pkgs | grep -qx "$LABEL" \
     && pass "LaunchDaemon skipped when installer_choice_2 is off" || fail "LaunchDaemon was installed despite installer_choice_2 off"
 [ -x "$LAPS" ] && pass "binary installed with the daemon skipped" || fail "binary missing after choice install"
-if [ "$SIGNED" = "true" ]; then
+if [ "$SIGNED" = "true" ] && [ "${NOTARIZED:-true}" != "true" ]; then
+    echo "::notice::Not notarized (a pull request build): Gatekeeper is checked on main and releases."
+elif [ "$SIGNED" = "true" ]; then
     for p in "$NEW_FULL" "$NEW_BIN" "$NEW_LD"; do
         spctl --assess --type install -vv "$p" 2>&1 | grep -q "accepted" && pass "Gatekeeper accepts $(basename "$p")" || fail "Gatekeeper rejects $(basename "$p"): $(spctl --assess --type install -vv "$p" 2>&1 | tr '\n' ' ')"
     done

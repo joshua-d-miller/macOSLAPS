@@ -15,7 +15,7 @@ The same list is in the repository as a [Jamf Pro custom schema and an iMazing P
 | Key | Type | Default | Values | What it does |
 |---|---|---|---|---|
 | `LocalAdminAccount` | string | `admin` |  | Short name of the local admin account macOSLAPS manages. |
-| `Method` | string | `AD` | `Local`, `AD` | Local stores the password in the System keychain for your MDM to collect with `-escrow`. AD writes it to the computer object in Active Directory. |
+| `Method` | string | `auto` | `auto`, `Local`, `AD` | auto (default): AD when the Mac is bound to Active Directory, otherwise Local. Local stores the password in the System keychain for your MDM to collect with `-escrow`. AD writes it to the computer object in Active Directory. |
 | `DaysTillExpiration` | integer | `60` | 1 or more | Days between rotations. |
 | `FirstPass` | string | (none) |  | The account's current password, used once for the first rotation (needed for an account with a secureToken). Never printed by `-showConfig`. |
 | `RemoveKeychain` | boolean | `true` |  | Delete the admin's login keychain after a rotation, since it would still use the old password. |
@@ -65,4 +65,11 @@ The same list is in the repository as a [Jamf Pro custom schema and an iMazing P
 | Key | Type | Default | Values | What it does |
 |---|---|---|---|---|
 | `ADSchema` | string | `legacy` | `legacy`, `windowsLAPS`, `both` | legacy: ms-Mcs-AdmPwd. windowsLAPS: msLAPS-Password (ADUC LAPS tab, Get-LapsADPassword). both: write both. windowsLAPS and both are experimental. |
-| `PreferredDC` | string | (empty) |  | Domain controller to use with Method AD. |
+| `PreferredDC` | string | (empty) |  | Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only or Open Directory can't reach AD. |
+
+## 3.x-style plaintext (profile only)
+
+| Key | Type | Default | Values | What it does |
+|---|---|---|---|---|
+| `AllowRead` | boolean | `false` |  | Plaintext escrow only. Allows the 3.x-style ways of reading the password on this Mac: `-read` prints only the current password, for scripts (XCreds, a macOS installer), and the deprecated `-getPassword` copies it to a keychain item. Setting it acknowledges that root on the Mac can then read the password in plaintext. The MDM's `-escrow` JSON (current and staged password) doesn't need it. Ignored with EscrowCertificates or RetrievalMode device, where the password is never handed out in plaintext. Honored only from a configuration profile: a value in /Library/Preferences is ignored. |
+| `AllowNewPassword` | boolean | `false` |  | Plaintext escrow only. Allows macOSLAPS `-newPassword` with `-rotate`, which sets a password a person chose (from a prompt or stdin) instead of a generated one, until the next rotation. Setting it acknowledges that root on the Mac can then choose the password. Ignored with EscrowCertificates or RetrievalMode device. Honored only from a configuration profile: a value in /Library/Preferences is ignored. |

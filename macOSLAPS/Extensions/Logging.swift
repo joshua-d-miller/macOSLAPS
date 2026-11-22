@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      The macOSLAPS log. Every message goes to the unified log (subsystem
@@ -24,6 +24,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    One timestamp formatter for every line.
+                        claude
  4.0.0     2026-11-12   joshua    Log lines can go to stderr so -status,
                         claude    -escrow and -showconfig print only their
                                   result; errors are remembered for -status.
@@ -80,6 +82,8 @@ public class laps_log {
     }
     
     public static var minimumLogLevel: logLevel = .info
+    /// One formatter for every line (making one per line was wasted work).
+    private static let timestamp = date_formatter()
     /// When true, log lines go to stderr so stdout carries only machine-readable output
     /// (-status, -escrow). The log file is written either way.
     public static var useStandardError = false
@@ -92,7 +96,7 @@ public class laps_log {
         if level == .error { RunState.lastError = "\(object)" }
         if level.rawValue >= laps_log.minimumLogLevel.rawValue {
             let process = ProcessInfo.processInfo
-            let text = "\(level.description())|\(date_formatter().string(from: Foundation.Date()))|\(process.processName)|\(object)"
+            let text = "\(level.description())|\(timestamp.string(from: Foundation.Date()))|\(process.processName)|\(object)"
             if useStandardError {
                 FileHandle.standardError.write((text + "\n").data(using: .utf8)!)
             } else {

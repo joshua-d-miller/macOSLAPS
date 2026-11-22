@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2017-06-13
- Updated:   2026-11-14
+ Updated:   2026-11-22
 
  Purpose:
      Reads and writes the password and its expiration in Active Directory,
@@ -16,6 +16,18 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    The writability check and fallback go
+                        claude    through Writability.ensure (unit-tested).
+                                  When Open Directory can't reach AD, the
+                                  first DC in DNS that answers is used over
+                                  LDAP; if it is read-only, the next one.
+ 4.0.0     2026-11-17   joshua    No crash on an incomplete binding or an
+                        claude    unreadable expiration time (treated as
+                                  expired); TimeConversion.expired.
+                                  Reads and writes go through ADComputer:
+                                  Open Directory, or LDAP to PreferredDC; a
+                                  read-only bound DC falls back to a writable
+                                  one from DNS.
  4.0.0     2026-11-11   joshua    Same rotation order as Local; restores every
                         claude    LAPS attribute after a partial write; staged
                                   rotation and finishing an interrupted one;
@@ -46,10 +58,10 @@ public class ADTools: NSObject {
     //   both        all four, for domains moving from legacy to Windows LAPS
     // Windows LAPS *encrypted* passwords (msLAPS-EncryptedPassword) are not supported:
     // they require the MS-GKDI group key protocol, which has no macOS implementation.
-    static let legacyPassword = "dsAttrTypeNative:ms-Mcs-AdmPwd"
-    static let legacyExpiration = "dsAttrTypeNative:ms-Mcs-AdmPwdExpirationTime"
-    static let windowsPassword = "dsAttrTypeNative:msLAPS-Password"
-    static let windowsExpiration = "dsAttrTypeNative:msLAPS-PasswordExpirationTime"
+    static let legacyPassword = "ms-Mcs-AdmPwd"
+    static let legacyExpiration = "ms-Mcs-AdmPwdExpirationTime"
+    static let windowsPassword = "msLAPS-Password"
+    static let windowsExpiration = "msLAPS-PasswordExpirationTime"
 
     static var schema: String {
         let raw = (GetPreference(preference_key: "ADSchema") as? String ?? "legacy")
@@ -76,81 +88,129 @@ public class ADTools: NSObject {
         return String(data: data, encoding: .utf8)!
     }
 
-    // Connect
-    class func connect() -> Array<ODRecord> {
-        // Use Open Directory to Connect to Active Directory
-        // Create Net Config
+    /// The binding, from the AD plugin. Exits when the Mac isn't bound.
+    class func binding() -> ADBinding {
         let net_config = SCDynamicStoreCreate(nil, "net" as CFString, nil, nil)
-        // Get Active Directory Info
-        let ad_info = [ SCDynamicStoreCopyValue(net_config, "com.apple.opendirectoryd.ActiveDirectory" as CFString)]
-        // Convert ad_info variable to dictionary as it seems there is support for multiple directories
-        let adDict = ad_info[0] as? NSDictionary ?? nil
-        if adDict == nil {
+        guard let adDict = SCDynamicStoreCopyValue(net_config, "com.apple.opendirectoryd.ActiveDirectory" as CFString) as? [String: Any] else {
             laps_log.print("This machine does not appear to be bound to Active Directory", .error)
             exit(1)
         }
-        // Create the Active Directory Path in case Search Paths are disabled
-        let ad_path = "\(adDict?["NodeName"] as! String)/\(adDict?["DomainNameDns"] as! String)"
-        
-        let session = ODSession.default()
+        guard let nodeName = adDict["NodeName"] as? String, let domain = adDict["DomainNameDns"] as? String,
+              let trustAccount = adDict["TrustAccount"].map({ "\($0)" }) else {
+            laps_log.print("The Active Directory binding is incomplete (NodeName, DomainNameDns or TrustAccount missing). Check it with dsconfigad -show.", .error)
+            exit(1)
+        }
+        return ADBinding(nodeName: nodeName, domain: domain, trustAccount: trustAccount)
+    }
+
+    /// The computer's object: over LDAP to PreferredDC when it is set, otherwise
+    /// through Open Directory (the bound DC). Exits when it can't be reached.
+    class func connect() -> ADComputer {
+        let bound = binding()
+        let preferred = Constants.preferred_domain_controller.trimmingCharacters(in: .whitespaces)
+        if !preferred.isEmpty {
+            do {
+                let ldap = try LDAPBackend.open(server: preferred, binding: bound)
+                laps_log.print("Using PreferredDC \(preferred) (LDAP as \(bound.trustAccount)).", .info)
+                return ADComputer(backend: ldap, binding: bound)
+            } catch {
+                laps_log.print("PreferredDC \(preferred) can't be used: \(error). Make sure it is the domain controller's full DNS name and reachable. Nothing was changed.", .error)
+                exit(1)
+            }
+        }
         var computer_record = [ODRecord]()
         do {
-            if Constants.preferred_domain_controller.isEmpty {
-                laps_log.print("No Preferred Domain Controller Specified. Continuing...", .info)
-            }
-            else {
-                laps_log.print("Using Preferred Domain Controller " + Constants.preferred_domain_controller + "...", .info)
-                let od_config = ODConfiguration.init()
-                od_config.preferredDestinationHostName = Constants.preferred_domain_controller
-            }
-            let node = try ODNode.init(session: session, name: ad_path)
-            let query = try ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: adDict!["TrustAccount"], returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
+            // The Active Directory path, in case search paths are disabled.
+            let node = try ODNode.init(session: ODSession.default(), name: "\(bound.nodeName)/\(bound.domain)")
+            let query = try ODQuery.init(node: node, forRecordTypes: [kODRecordTypeServer, kODRecordTypeComputers], attribute: kODAttributeTypeRecordName, matchType: UInt32(kODMatchEqualTo), queryValues: bound.trustAccount, returnAttributes: kODAttributeTypeNativeOnly, maximumResults: 0)
             computer_record = (try query.resultsAllowingPartial(false) as? [ODRecord]) ?? []
         }
         catch {
-            laps_log.print("Active Directory Node not available (\(describe(error))). Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
-            exit(1)
-        }
-        guard !computer_record.isEmpty else {
-            laps_log.print("This Mac's computer record (\(adDict?["TrustAccount"] ?? "unknown")) was not found in Active Directory.", .error)
-            exit(1)
-        }
-        return(computer_record)
-    }
-    class func check_pw_expiration(computer_record: Array<ODRecord>) -> String? {
-        var expirationtime: Any = "126227988000000000" // Default of 01/01/2001 forces a change
-        do {
-            expirationtime = try computer_record[0].values(forAttribute: expirationAttribute)[0]
-        } catch {
-            laps_log.print("There has never been a random password generated for this device (no \(expirationAttribute)). Forcing a password change...", .warn)
-        }
-        return(expirationtime) as? String
-    }
-    class func verify_dc_writability(computer_record: Array<ODRecord>) {
-        // Test that we can write to the domain controller we are connected to before
-        // changing the local password, by rewriting the current expiration time.
-        do {
-            for attribute in (writesLegacy ? [legacyExpiration] : []) + (writesWindowsLAPS ? [windowsExpiration] : []) {
-                if let current = try? computer_record[0].values(forAttribute: attribute), !current.isEmpty {
-                    try computer_record[0].setValue(current, forAttribute: attribute)
-                } else {
-                    try computer_record[0].setValue("126227988000000000", forAttribute: attribute)
-                }
+            // Open Directory can't reach AD (the DC it wants is down?):
+            // try the domain's DCs from DNS over LDAP before giving up.
+            if let ldap = firstDCFromDNS(bound) {
+                laps_log.print("Open Directory can't reach Active Directory (\(describe(error))). Using \(ldap.host) from DNS instead (LDAP as \(bound.trustAccount)). Set PreferredDC to choose the domain controller.", .warn)
+                return ADComputer(backend: ldap, binding: bound)
             }
-        } catch {
-            laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) (\(describe(error))). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
+            laps_log.print("Active Directory Node not available (\(describe(error))), and no domain controller in DNS answered over LDAP. Make sure your Active Directory is reachable via direct network connection or VPN.", .error)
+            exit(1)
+        }
+        guard let record = computer_record.first else {
+            laps_log.print("This Mac's computer record (\(bound.trustAccount)) was not found in Active Directory.", .error)
+            exit(1)
+        }
+        return ADComputer(backend: ODBackend(record: record), binding: bound)
+    }
+    /// The first DC in DNS macOSLAPS can sign in to as the computer. It
+    /// may be read-only; the writability check then moves on.
+    private static func firstDCFromDNS(_ bound: ADBinding) -> LDAPBackend? {
+        for server in DomainControllers.fromDNS(domain: bound.domain) {
+            do {
+                return try LDAPBackend.open(server: server, binding: bound, fromDNS: true)
+            } catch {
+                laps_log.print("\(server): \(explain(error)).", .info)
+            }
+        }
+        return nil
+    }
+    /// The expiration time AD holds (Windows time). Missing or unreadable: already expired.
+    class func check_pw_expiration(computer_record computer: ADComputer) -> String {
+        guard let value = computer.value(expirationAttribute) else {
+            laps_log.print("There has never been a random password generated for this device (no \(expirationAttribute)). Forcing a password change...", .warn)
+            return TimeConversion.expired
+        }
+        guard let text = value as? String, TimeConversion.epoch(exp_time: text) != nil else {
+            laps_log.print("\(expirationAttribute) in Active Directory is not a valid time (\(value)). Forcing a password change...", .warn)
+            return TimeConversion.expired
+        }
+        return text
+    }
+
+    /// Before the local password changes: rewrite the current expiration time(s) to prove
+    /// the DC takes writes. Through Open Directory, a DC that refuses (read-only) is
+    /// replaced by the first writable DC in DNS, reached over LDAP. Exits when none works.
+    class func verify_dc_writability(computer_record computer: ADComputer) {
+        let attributes = (writesLegacy ? [legacyExpiration] : []) + (writesWindowsLAPS ? [windowsExpiration] : [])
+        let first = computer.backend.server ?? "The domain controller this Mac's binding uses"
+        let outcome = Writability.ensure(
+            computer, attributes: attributes, placeholder: TimeConversion.expired,
+            candidates: { DomainControllers.fromDNS(domain: computer.binding.domain) },
+            open: { try LDAPBackend.open(server: $0, binding: computer.binding, fromDNS: true) },
+            explain: explain)
+        switch outcome {
+        case .writable:
+            return
+        case .refused(let reason):
+            laps_log.print("Unable to write the LAPS expiration attribute(s) for ADSchema \(schema) through \(computer.backend.description) (\(reason)). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or the domain controller is read-only.", .error)
+            exit(1)
+        case .switched(let server, let refusal, let skipped):
+            logRefusal(first, refusal, skipped)
+            laps_log.print("Writing to \(server) instead (LDAP as \(computer.binding.trustAccount)). Set PreferredDC to choose the domain controller.", .info)
+        case .noWritableDC(let refusal, let skipped):
+            logRefusal(first, refusal, skipped)
+            laps_log.print("No writable domain controller took the LAPS expiration attribute(s) for ADSchema \(schema). Either the schema is missing, the computer lacks permission to write its own LAPS attributes, or no writable domain controller is reachable (set PreferredDC to one).", .error)
             exit(1)
         }
     }
+    private static func logRefusal(_ first: String, _ refusal: String, _ skipped: [Writability.Attempt]) {
+        laps_log.print("\(first) didn't take the write (\(refusal)); it may be read-only. Looking for a writable domain controller.", .warn)
+        for attempt in skipped {
+            laps_log.print("\(attempt.server): \(attempt.reason).", .info)
+        }
+    }
+
+    /// An error from either backend, readable.
+    static func explain(_ error: Error) -> String {
+        (error as? LDAPBackend.Failure)?.description ?? describe(error)
+    }
+
     /// Rotates the account and writes AD. `staged` is the pending password when applying a
     /// staged rotation; otherwise a new password is generated.
-    class func password_change(computer_record: Array<ODRecord>, staged: String? = nil) {
+    class func password_change(computer_record: ADComputer, staged: String? = nil) {
         let password = staged ?? PasswordGen(length: Constants.password_length)
         // Set out next expiration date in a variable x days from what we specified
         let new_ad_exp_date = TimeConversion.windows()
-        // Format Expiration Date
-        let print_exp_date = TimeConversion.epoch(exp_time: new_ad_exp_date!)
-        let formatted_new_exp_date = Constants.dateFormatter.string(from: print_exp_date!)
+        let formatted_new_exp_date = TimeConversion.epoch(exp_time: new_ad_exp_date).map { Constants.dateFormatter.string(from: $0) } ?? new_ad_exp_date
         // Change and verify the local password (shared with the Local method)
         let local_admin_record = LocalTools.connect()
         CriticalSection.begin()
@@ -168,7 +228,7 @@ public class ADTools: NSObject {
 
         // Write to Active Directory. On failure, put the account, keychain and every LAPS
         // attribute this ADSchema writes back, so AD never holds a password the Mac doesn't.
-        if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date!) != 0 {
+        if ADTools.set_password(computer_record: computer_record, password: password, new_ad_exp_date: new_ad_exp_date) != 0 {
             if LocalTools.revert(record: local_admin_record, from: password, to: previous_password), let previous = previous_password {
                 _ = KeychainService.savePassword(service: KeychainNames.current, account: Constants.local_admin, data: previous)
                 ADTools.restore(computer_record: computer_record, previousPassword: previous)
@@ -184,35 +244,32 @@ public class ADTools: NSObject {
         Staging.finishApply()
         CriticalSection.end()
         RunState.record("rotated")
-        RunState.noteVerified(true, created: KeychainService.loadPassword(service: KeychainNames.current).1)
+        RunState.noteVerified(true, created: KeychainService.current?.created)
         LocalTools.removeAdminKeychainIfEnabled(record: local_admin_record)
         InventoryHook.run(reason: "password change")
     }
     /// Writes the new password and expiration to every attribute the ADSchema uses.
     /// Returns 0 on success, 1 if a legacy attribute failed, 2 if a Windows LAPS one failed.
     /// A failure can leave some attributes written; callers then use restore(...).
-    class func set_password(computer_record: Array<ODRecord>, password: String, new_ad_exp_date: String) -> OSStatus {
-        let record = computer_record[0]
+    class func set_password(computer_record record: ADComputer, password: String, new_ad_exp_date: String) -> OSStatus {
         // Device mode: the reveal code (ADRevealCode) or only the expiration, never the password.
         let secret = Reveal.directorySecret(password: password, newPassword: true)
-        if writesWindowsLAPS && schema != "legacy" {
-            ADTools.noteExperimentalSchemaOnce()
-        }
+        if writesWindowsLAPS { ADTools.noteExperimentalSchemaOnce() }
         if writesLegacy {
             do {
-                if let s = secret { try record.setValue(s.value, forAttribute: legacyPassword) }
-                try record.setValue(new_ad_exp_date, forAttribute: legacyExpiration)
+                if let s = secret { try record.write(legacyPassword, s.value) }
+                try record.write(legacyExpiration, new_ad_exp_date)
             } catch {
-                laps_log.print("There was an error writing the legacy LAPS attributes (\(describe(error)))", .error)
+                laps_log.print("There was an error writing the legacy LAPS attributes (\(explain(error)))", .error)
                 return(1)
             }
         }
         if writesWindowsLAPS {
             do {
-                if let s = secret { try record.setValue(windowsLAPSValue(account: s.account, password: s.value), forAttribute: windowsPassword) }
-                try record.setValue(new_ad_exp_date, forAttribute: windowsExpiration)
+                if let s = secret { try record.write(windowsPassword, windowsLAPSValue(account: s.account, password: s.value)) }
+                try record.write(windowsExpiration, new_ad_exp_date)
             } catch {
-                laps_log.print("There was an error writing the Windows LAPS attributes (\(describe(error)))", .error)
+                laps_log.print("There was an error writing the Windows LAPS attributes (\(explain(error)))", .error)
                 return(2)
             }
         }
@@ -222,15 +279,14 @@ public class ADTools: NSObject {
     /// Best effort after a failed write: put every attribute this ADSchema uses back on
     /// the previous password, already expired so the next run rotates again. When the
     /// previous password is unknown, only the expiration is reset (to "expired").
-    class func restore(computer_record: Array<ODRecord>, previousPassword givenPrevious: String?) {
-        let record = computer_record[0]
+    class func restore(computer_record record: ADComputer, previousPassword givenPrevious: String?) {
         // Device mode never writes a password to AD; restore the code (or nothing) instead.
         let previousPassword = givenPrevious.flatMap { Reveal.directorySecret(password: $0)?.value }
-        let expired = "126227988000000000"   // 2001-01-01
+        let expired = TimeConversion.expired
         var problems : [String] = []
         func attempt(_ value: String, _ attribute: String) {
-            do { try record.setValue(value, forAttribute: attribute) }
-            catch { problems.append("\(attribute.replacingOccurrences(of: "dsAttrTypeNative:", with: "")): \(describe(error))") }
+            do { try record.write(attribute, value) }
+            catch { problems.append("\(attribute): \(explain(error))") }
         }
         if writesLegacy {
             if let previous = previousPassword { attempt(previous, legacyPassword) }
@@ -248,8 +304,8 @@ public class ADTools: NSObject {
     }
 
     /// Interrupted staged apply: the account already uses `password`; bring AD in line.
-    class func restoreAfterInterruptedApply(computer_record: Array<ODRecord>, password: String) {
-        if set_password(computer_record: computer_record, password: password, new_ad_exp_date: TimeConversion.windows()!) != 0 {
+    class func restoreAfterInterruptedApply(computer_record: ADComputer, password: String) {
+        if set_password(computer_record: computer_record, password: password, new_ad_exp_date: TimeConversion.windows()) != 0 {
             laps_log.print("The interrupted rotation was finished locally, but Active Directory could not be updated. The next run will try again.", .error)
             restore(computer_record: computer_record, previousPassword: password)
         }

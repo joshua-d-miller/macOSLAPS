@@ -1,11 +1,11 @@
 #!/bin/zsh
 : <<'HEADER'
 ===============================================================================
- macOSLAPS | Jamf Extension Attributes | Expiration Only.zsh
+ macOSLAPS | Integrations | jamf/macOSLAPS-Expiration-EA.zsh
 ===============================================================================
  Version:   4.0.0
  Author:    James Smith, Joshua D. Miller, Claude
- Updated:   2026-11-11
+ Updated:   2026-11-17
 
  Purpose:
      Jamf Pro extension attribute (String) with when the local admin's
@@ -22,6 +22,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Moved here from Jamf Extension Attributes/
+                        claude    (Expiration Only.zsh).
  4.0.0     2026-11-11   joshua    Reads macOSLAPS 4.0 with -escrow (or -status
                         claude    for the date) and shows a staged pending
                                   password too, so Jamf always has the password

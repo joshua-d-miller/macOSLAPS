@@ -11,11 +11,12 @@
     },
     "Method": {
       "title": "Method",
-      "description": "Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.",
+      "description": "auto (default): AD when the Mac is bound to Active Directory, otherwise Local. Local stores the password in the System keychain for your MDM to collect with -escrow. AD writes it to the computer object in Active Directory.",
       "property_order": 10,
       "type": "string",
-      "default": "AD",
+      "default": "auto",
       "enum": [
+        "auto",
         "Local",
         "AD"
       ]
@@ -53,7 +54,7 @@
     },
     "PreferredDC": {
       "title": "Preferred domain controller",
-      "description": "Domain controller to use with Method AD.",
+      "description": "Method AD: the domain controller (full DNS name) macOSLAPS writes to, over LDAP as the computer account. Use it when the DC the Mac is bound to may be read-only. Empty: the bound DC, or a writable one found in DNS when the bound DC is read-only or Open Directory can't reach AD.",
       "property_order": 30,
       "type": "string",
       "default": ""
@@ -285,6 +286,20 @@
       "property_order": 135,
       "type": "boolean",
       "default": true
+    },
+    "AllowRead": {
+      "title": "Allow -read (3.x-style plaintext)",
+      "description": "Plaintext escrow only. Allows the 3.x-style ways of reading the password on this Mac: -read prints only the current password, for scripts (XCreds, a macOS installer), and the deprecated -getPassword copies it to a keychain item. Setting it acknowledges that root on the Mac can then read the password in plaintext. The MDM's -escrow JSON (current and staged password) doesn't need it. Ignored with EscrowCertificates or RetrievalMode device, where the password is never handed out in plaintext. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
+      "property_order": 140,
+      "type": "boolean",
+      "default": false
+    },
+    "AllowNewPassword": {
+      "title": "Allow -newPassword (a chosen password)",
+      "description": "Plaintext escrow only. Allows macOSLAPS -newPassword with -rotate, which sets a password a person chose (from a prompt or stdin) instead of a generated one, until the next rotation. Setting it acknowledges that root on the Mac can then choose the password. Ignored with EscrowCertificates or RetrievalMode device. Honored only from a configuration profile: a value in /Library/Preferences is ignored.",
+      "property_order": 145,
+      "type": "boolean",
+      "default": false
     }
   }
 }

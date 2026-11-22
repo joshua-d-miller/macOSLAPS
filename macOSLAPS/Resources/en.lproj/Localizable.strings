@@ -29,7 +29,7 @@
 "Reason or ticket (optional)" = "Reason or ticket (optional)";
 "Reveal Password" = "Reveal Password";
 "Reveal code" = "Reveal code";
-"Reveals are locked after too many wrong codes. Contact IT." = "Reveals are locked after too many wrong codes. Contact IT.";
+"Too many wrong codes. Try again later, or contact IT." = "Too many wrong codes. Try again later, or contact IT.";
 "Show Phonetic" = "Show Phonetic";
 "The local admin password for %@ was revealed at %@. It changes at %@." = "The local admin password for %@ was revealed at %@. It changes at %@.";
 "The macOSLAPS service did not answer." = "The macOSLAPS service did not answer.";

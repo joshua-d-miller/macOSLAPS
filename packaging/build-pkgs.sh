@@ -6,7 +6,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-10
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      Builds the three macOSLAPS installer packages:
@@ -34,6 +34,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    productsign retries when Apple's timestamp
+                        claude    server fails.
  4.0.0     2026-11-12   joshua    Builds from the app bundle; new receipts and
                         claude    label; app not relocatable; paths.d points
                                   into the app; the service daemon, its request
@@ -170,7 +172,15 @@ product() {        # product <output name> <title> <pkg-ref id>...
     productbuild --distribution "$WORK/$name.dist" --package-path "$WORK/components" "$WORK/$name" >&2
     local sign=(--sign "$IDENTITY" --timestamp)
     [ -n "$KEYCHAIN" ] && sign+=(--keychain "$KEYCHAIN")
-    productsign "${sign[@]}" "$WORK/$name" "$OUT/$name" >&2
+    # Apple's timestamp server sometimes fails for a while; try again before giving up.
+    local n
+    for n in 1 2 3 4 5; do
+        rm -f "$OUT/$name"
+        productsign "${sign[@]}" "$WORK/$name" "$OUT/$name" >&2 && return 0
+        echo "::warning::productsign $name failed (try $n of 5); retrying in 30 s" >&2
+        sleep 30
+    done
+    return 1
 }
 
 # ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: #

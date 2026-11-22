@@ -5,7 +5,7 @@
  Version:   4.0.0
  Author:    Joshua D. Miller, Claude
  Created:   2026-11-12
- Updated:   2026-11-12
+ Updated:   2026-11-17
 
  Purpose:
      The privileged service. A second LaunchDaemon
@@ -33,6 +33,8 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-17   joshua    Reveals run one at a time; the reveal output
+                        claude    is shared with -reveal.
  4.0.0     2026-11-12   joshua    New file. A rotate-now request older than
                         claude    the current deadline is ignored. "Will be
                                   logged out" only when the admin is logged
@@ -73,6 +75,8 @@ enum Service {
     static let requirement = "identifier \"com.joshua-d-miller.macoslaps\" and anchor apple generic and certificate leaf[subject.OU] = \"9UYK4F9BSM\""
     /// Exit after this long without a connection; launchd starts the service again on demand.
     static let idleExit : TimeInterval = 30
+    /// Serializes reveals from several connections (see Handler.reveal).
+    static let revealGate = NSLock()
 
     /// Starts the check LaunchDaemon now (no-op if it is running), e.g. so it arms the
     /// deadline timer right after a reveal or -expireIn.
@@ -164,6 +168,10 @@ enum Service {
 
         func reveal(code: String, reason: String, reply: @escaping (Bool, String, String, Bool) -> Void) {
             touch()
+            // One reveal at a time in this process: the run lock (flock) doesn't exclude
+            // a second call from the same process, and the wrong-code count must not race.
+            Service.revealGate.lock()
+            defer { Service.revealGate.unlock() }
             guard RunLock.tryAcquire(wait: 60) else {
                 reply(false, "macOSLAPS is busy (a rotation is running). Try again in a minute.", "", false)
                 return
@@ -240,14 +248,7 @@ enum Service {
         typealias R = (Bool, String, String, Bool)
         guard let r: R = call({ s, done in s.reveal(code: code, reason: reason) { done(($0, $1, $2, $3)) } }) else { exit(1) }
         guard r.0 else { laps_log.print(r.1, .error); exit(1) }
-        print("Local Admin Account: \(Constants.local_admin)")
-        print("Password: \(r.1)")
-        if let until = RunState.iso.date(from: r.2) {
-            let minutes = Int(until.timeIntervalSinceNow / 60)
-            print("Works until: \(Constants.dateFormatter.string(from: until)) (\(minutes / 60) h \(minutes % 60) min)")
-            if Reveal.logoutApplies(Reveal.action) { print("\(Constants.local_admin) will be logged out at that time.") }
-        }
-        if !r.3 { print("Warning: this password did not work for \(Constants.local_admin) just now.") }
+        Reveal.printRevealed(password: r.1, worksUntil: RunState.iso.date(from: r.2), verified: r.3)
         exit(0)
     }
 
