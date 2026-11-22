@@ -24,8 +24,8 @@
  4.0.0     2026-11-22   joshua    -read and -newPassword run only in
                         claude    plaintext escrow, when the MDM's profile
                                   sets AllowRead / AllowNewPassword (exit 78
-                                  otherwise); -getPassword is refused with
-                                  EscrowCertificates.
+                                  otherwise); -getPassword too, with
+                                  AllowRead.
  4.0.0     2026-11-17   joshua    One path for the AD and Local methods;
                         claude    -getPassword and -firstPass parsing
                                   shortened; -rotateNow handled once;
@@ -280,11 +280,11 @@ func initializeWithoutRotating() -> Never {
 // | -read and -newPassword | //
 // -------------------------- //
 // The password for scripts on this Mac, and a password chosen by a person.  //
-/// -read and -newPassword are the 3.x-style plaintext path: root on this Mac
-/// reads the password, or chooses one. They exist only in plaintext escrow,
-/// and only when the MDM's profile sets the Allow key (the admin's
-/// acknowledgement). With EscrowCertificates or in device mode the password
-/// is never handed out in plaintext, whatever the key says. Exit 78.
+/// -read, -getPassword and -newPassword are the 3.x-style plaintext path:
+/// root on this Mac reads the password, or chooses one. They exist only in
+/// plaintext escrow, and only when the MDM's profile sets the Allow key (the
+/// admin's acknowledgement). With EscrowCertificates or in device mode the
+/// password is never handed out in plaintext, whatever the key says. Exit 78.
 func requireAllowed(_ key: String, for command: String, because reason: String) {
     if Reveal.deviceMode {
         laps_log.print("\(command) isn't available in device mode: the password is only shown at the Mac with a reveal code (macOSLAPS -reveal, or the app).", .error)
@@ -485,14 +485,7 @@ func macOSLAPS() {
             // Deprecated, removed in 5.0: copies the password to a temporary System
             // keychain item that /usr/bin/security can read, deleted on the next run.
             verify_root()
-            if Reveal.deviceMode {
-                laps_log.print("RetrievalMode is device: the password is only shown with a reveal code (macOSLAPS -reveal, or the app).", .error)
-                exit(1)
-            }
-            if Escrow.certificateConfig().configured {
-                laps_log.print("-getPassword isn't available with EscrowCertificates set: the password only leaves macOSLAPS encrypted. Use -escrow and decrypt it with your private key.", .error)
-                exit(78)
-            }
+            requireAllowed("AllowRead", for: "-getPassword", because: "copies the password in plaintext to a keychain item")
             guard Constants.method == "Local" else {
                 laps_log.print("Password WILL NOT be exported as the current method is set to Active Directory", .warn)
                 exit(0)

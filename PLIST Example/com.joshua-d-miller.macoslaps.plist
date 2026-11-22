@@ -96,8 +96,9 @@
 	<true/>                           <!-- true: manage it, with a warning; false: refuse -->
 	<!-- Plaintext escrow only, from a profile only (ignored in                 -->
 	<!-- /Library/Preferences, with EscrowCertificates or in device mode).      -->
-	<!-- true accepts the risk: -read prints the current password for local     -->
-	<!-- scripts (the 3.x way); -newPassword sets a password a person chose.    -->
+	<!-- true accepts the risk: -read (and the deprecated -getPassword) give    -->
+	<!-- local scripts the current password, the 3.x way; -newPassword sets     -->
+	<!-- a password a person chose.                                             -->
 	<key>AllowRead</key>
 	<false/>
 	<key>AllowNewPassword</key>

@@ -24,6 +24,9 @@
 ===============================================================================
  Version   Date         Author    Description
  -------   ----------   -------   --------------------------------------------
+ 4.0.0     2026-11-22   joshua    -getPassword needs AllowRead too: the
+                        claude    setup turns it on through a managed
+                                  profile (fails if the runner ignores it).
  4.0.0     2026-11-22   joshua    ROUNDS from the environment (default 25);
                         claude    the reveal wait is skipped through the
                                   state file instead of sleeping 61 s.
@@ -172,6 +175,15 @@ defaults write "$DOMAIN" DaysTillExpiration -int 30
 defaults write "$DOMAIN" StagedRotation -string off
 defaults write "$DOMAIN" RemovePassChars -string "$EXCLUDED"
 defaults read "$DOMAIN"
+# get_pw reads the password with -getPassword, which needs AllowRead from a
+# configuration profile: written here as a managed preference, as an MDM's
+# profile would be.
+MANAGED="/Library/Managed Preferences/com.joshua-d-miller.macoslaps"
+managed_on()  { mkdir -p "/Library/Managed Preferences"; for k in "$@"; do defaults write "$MANAGED" "$k" -bool true; done; killall cfprefsd 2>/dev/null; sleep 1; }
+managed_off() { for k in "$@"; do defaults delete "$MANAGED" "$k" >/dev/null 2>&1; done; killall cfprefsd 2>/dev/null; sleep 1; }
+managed_on AllowRead
+"$LAPS" -showConfig 2>/dev/null | grep -q "AllowRead = true  \[profile, new domain\]" \
+    || { echo "::error::A managed preference written to /Library/Managed Preferences isn't honored on this runner, so AllowRead can't be turned on: $("$LAPS" -showConfig 2>/dev/null | grep AllowRead)"; exit 1; }
 echo "::endgroup::"
 
 jget() { python3 -c 'import json,sys; v=json.loads(sys.argv[1]).get(sys.argv[2]); print("" if v is None else v)' "$1" "$2"; }
@@ -374,15 +386,14 @@ echo "$CFG" | grep -q "Method = Local  \[/Library/Preferences, legacy domain\]" 
 "$LAPS" -resetPassword >/dev/null 2>&1 && P20=$(get_pw) && [ "${#P20}" -eq 20 ] && dscl . -authonly "$ACCT" "$P20" >/dev/null 2>&1 \
     && pass "rotation with split settings uses the right account and the new length" || fail "rotation with split settings (length ${#P20})"
 # A managed profile in the new domain beats both local files.
-mkdir -p "/Library/Managed Preferences"
-defaults write "/Library/Managed Preferences/com.joshua-d-miller.macoslaps" PasswordLength -int 24
+defaults write "$MANAGED" PasswordLength -int 24
 killall cfprefsd 2>/dev/null; sleep 1
 if "$LAPS" -showConfig 2>/dev/null | grep -q "PasswordLength = 24  \[profile, new domain\]"; then
     pass "a managed new-domain value beats local settings"
 else
     echo "::notice::Managed preferences written by hand weren't treated as managed on this runner: $("$LAPS" -showConfig 2>/dev/null | grep PasswordLength)"
 fi
-rm -f "/Library/Managed Preferences/com.joshua-d-miller.macoslaps.plist"
+defaults delete "$MANAGED" PasswordLength >/dev/null 2>&1; killall cfprefsd 2>/dev/null; sleep 1
 defaults delete "$NEWDOM" >/dev/null 2>&1; rm -f "$NEWDOM.plist"
 # Method unset: the default auto picks Local on a Mac that isn't bound to AD.
 defaults delete "$DOMAIN" Method >/dev/null 2>&1
@@ -718,25 +729,26 @@ echo "::endgroup::"
 ### the password settings.                                                 ###
 echo "::group::-read, -rotate, -currentPassword, -newPassword"
 CUR=$(get_pw)
+managed_off AllowRead
 OUT=$("$LAPS" -read 2>/dev/null); RC=$?
-[ "$RC" -eq 78 ] && [ -z "$OUT" ] && pass "-read is off by default (exit 78, nothing printed)" || fail "-read without AllowRead: rc $RC"
-printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC=$?
-[ "$RC" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC"
-defaults write "$DOMAIN" AllowRead -bool true; defaults write "$DOMAIN" AllowNewPassword -bool true
-"$LAPS" -read >/dev/null 2>&1; RC=$?
+GP=$("$LAPS" -getPassword 2>/dev/null); RC3=$?
 printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
-[ "$RC" -eq 78 ] && [ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
-    && pass "AllowRead / AllowNewPassword in /Library/Preferences are ignored" || fail "local Allow keys were honored: -read rc $RC, -newPassword rc $RC2"
+[ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC3" -eq 78 ] && pass "-read and -getPassword are off by default (exit 78, nothing printed)" || fail "without AllowRead: -read rc $RC, -getPassword rc $RC3"
+defaults write "$DOMAIN" AllowRead -bool true; defaults write "$DOMAIN" AllowNewPassword -bool true
+"$LAPS" -read >/dev/null 2>&1; RC4=$?
+"$LAPS" -getPassword >/dev/null 2>&1; RC5=$?
+printf '%s\n' 'Chosen-Pass-2468-off' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC6=$?
 grep -q "AllowRead in /Library/Preferences is ignored" "/Library/Application Support/macOSLAPS/Logs/macOSLAPS.log" \
     && pass "the ignored local key is logged" || fail "no log line for the ignored local AllowRead"
 defaults delete "$DOMAIN" AllowRead >/dev/null 2>&1; defaults delete "$DOMAIN" AllowNewPassword >/dev/null 2>&1
-# The MDM's acknowledgement: a managed profile turns both on.
-MANAGED="/Library/Managed Preferences/com.joshua-d-miller.macoslaps"
-mkdir -p "/Library/Managed Preferences"
-defaults write "$MANAGED" AllowRead -bool true; defaults write "$MANAGED" AllowNewPassword -bool true
-killall cfprefsd 2>/dev/null; sleep 1
-if ! "$LAPS" -showConfig 2>/dev/null | grep -q "AllowRead = true  \[profile, new domain\]"; then
-    echo "::notice::Managed preferences written by hand weren't treated as managed on this runner; the enabled -read / -newPassword checks were skipped."
+managed_on AllowRead
+[ "$RC2" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] && pass "-newPassword is off by default; nothing changed" || fail "-newPassword without AllowNewPassword: rc $RC2"
+[ "$RC4" -eq 78 ] && [ "$RC5" -eq 78 ] && [ "$RC6" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
+    && pass "AllowRead / AllowNewPassword in /Library/Preferences are ignored" || fail "local Allow keys were honored: -read rc $RC4, -getPassword rc $RC5, -newPassword rc $RC6"
+# The MDM's acknowledgement: the profile turns -newPassword on too.
+managed_on AllowNewPassword
+if ! "$LAPS" -showConfig 2>/dev/null | grep -q "AllowNewPassword = true  \[profile, new domain\]"; then
+    fail "AllowNewPassword from the managed profile isn't in effect"
 else
     [ "$("$LAPS" -read 2>/dev/null)" = "$CUR" ] && pass "-read prints only the current password" || fail "-read output"
     defaults write "$DOMAIN" StagedRotation -string on
@@ -777,13 +789,13 @@ else
         OUT=$("$LAPS" -read 2>/dev/null); RC=$?
         printf '%s\n' 'Chosen-Pass-2468-mode' | "$LAPS" -rotate -newPassword - >/dev/null 2>&1; RC2=$?
         GP=$("$LAPS" -getPassword 2>/dev/null); RC3=$?
-        [ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC2" -eq 78 ] && [ "$RC3" -ne 0 ] && [ "$(get_pw)" = "$CUR" ] \
+        defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
+        [ "$RC" -eq 78 ] && [ -z "$OUT" ] && [ "$RC2" -eq 78 ] && [ "$RC3" -eq 78 ] && [ "$(get_pw)" = "$CUR" ] \
             && pass "$MODE: -read, -newPassword and -getPassword refused despite AllowRead / AllowNewPassword" \
             || fail "$MODE: plaintext path open (-read rc $RC, -newPassword rc $RC2, -getPassword rc $RC3)"
-        defaults delete "$DOMAIN" EscrowCertificates >/dev/null 2>&1; defaults delete "$DOMAIN" RetrievalMode >/dev/null 2>&1
     done
 fi
-rm -f "$MANAGED.plist"; killall cfprefsd 2>/dev/null; sleep 1
+managed_off AllowNewPassword   # AllowRead stays on: get_pw needs it
 echo "::endgroup::"
 
 if [ "$HAS_TOKEN" -eq 1 ]; then

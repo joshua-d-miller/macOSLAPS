@@ -19,7 +19,7 @@ The installer puts `macOSLAPS` on the `PATH` (`/etc/paths.d/laps` points into th
 | `-showConfig` | The settings in effect, which preference domain each came from, and whether it's managed, set locally or a default. `FirstPass` is never printed. |
 | `-uninstall` | Removes the app, LaunchDaemons, LaunchAgent, symlink and receipts. The stored password is kept, so a reinstall carries on. |
 | `-uninstall -purge` | Also deletes the stored passwords, the state and the logs. Make sure your MDM has the password first. |
-| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Refused with `EscrowCertificates` or in device mode. Use `-escrow` for the MDM and `-read` for scripts on the Mac. |
+| `-getPassword` | **Deprecated, removed in 5.0.** Copies the password to a temporary keychain item for 3.x scripts. Like `-read`: plain escrow only, when your MDM's profile sets `AllowRead`. Use `-escrow` for the MDM and `-read` for scripts on the Mac. |
 | `-version` | Prints the version, `4.0.0.<build>`. |
 | `-help` | Lists the commands. |
 
@@ -29,9 +29,9 @@ The uninstall script is also in the app, for MDMs that run scripts: `/Applicatio
 
 `-read` hands the password to anything running as root on the Mac, in plaintext. `-newPassword` lets it choose the password. Root can already reset the account with `dscl` or `sysadminctl`, but that breaks its secureToken. With these two commands it gets a working password and the secureToken stays intact. So both are off until you turn them on:
 
-- `AllowRead true` allows `-read`; `AllowNewPassword true` allows `-newPassword`.
+- `AllowRead true` allows `-read` and the deprecated `-getPassword`; `AllowNewPassword true` allows `-newPassword`.
 - They count **only from a configuration profile** your MDM installs. A value in `/Library/Preferences` is ignored (root can write there), and macOSLAPS logs that it ignored it.
-- They work **only in plain escrow**. With [`EscrowCertificates`](retrieval/encrypted-escrow.md) or in [device mode](retrieval/device-mode.md) the password is never handed out in plaintext, so both commands (and `-getPassword`) are refused whatever the keys say.
+- They work **only in plain escrow**. With [`EscrowCertificates`](retrieval/encrypted-escrow.md) or in [device mode](retrieval/device-mode.md) the password is never handed out in plaintext, so all three are refused whatever the keys say.
 - Setting them is your acknowledgement of that risk. Your MDM doesn't need them: `-escrow` gives it the current and staged password (see [Two ways to read it](retrieval/escrow.md#two-ways-to-read-it)).
 - When a command is refused, it exits with code 78 and says why.
 

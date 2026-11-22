@@ -33,7 +33,7 @@ Plain escrow offers the password two ways:
 | | Command | What it gives | Turn it on |
 |---|---|---|---|
 | **For your MDM (4.0)** | `macOSLAPS -escrow` | JSON with the current password and, during a [staged rotation](#staged-rotation), the next one. The MDM always has the password the Mac is using. Each run counts as a collection. | Always available |
-| **For scripts on the Mac (3.x style)** | `macOSLAPS -read` | Only the current password, on one line, as 3.x scripts expected. Never counts as a collection, so it doesn't hurry a staged rotation. | `AllowRead true` in your MDM's profile |
+| **For scripts on the Mac (3.x style)** | `macOSLAPS -read` (or the deprecated `-getPassword`) | Only the current password, on one line, as 3.x scripts expected. Never counts as a collection, so it doesn't hurry a staged rotation. | `AllowRead true` in your MDM's profile |
 
 `-read` is off unless your MDM's configuration profile sets `AllowRead true`. Setting it is your acknowledgement that anything running as root on the Mac can read the password in plaintext. A value in `/Library/Preferences` is ignored, because root can write there. `AllowNewPassword true` likewise allows `-rotate -newPassword -` (a password a person chose).
 

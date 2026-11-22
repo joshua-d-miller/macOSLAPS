@@ -27,6 +27,8 @@
  -------   ----------   -------   --------------------------------------------
  4.0.0     2026-11-22   joshua    Gatekeeper is checked only for notarized
                         claude    builds (NOTARIZED; pull requests aren't).
+                                  AllowRead from a managed profile, for
+                                  -getPassword.
  4.0.0     2026-11-17   joshua    The scripts' new paths under integrations/.
                         claude
  4.0.0     2026-11-12   joshua    Migration from 845, the required/recovery
@@ -104,6 +106,12 @@ defaults write "$DOMAIN" PasswordLength -int 16
 defaults write "$DOMAIN" DaysTillExpiration -int 30
 # Most checks expect -resetPassword to rotate immediately; staging has its own tests.
 defaults write "$DOMAIN" StagedRotation -string off
+# The new build's -getPassword (get_pw) needs AllowRead from a configuration
+# profile: written as a managed preference, as an MDM's would be. 845
+# doesn't know the key.
+mkdir -p "/Library/Managed Preferences"
+defaults write "/Library/Managed Preferences/com.joshua-d-miller.macoslaps" AllowRead -bool true
+killall cfprefsd 2>/dev/null; sleep 1
 "$LAPS" -resetPassword || fatal "previous release could not rotate"
 OLD_PW=$(get_pw) || fatal "previous release could not export"
 dscl . -authonly "$ACCT" "$OLD_PW" >/dev/null 2>&1 && pass "previous release rotated and exported" || fatal "previous release's password does not authenticate"
