@@ -1,0 +1,82 @@
+name: CodeQL
+
+# GitHub's code scanning (free for public repositories). It reads the Swift
+# code as it's compiled, and these workflows, for security problems: a shell
+# command or LDAP filter made from untrusted text, a password reaching a log
+# or a file, weak randomness or cryptography, unsafe file handling, script
+# injection in a workflow. Findings show up on the pull request and under
+# Security → Code scanning.
+#
+# Runs on pull requests, on main (the baseline pull requests are compared
+# with) and weekly, since new checks arrive with CodeQL updates even when
+# the code hasn't changed. The build here is for analysis only: one
+# architecture, unsigned, nothing packaged (build.yml makes the real one).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths-ignore:
+      # Documentation only, as in build.yml.
+      - 'docs/**'
+      - 'zensical.toml'
+      - '**.md'
+  schedule:
+    - cron: '17 9 * * 3'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write # to report what it finds
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Swift is analyzed while it's compiled, on a Mac.
+          - language: swift
+            runner: macos-26
+            build-mode: manual
+          # The workflows need no build.
+          - language: actions
+            runner: ubuntu-latest
+            build-mode: none
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          # The standard security checks plus the extended set: more
+          # findings, a few of them less certain.
+          queries: security-extended
+
+      - name: Build for analysis
+        if: matrix.language == 'swift'
+        run: |
+          xcodebuild -version
+          xcodebuild -project macOSLAPS.xcodeproj -scheme macOSLAPS \
+            -configuration Release -derivedDataPath build \
+            ONLY_ACTIVE_ARCH=YES MACOSX_DEPLOYMENT_TARGET=13.0 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            clean build
+          # The legacy migration helper, built with swiftc as in build.yml.
+          mkdir -p build/helper
+          swiftc -O -target "$(uname -m)-apple-macos13.0" \
+            macOSLAPS-legacy/main.swift -o build/helper/legacy
+
+      - uses: github/codeql-action/analyze@v4
+        with:
+          category: /language:${{ matrix.language }}
