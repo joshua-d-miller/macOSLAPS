@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit's pull request reviews (free for public repositories). It
+# reviews each pull request on its own; comment "@coderabbitai review" to ask
+# again after more pushes.
+language: en-US
+tone_instructions: 'Be brief and concrete. Lead with security and correctness problems, then real inefficiencies. Skip pure style.'
+reviews:
+  profile: chill # fewer nitpicks; security and bugs are still reported
+  request_changes_workflow: false # comments only; the maintainer approves
+  high_level_summary: true
+  poem: false
+  sequence_diagrams: false
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - '!macOSLAPS/Resources/**'
+    - '!**/*.xcodeproj/**'
+  path_instructions:
+    - path: '**/*'
+      instructions: >-
+        macOSLAPS runs as root on managed Macs. It rotates a local
+        administrator's password and escrows it (MDM, CMS-encrypted escrow,
+        Active Directory, device-mode reveal codes). It supports macOS 13 and
+        later. Every code file opens with the project's header; see
+        .github/scripts/check-style.sh.
+    - path: 'macOSLAPS/**/*.swift'
+      instructions: >-
+        Check security first: a password, reveal code or key must never
+        reach a log, a crash message, a command line (visible in ps), an
+        environment variable or a world-readable file; passwords come from a
+        cryptographically secure generator; files written as root use safe
+        permissions and aren't open to symlink or race tricks in shared
+        folders; Process/shell calls don't build commands from strings that
+        could hold untrusted text; LDAP filters and DNs are escaped; Keychain
+        items are scoped and protected; failures leave the old password
+        working rather than locking the admin out. Then correctness on every
+        supported macOS and on Apple silicon and Intel, and real
+        inefficiencies.
+    - path: 'Tests/**'
+      instructions: >-
+        Tests should check behavior, cover the failure cases, and not leak
+        real secrets or depend on the machine they run on.
+    - path: '{LaunchAgent,LaunchDaemon,packaging,integrations}/**'
+      instructions: >-
+        Installer scripts and launchd jobs run as root. Check quoting,
+        error handling, file ownership and permissions, and that a failed
+        install or upgrade doesn't leave a Mac without a working admin.
+    - path: '.github/**'
+      instructions: >-
+        Check for script injection from pull request titles, branch names or
+        other event text in run steps, permissions broader than needed, and
+        signing or notarization secrets reachable from pull requests or
+        written to disk without cleanup.
+chat:
+  auto_reply: true
